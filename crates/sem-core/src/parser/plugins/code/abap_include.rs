@@ -14,11 +14,7 @@
 //! one unit, so each sees the other's forms. [`IncludeGraph::shared`] counts
 //! them.
 //!
-//! # Integration with story 2.1 (`calls/abap.rs`)
-//!
-//! This is the half of story 2.4 that does not need the calls pipeline. It
-//! feeds the bag-of-words pass today (`graph.rs`, `build_abap_includes`), which
-//! is the only ABAP resolver until 2.1 lands. When `calls/abap.rs` exists:
+//! # Use by the calls pipeline (`calls/abap.rs`)
 //!
 //! - `layout()` takes its per-object directory key from [`IncludeGraph::unit`]
 //!   instead of `AbapObject.name`, and `local_home` follows, so a form of an
@@ -26,11 +22,15 @@
 //! - the lowering reads `INCLUDE` names with `abap_fallback::include_names` (the
 //!   same statement cutter) into `FileFacts.includes`, and `layout()` resolves
 //!   them through [`IncludeGraph::from_names`]; nothing re-reads the files.
-//! - `PERFORM f IN PROGRAM x` lowers to the two-segment path `x`, `f`, so the
-//!   resolver looks in program `x` only (test `abap_fixture_2_4_in_program_target`,
-//!   `#[ignore]`d until then; bag-of-words binds the bare name to the form of the
-//!   caller's own unit and so cannot answer it).
-//! - [`INCLUDE_NOT_IN_REPO`] joins `Stats.unresolved`.
+//! - `PERFORM f IN PROGRAM x` lowers to the two-segment path `program:x`, `f`
+//!   and every program is importable under that name, so the resolver looks in
+//!   program `x`'s unit only (test `abap_fixture_2_4_in_program_target`).
+//!   `IN PROGRAM (lv)` is a dynamic site (story 2.5).
+//! - [`INCLUDE_NOT_IN_REPO`] joins `Stats.unresolved`, one count per entry of
+//!   [`IncludeGraph::unresolved`].
+//!
+//! The bag-of-words pass (`graph.rs`, `build_abap_includes`) still runs beside
+//! the pipeline until `replaces_bow()` flips (story 2.2).
 
 use std::collections::{BTreeMap, HashMap};
 
@@ -41,8 +41,8 @@ use super::abap_name::{include_file_names, parse_abapgit_name};
 /// abapGit does not serialise a function group's generated `uxx` include, so
 /// this is the normal case, and not an error.
 ///
-/// Integration point (story 2.1): `calls/mod.rs` adds this as a reason of
-/// `Stats.unresolved`, one count per entry of [`IncludeGraph::unresolved`].
+/// `calls/abap.rs`'s `layout()` adds one count of it to `Stats.unresolved` per
+/// entry of [`IncludeGraph::unresolved`].
 pub const INCLUDE_NOT_IN_REPO: &str = "include not in repo";
 
 /// One `INCLUDE` statement that names no file of the repo.

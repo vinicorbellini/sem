@@ -3,8 +3,8 @@
 //! `->`, `=>`, `~`, `CALL METHOD`, `CALL FUNCTION` and `PERFORM` as call shapes. Computed calls
 //! (`CALL FUNCTION lv`, `zcl_x=>(lv)`) are reported with a reason, never dropped.
 //!
-//! The fixture is the ABAP fixture repository; the tests that need story 2.1's call lowering
-//! (resolved callers by shape, `Stats.unresolved` by reason) join it in the merge.
+//! The fixture is the ABAP fixture repository. The resolved callers come from story 2.1's call
+//! lowering, and the per-reason counts of `Stats.unresolved` are in `sem graph --json`.
 
 use std::{fs, path::Path, process::Command};
 
@@ -85,11 +85,9 @@ fn abap_fixture_2_5_string_key_any_case() {
     let dynamic = sites(&row, "zfx_dynamic.prog.abap");
     assert!(dynamic.iter().any(|(_, line, kind)| *line == 4 && kind == "string_key"), "{dynamic:?}");
     assert!(codes(&row).contains(&"dynamic_call".to_string()), "{:?}", row["incomplete_because"]);
-    // INTEGRATION 2.1: `zfx_report` becomes a resolved caller (`CALL FUNCTION 'ZFX_FM'`); until
-    // then the scan lists it as a possible one, as a call
+    // `zfx_report` is a resolved caller (`CALL FUNCTION 'ZFX_FM'`), by the calls pipeline
     let report_is_resolved = row["related"].as_array().unwrap().iter().any(|e| e["file"] == "zfx_report.prog.abap");
-    let report = sites(&row, "zfx_report.prog.abap");
-    assert!(report_is_resolved || report.iter().any(|(_, _, kind)| kind == "call"), "{report:?}");
+    assert!(report_is_resolved, "{:?}", row["related"]);
 }
 
 #[test]
@@ -148,4 +146,53 @@ fn abap_fixture_2_5_arrow_is_member_call() {
         assert!(got.contains(&("<module level>".to_string(), line, "member_call".to_string())), "{got:?}");
     }
     assert!(!got.iter().any(|(_, _, k)| k == "call"), "{got:?}");
+}
+
+#[test]
+fn abap_fixture_2_5_dynamic_reasons_counted() {
+    // `sem graph --json` carries the unresolved-call counts by reason in its stats block, one per
+    // computed call of `zfx_dynamic`, with no env var
+    let repo = fixture_repo();
+    let output = Command::new(env!("CARGO_BIN_EXE_sem"))
+        .current_dir(repo.path())
+        .env("DO_NOT_TRACK", "1")
+        .env("SEM_LOCAL", "1")
+        .env("SEM_NO_INDEX", "1")
+        .args(["graph", "--json", "--no-default-excludes"])
+        .output()
+        .expect("run sem");
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    let graph: Value = serde_json::from_slice(&output.stdout).expect("json");
+    let stats = &graph["stats"];
+    assert!(stats["entityCount"].as_u64().unwrap() > 0 && stats["edgeCount"].as_u64().is_some());
+    let unresolved = stats["unresolved"].as_object().expect("unresolved counts for an ABAP repo");
+    // CALL FUNCTION lv_fm; CALL METHOD zcl_fx_order=>(lv_meth) and lo_any->(lv_meth); PERFORM
+    // (lv_form) IN PROGRAM zfx_report and PERFORM show_order IN PROGRAM (lv_prog); CREATE OBJECT
+    // ... TYPE (lv_cls)
+    for (reason, n) in [
+        ("dynamic function name", 1),
+        ("dynamic method name", 2),
+        ("dynamic form name", 2),
+        ("dynamic class name", 1),
+    ] {
+        assert_eq!(unresolved.get(reason).and_then(Value::as_u64), Some(n), "{reason}: {unresolved:?}");
+    }
+}
+
+#[test]
+fn graph_json_stats_unchanged_without_abap() {
+    let repo = TempDir::new().unwrap();
+    fs::write(repo.path().join("a.py"), "def f():\n    g()\n\n\ndef g():\n    pass\n").unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_sem"))
+        .current_dir(repo.path())
+        .env("DO_NOT_TRACK", "1")
+        .env("SEM_LOCAL", "1")
+        .env("SEM_NO_INDEX", "1")
+        .args(["graph", "--json"])
+        .output()
+        .expect("run sem");
+    assert!(output.status.success());
+    let graph: Value = serde_json::from_slice(&output.stdout).expect("json");
+    let keys: Vec<&String> = graph["stats"].as_object().unwrap().keys().collect();
+    assert_eq!(keys, ["edgeCount", "entityCount"]);
 }

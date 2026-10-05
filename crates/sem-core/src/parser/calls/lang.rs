@@ -67,6 +67,9 @@ pub struct Layout {
     /// not named modules: a name a directory does not define is looked up in
     /// the one above it, and no directory is a member of its parent.
     pub dirs_fall_back: bool,
+    /// Sites the layout itself found unresolvable (an ABAP `INCLUDE` of a file
+    /// not in the repo), by reason: added to the stats' `unresolved`.
+    pub unresolved: HashMap<&'static str, usize>,
 }
 
 impl Layout {

@@ -396,7 +396,7 @@ fn words(text: &str) -> impl Iterator<Item = (usize, &str)> {
 /// not program includes. System includes (`INCLUDE <icon>.`) are not either.
 /// Read off the statement stream like `FORM`, so a comment or a literal that
 /// says "INCLUDE" is not one.
-pub(super) fn include_names(text: &str) -> Vec<String> {
+pub(crate) fn include_names(text: &str) -> Vec<String> {
     let code = strip_abap_content(text);
     let mut names = Vec::new();
     for statement in statements(&code) {

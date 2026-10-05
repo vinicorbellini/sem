@@ -271,6 +271,7 @@ impl<'t, 'a> Resolver<'t, 'a> {
                 self.method(&t, f.sym(name), depth + 1)
             }
             Expr::Path(p) => self.path(p, cx, at, depth),
+            Expr::Dynamic(k) => Pick::Unknown(DYNAMIC_REASONS[k as usize]),
             _ => Pick::Unknown("not a call"),
         }
     }

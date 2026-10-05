@@ -78,7 +78,8 @@ pub fn graph_command(opts: GraphOptions) {
     ));
 
     if opts.json {
-        write_graph_json(&graph).unwrap();
+        let unresolved = sem_core::parser::calls::abap_unresolved(root, &file_paths);
+        write_graph_json(&graph, unresolved).unwrap();
         timings.mark("cli_output_serialization");
     } else {
         timings.mark("cli_output_serialization");
@@ -111,9 +112,15 @@ pub fn fmt_count(n: usize) -> String {
 struct GraphStats {
     entity_count: usize,
     edge_count: usize,
+    /// Unresolved call sites by reason, for a repo with ABAP files only.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    unresolved: Option<std::collections::BTreeMap<&'static str, usize>>,
 }
 
-fn write_graph_json(graph: &EntityGraph) -> serde_json::Result<()> {
+fn write_graph_json(
+    graph: &EntityGraph,
+    unresolved: Option<std::collections::BTreeMap<&'static str, usize>>,
+) -> serde_json::Result<()> {
     let mut entities = graph.entities.values().collect::<Vec<_>>();
     entities.sort_by(|a, b| a.id.cmp(&b.id));
 
@@ -131,6 +138,7 @@ fn write_graph_json(graph: &EntityGraph) -> serde_json::Result<()> {
         &GraphStats {
             entity_count: graph.entities.len(),
             edge_count: graph.edges.len(),
+            unresolved,
         },
     )?;
     map.end()?;
@@ -187,6 +195,12 @@ fn try_index_graph(opts: &GraphOptions, root: &Path, source_scope: CacheSourceSc
         return false;
     }
     if !super::query::corpus_is_fresh(&idx, root, &opts.cwd) {
+        return false;
+    }
+
+    // The stats block of an ABAP repo carries its unresolved-call counts,
+    // which the image does not hold: build the graph for it.
+    if opts.json && idx.all_file_paths().iter().any(|p| p.ends_with(".abap")) {
         return false;
     }
 

@@ -10,9 +10,9 @@
 //! Two consumers share this one detector so they cannot disagree: the call lowering reports
 //! each site as `Pick::Unknown` with [`DynForm::reason`], counted in `Stats.unresolved`, and the
 //! CLI's completeness verdict (`commands::completeness`) lists them as possible references.
-//! INTEGRATION 2.1: `calls/abap.rs`'s lowering calls [`dynamic_sites`] on the file's source and
-//! emits one `Site` per result, with an expression that resolves to `Pick::Unknown(form.reason())`
-//! and no edge.
+//! `calls/abap.rs`'s lowering calls [`dynamic_sites`] on the file's source and emits one `Site`
+//! per result, with an `Expr::Dynamic` that resolves to `Pick::Unknown(form.reason())` and no
+//! edge. `sem graph --json` reports the per-reason counts in its stats block.
 
 use std::sync::OnceLock;
 
