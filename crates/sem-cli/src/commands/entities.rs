@@ -944,6 +944,7 @@ mod tests {
             except_kinds: vec![],
             text: None,
             signatures: false,
+            parse_report: false,
         });
 
         assert_eq!(
