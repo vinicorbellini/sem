@@ -3088,6 +3088,85 @@ DATA gv_global TYPE i.
 
     #[test]
     #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_0_local_parts_keep_definition_references() {
+        // A global class's local classes are its children from other files. Their
+        // line numbers must not be cut out of the class's own definition lines,
+        // or `TYPE REF TO` / `INTERFACES` / parameter types there lose their edges.
+        // A class with a one-line child (its `DATA`) is scanned through content
+        // spans, which already stay in the file, so drop the attributes: the
+        // class then has only methods as children and is scanned by line range,
+        // as an abstract class of local parts is. The definition then has
+        // references of its own: `INTERFACES zif_fx_order`, and one more nothing
+        // else makes, a `METHODS` parameter typed `zcl_fx_user`.
+        let class_edges = |names: &[&str]| {
+            let files: Vec<(&str, String)> = names
+                .iter()
+                .map(|file| {
+                    let text = abap_fixture_text(file);
+                    if *file != "zcl_fx_order.clas.abap" {
+                        return (*file, text);
+                    }
+                    let text: String = text
+                        .lines()
+                        .filter(|line| !line.trim_start().starts_with("DATA m"))
+                        .map(|line| {
+                            if line.trim_start().starts_with("METHODS describe") {
+                                format!(
+                                    "    METHODS adopt IMPORTING io_user TYPE REF TO zcl_fx_user.\n{line}\n"
+                                )
+                            } else {
+                                format!("{line}\n")
+                            }
+                        })
+                        .collect();
+                    assert!(text.contains("io_user") && !text.contains("DATA m"));
+                    (*file, text)
+                })
+                .collect();
+            let graph = abap_graph(&files);
+            let mut edges: Vec<(String, String, String)> = graph
+                .edges
+                .iter()
+                .filter(|edge| abap_label(&graph, edge.from_entity.as_str()) == "zcl_fx_order")
+                .map(|edge| {
+                    (
+                        abap_label(&graph, edge.from_entity.as_str()),
+                        abap_label(&graph, edge.to_entity.as_str()),
+                        format!("{:?}", edge.ref_type),
+                    )
+                })
+                .collect();
+            edges.sort();
+            edges.dedup();
+            eprintln!("zcl_fx_order edges: {edges:?}");
+            edges
+        };
+        let alone = class_edges(&[
+            "zcl_fx_order.clas.abap",
+            "zif_fx_order.intf.abap",
+            "zcl_fx_user.clas.abap",
+        ]);
+        let with_parts = class_edges(&[
+            "zcl_fx_order.clas.abap",
+            "zif_fx_order.intf.abap",
+            "zcl_fx_user.clas.abap",
+            "zcl_fx_order.clas.locals_def.abap",
+            "zcl_fx_order.clas.locals_imp.abap",
+            "zcl_fx_order.clas.testclasses.abap",
+        ]);
+        assert!(
+            alone.iter().any(|(_, to, _)| to == "zif_fx_order"),
+            "definition lost its interface reference: {alone:?}"
+        );
+        assert!(
+            alone.iter().any(|(_, to, _)| to == "zcl_fx_user"),
+            "definition lost its parameter type reference: {alone:?}"
+        );
+        assert_eq!(with_parts, alone);
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
     fn abap_fixture_2_0_local_class_stays_in_object() {
         // zcl_fx_order and zcl_fx_other each have a local `lcl_helper` with a
         // `tag` method. Each object's use reaches its own, in its other files.

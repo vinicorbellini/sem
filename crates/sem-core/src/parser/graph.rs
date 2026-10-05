@@ -1279,6 +1279,37 @@ fn fallback_reference_end_line(entity: &SemanticEntity, has_scope_resolve: bool)
         .max(entity.start_line)
 }
 
+/// Line ranges of each parent's children, keyed by parent id and sorted, for
+/// `direct_reference_line_ranges` to cut out of the parent's own scan.
+///
+/// A child's range is only meaningful in the parent's file: ABAP local parts
+/// (`*.clas.locals_imp.abap`, `*.clas.testclasses.abap`) and Go receiver
+/// methods name a parent that lives in another file, and subtracting their
+/// line numbers from the parent would cut out unrelated lines of its own.
+fn build_child_line_ranges(entities: &[SemanticEntity]) -> HashMap<String, Vec<(usize, usize)>> {
+    let file_by_id: HashMap<&str, &str> = entities
+        .iter()
+        .map(|entity| (entity.id.as_str(), entity.file_path.as_str()))
+        .collect();
+    let mut child_line_ranges: HashMap<String, Vec<(usize, usize)>> = HashMap::default();
+    for entity in entities {
+        let Some(pid) = entity.parent_id.as_ref() else {
+            continue;
+        };
+        if file_by_id.get(pid.as_str()) != Some(&entity.file_path.as_str()) {
+            continue;
+        }
+        child_line_ranges
+            .entry(pid.clone())
+            .or_default()
+            .push((entity.start_line, entity.end_line));
+    }
+    for ranges in child_line_ranges.values_mut() {
+        ranges.sort_unstable_by_key(|(start, end)| (*start, *end));
+    }
+    child_line_ranges
+}
+
 fn direct_reference_line_ranges(
     entity: &SemanticEntity,
     fallback_end_line: usize,
@@ -2832,24 +2863,7 @@ impl EntityGraph {
             }
             (parent_child_pairs, class_child_names)
         };
-        let lines = || {
-            let mut child_line_ranges: HashMap<String, Vec<(usize, usize)>> = HashMap::default();
-            for entity in &all_entities {
-                if let Some(ref pid) = entity.parent_id {
-                    match child_line_ranges.get_mut(pid.as_str()) {
-                        Some(bucket) => bucket.push((entity.start_line, entity.end_line)),
-                        None => {
-                            child_line_ranges
-                                .insert(pid.clone(), vec![(entity.start_line, entity.end_line)]);
-                        }
-                    }
-                }
-            }
-            for ranges in child_line_ranges.values_mut() {
-                ranges.sort_unstable_by_key(|(start, end)| (*start, *end));
-            }
-            child_line_ranges
-        };
+        let lines = || build_child_line_ranges(&all_entities);
         let classes = || {
             let mut class_entity_names: HashSet<&str> = HashSet::default();
             let mut class_entity_files: HashSet<(&str, &str)> = HashSet::default();
@@ -3572,7 +3586,7 @@ impl EntityGraph {
         let mut entity_map: EntityInfoMap =
             HashMap::with_capacity_and_hasher(all_entities.len(), Default::default());
         let mut parent_child_pairs: HashSet<(&str, &str)> = HashSet::default();
-        let mut child_line_ranges: HashMap<String, Vec<(usize, usize)>> = HashMap::default();
+        let child_line_ranges = build_child_line_ranges(&all_entities);
         let mut class_child_names: HashSet<(&str, &str)> = HashSet::default();
         let child_ranges_by_parent = build_child_ranges_by_parent(&all_entities);
         let mut class_entity_names: HashSet<&str> = HashSet::default();
@@ -3603,10 +3617,6 @@ impl EntityGraph {
 
             if let Some(ref pid) = entity.parent_id {
                 parent_child_pairs.insert((pid.as_str(), entity.id.as_str()));
-                child_line_ranges
-                    .entry(pid.clone())
-                    .or_default()
-                    .push((entity.start_line, entity.end_line));
                 class_child_names.insert((pid.as_str(), entity.name.as_str()));
             }
 
@@ -3626,10 +3636,6 @@ impl EntityGraph {
                     EntityId::from(&entity.id),
                 ));
         }
-        for ranges in child_line_ranges.values_mut() {
-            ranges.sort_unstable_by_key(|(start, end)| (*start, *end));
-        }
-
         let mut enclosing_class: HashMap<&str, &str> = HashMap::default();
         let mut class_members: HashMap<&str, Vec<(&str, &str)>> = HashMap::default();
         let mut scope_class_members: ClassMembers = HashMap::default();
@@ -4419,18 +4425,7 @@ impl EntityGraph {
                     .map(|pid| (pid.as_str(), e.id.as_str()))
             })
             .collect();
-        let mut child_line_ranges: HashMap<String, Vec<(usize, usize)>> = HashMap::default();
-        for entity in &all_entities {
-            if let Some(pid) = &entity.parent_id {
-                child_line_ranges
-                    .entry(pid.clone())
-                    .or_default()
-                    .push((entity.start_line, entity.end_line));
-            }
-        }
-        for ranges in child_line_ranges.values_mut() {
-            ranges.sort_unstable_by_key(|(start, end)| (*start, *end));
-        }
+        let child_line_ranges = build_child_line_ranges(&all_entities);
 
         let class_child_names: HashSet<(&str, &str)> = all_entities
             .iter()
