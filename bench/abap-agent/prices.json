@@ -1,17 +1,17 @@
 {
-  "_comment": "USD per million tokens. Fill in from the current price list before a real run; run.py refuses to make a model call while any value for the chosen model is null. cache_write is the 5-minute cache write rate.",
+  "_comment": "USD per million tokens, Anthropic first-party list prices as of 2026-10-05 (cache_write is the 5-minute cache write rate, 1.25x input; cache_read is 0.10x input on Opus 4.8 and 0.10 USD per million on Sonnet 5.5 per the published rate). Re-check against the price list before a real run; run.py refuses to make a model call while any value for the chosen model is null.",
   "models": {
     "claude-sonnet-5-5": {
-      "input": null,
-      "output": null,
-      "cache_read": null,
-      "cache_write": null
+      "input": 2.0,
+      "output": 10.0,
+      "cache_read": 0.2,
+      "cache_write": 2.5
     },
     "claude-opus-4-8": {
-      "input": null,
-      "output": null,
-      "cache_read": null,
-      "cache_write": null
+      "input": 5.0,
+      "output": 25.0,
+      "cache_read": 0.5,
+      "cache_write": 6.25
     }
   }
 }

@@ -9,7 +9,7 @@ appends one row to results.csv.
 
 Usage:
     export ANTHROPIC_API_KEY=...
-    python3 bench/abap-agent/run.py --checkpoint baseline --arm both --class all --cap-usd 50
+    python3 bench/abap-agent/run.py --checkpoint baseline --arm both --class all --cap-usd 30
     python3 bench/abap-agent/run.py --dry-run --arm both --class all --reps 1
 
 Dependencies: anthropic (not needed for --dry-run), git, node + npm, a release build of sem
@@ -385,7 +385,7 @@ def main():
     parser.add_argument("--task", action="append", help="Only this task id (repeatable), e.g. b1_03.")
     parser.add_argument("--dry-run", action="store_true",
                         help="Do everything except the model call; print what would be sent.")
-    parser.add_argument("--cap-usd", type=float, help="Stop when the cumulative cost would exceed this.")
+    parser.add_argument("--cap-usd", type=float, default=30.0, help="Stop when the cumulative cost would exceed this (default 30, the agreed benchmark cap).")
     parser.add_argument("--abapgit", default=ABAPGIT_SOURCE, help="abapGit clone to copy checkouts from.")
     parser.add_argument("--work-dir", type=Path, default=WORK_DIR)
     parser.add_argument("--sem-binary")
