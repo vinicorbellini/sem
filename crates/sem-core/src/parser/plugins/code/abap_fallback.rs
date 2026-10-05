@@ -297,21 +297,21 @@ struct Word {
 
 /// One ABAP statement: its tokens, and the period that closes it (none for a
 /// statement cut short by the end of the file).
-struct Statement {
-    tokens: Vec<Token>,
-    period: Option<Token>,
+pub(crate) struct Statement {
+    pub(crate) tokens: Vec<Token>,
+    pub(crate) period: Option<Token>,
 }
 
 /// Where a token is. Its text is read off the stripped code, never the source,
 /// so a comment or a literal is never a word.
 #[derive(Clone, Copy)]
-struct Token {
-    start_byte: usize,
-    end_byte: usize,
+pub(crate) struct Token {
+    pub(crate) start_byte: usize,
+    pub(crate) end_byte: usize,
 }
 
 impl Token {
-    fn text<'a>(&self, code: &'a str) -> &'a str {
+    pub(crate) fn text<'a>(&self, code: &'a str) -> &'a str {
         &code[self.start_byte..self.end_byte]
     }
 }
@@ -346,7 +346,7 @@ impl Statement {
         })
     }
 
-    fn end_byte(&self) -> usize {
+    pub(crate) fn end_byte(&self) -> usize {
         self.period
             .or_else(|| self.tokens.last().copied())
             .map_or(0, |t| t.end_byte)
@@ -366,8 +366,9 @@ fn words(text: &str) -> impl Iterator<Item = (usize, &str)> {
 }
 
 /// Cut the stripped code into statements at each period. Whitespace separates
-/// tokens, and `.`, `,` and `:` are tokens of their own.
-fn statements(code: &str) -> Vec<Statement> {
+/// tokens, and `.`, `,` and `:` are tokens of their own. The calls pipeline's
+/// ABAP lowering (`calls::abap`) reads its statements here too.
+pub(crate) fn statements(code: &str) -> Vec<Statement> {
     let mut statements = Vec::new();
     let mut tokens = Vec::new();
     let mut word_start: Option<usize> = None;

@@ -1552,7 +1552,7 @@ fn resolve_references_with_file_indexes<'a>(
             .map(|i| &entity.file_path[i..])
             .unwrap_or("");
         if crate::parser::plugins::code::languages::get_language_config(ext).is_none()
-            || calls::language_for(&entity.file_path).is_some()
+            || calls::language_for(&entity.file_path).is_some_and(|lang| lang.replaces_bow())
         {
             continue;
         }

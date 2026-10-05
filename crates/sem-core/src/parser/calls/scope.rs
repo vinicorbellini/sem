@@ -182,6 +182,11 @@ fn propagate_globs<'a>(
     surfaces
 }
 
+/// The directory holding file `fi`'s scope-1 items ([`Layout::local_home`]).
+fn local_home(layout: &Layout, fi: usize) -> Option<usize> {
+    layout.local_home.get(fi).copied().flatten()
+}
+
 /// Which namespaces some definitions occupy: (values, types/modules).
 /// `External` could be either.
 fn namespaces(defs: &[Def]) -> (bool, bool) {
@@ -275,8 +280,11 @@ impl<'a> ScopeTables<'a> {
                 (Some((d, _)), Some(true)) => Some(dir_base + *d as u32),
                 _ => None,
             };
-            let home = |local: u32| match (local, pooled_dir) {
-                (0, Some(d)) => d,
+            // and its scope 1, a directory of its own unit's local names
+            let local_dir = local_home(layout, fi).map(|d| dir_base + d as u32);
+            let home = |local: u32| match (local, pooled_dir, local_dir) {
+                (0, Some(d), _) => d,
+                (1, Some(_), Some(d)) => d,
                 _ => b + local,
             };
             for (i, func) in f.fns.iter().enumerate() {
@@ -323,6 +331,12 @@ impl<'a> ScopeTables<'a> {
             if let Some(p) = parent {
                 let pg = dir_base + *p as u32;
                 module_parent[g as usize] = Some(pg);
+                if layout.dirs_fall_back {
+                    // a lookup block: what it lacks, its parent answers
+                    is_block[g as usize] = true;
+                    lexical_parent[g as usize] = Some(pg);
+                    continue;
+                }
                 items[pg as usize]
                     .entry(name.as_str())
                     .or_default()
@@ -334,9 +348,11 @@ impl<'a> ScopeTables<'a> {
                 let g = dir_base + *d as u32;
                 if layout.pooled.get(fi) == Some(&true) {
                     // the file scope only holds its imports; names fall
-                    // back to the package
+                    // back to its unit's local names, if it has a home for
+                    // them, then to the package
                     is_block[base[fi] as usize] = true;
-                    lexical_parent[base[fi] as usize] = Some(g);
+                    lexical_parent[base[fi] as usize] =
+                        Some(local_home(layout, fi).map_or(g, |l| dir_base + l as u32));
                     continue;
                 }
                 module_parent[base[fi] as usize] = Some(g);

@@ -284,6 +284,15 @@ impl<'t, 'a> Resolver<'t, 'a> {
         if segs.len() == 1 && cx.generics.iter().any(|g| *g.name == *segs[0]) {
             return Pick::Unknown("generic parameter");
         }
+        // `m()` inside a method, with no receiver written (ABAP): a method
+        // of the enclosing type, else whatever the name means in scope
+        if segs.len() == 1 && self.lang.implicit_self() {
+            if let Some(t) = &cx.self_ty {
+                if let p @ Pick::Defs(..) = self.method(t, segs[0], depth + 1) {
+                    return p;
+                }
+            }
+        }
         self.path_segs(&segs, cx, depth)
     }
 
