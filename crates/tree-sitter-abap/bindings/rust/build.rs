@@ -1,6 +1,7 @@
-// Compiles the generated parser. The same as the sqry crate's build.rs that
-// this replaces, plus the wasm32 headers every tree-sitter-language grammar
-// takes (sem-plugin builds sem-core for wasm32 with every grammar).
+// Compiles the generated parser and the external scanner (`src/scanner.c`).
+// The same as the sqry crate's build.rs that this replaces, plus the wasm32
+// headers every tree-sitter-language grammar takes (sem-plugin builds sem-core
+// for wasm32 with every grammar).
 fn main() {
     let src_dir = std::path::Path::new("src");
 
@@ -35,6 +36,11 @@ fn main() {
     let parser_path = src_dir.join("parser.c");
     c_config.file(&parser_path);
     println!("cargo:rerun-if-changed={}", parser_path.to_str().unwrap());
+
+    // The external scanner: a `*` comment only in column 1.
+    let scanner_path = src_dir.join("scanner.c");
+    c_config.file(&scanner_path);
+    println!("cargo:rerun-if-changed={}", scanner_path.to_str().unwrap());
 
     c_config.compile("tree-sitter-abap");
 }

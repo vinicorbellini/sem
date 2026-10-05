@@ -1,0 +1,285 @@
+==================
+chained METHODS and CLASS-METHODS in a class definition
+==================
+
+class ltcl_test definition final for testing duration short risk level harmless.
+  private section.
+    methods: setup,
+      first_test for testing raising zcx_error,
+      second_test for testing,
+      constructor importing iv_a type i,
+      get_a redefinition.
+    class-methods: class_setup,
+      create returning value(ro_x) type ref to zcl_x.
+endclass.
+
+---
+
+(program
+  (class_declaration
+    name: (name)
+    (private_section
+      (chained_method_declaration
+        (method_declaration
+          name: (name))
+        (method_declaration
+          name: (name)
+          raising: (name))
+        (method_declaration
+          name: (name))
+        (constructor_declaration
+          importing_parameters: (method_parameters
+            (name)
+            (complete_typing
+              (type))))
+        (method_redefinition
+          (name)))
+      (chained_class_method_declaration
+        (class_method_declaration
+          name: (name))
+        (class_method_declaration
+          name: (name)
+          (returning_parameter
+            (name)
+            (complete_typing
+              (type))))))))
+
+==================
+chained and single INTERFACES
+==================
+
+class zcl_x definition public final create public.
+  public section.
+    interfaces: zif_a, zif_b.
+    interfaces zif_c partially implemented.
+    interfaces zif_d all methods final.
+endclass.
+
+---
+
+(program
+  (class_declaration
+    name: (name)
+    (public_section
+      (chained_interfaces_declaration
+        (interfaces_declaration
+          name: (name))
+        (interfaces_declaration
+          name: (name)))
+      (interfaces_declaration
+        name: (name))
+      (interfaces_declaration
+        name: (name)))))
+
+==================
+chained DATA, CLASS-DATA, CONSTANTS and TYPES in a class definition
+==================
+
+class zcl_x definition public.
+  public section.
+    types: ty_names type standard table of string with default key,
+      begin of ty_s,
+        id    type dokil-id,
+        other type zif_x=>ty_y,
+        text  type c length 10,
+      end of ty_s.
+    types ty_count type i.
+    constants: begin of c_kind,
+        a type string value 'A',
+        b type i value 2,
+      end of c_kind.
+    constants c_max type i value 100.
+  private section.
+    data: mv_a type i,
+      begin of ms_called,
+        popup type abap_bool,
+      end of ms_called,
+      mt_names type ty_names.
+    class-data: go_instance type ref to zcl_x,
+      gt_cache type hashed table of ty_s with unique key id.
+    class-data gv_flag type abap_bool read-only.
+endclass.
+
+---
+
+(program
+  (class_declaration
+    name: (name)
+    (public_section
+      (chained_types_declaration
+        (type_definition
+          name: (name)
+          typing: (typing
+            (type)))
+        (structure_begin
+          name: (name))
+        (type_definition
+          name: (name)
+          typing: (typing
+            (type
+              (name)
+              (name))))
+        (type_definition
+          name: (name)
+          typing: (typing
+            (type
+              (name)
+              (name))))
+        (type_definition
+          name: (name)
+          typing: (typing
+            (type)
+            (numeric_literal)))
+        (structure_end
+          name: (name)))
+      (types_declaration
+        name: (name)
+        typing: (typing
+          (type)))
+      (chained_constants_declaration
+        (structure_begin
+          name: (name))
+        (constant
+          name: (name)
+          typing: (typing
+            (type)
+            (character_literal)))
+        (constant
+          name: (name)
+          typing: (typing
+            (type)
+            (numeric_literal)))
+        (structure_end
+          name: (name)))
+      (constants_declaration
+        name: (name)
+        typing: (typing
+          (type)
+          (numeric_literal))))
+    (private_section
+      (variable_declaration
+        name: (name)
+        typing: (typing
+          (type)))
+      (variable_declaration
+        name: (name)
+        (component
+          name: (name)
+          typing: (typing
+            (type)))
+        (name))
+      (variable_declaration
+        name: (name)
+        typing: (typing
+          (type)))
+      (variable_declaration
+        name: (name)
+        typing: (typing
+          (type)))
+      (variable_declaration
+        name: (name)
+        typing: (typing
+          (type)
+          (name)))
+      (variable_declaration
+        name: (name)
+        typing: (typing
+          (type))))))
+
+==================
+chained declarations in an interface
+==================
+
+interface zif_x public.
+  types: begin of ty_y,
+      a type i,
+    end of ty_y.
+  constants c_version type string value `1.0`.
+  methods: run importing iv_x type string default 'a',
+    stop.
+  class-methods: create.
+  interfaces zif_base.
+endinterface.
+
+---
+
+(program
+  (interface_declaration
+    name: (name)
+    (chained_types_declaration
+      (structure_begin
+        name: (name))
+      (type_definition
+        name: (name)
+        typing: (typing
+          (type)))
+      (structure_end
+        name: (name)))
+    (constants_declaration
+      name: (name)
+      typing: (typing
+        (type)
+        (string_literal)))
+    (chained_method_declaration
+      (method_declaration
+        name: (name)
+        importing_parameters: (method_parameters
+          (name)
+          (complete_typing
+            (type))
+          (character_literal)))
+      (method_declaration
+        name: (name)))
+    (chained_class_method_declaration
+      (class_method_declaration
+        name: (name)))
+    (interfaces_declaration
+      name: (name))))
+
+==================
+TYPES and CONSTANTS in a method body
+==================
+
+class zcl_x implementation.
+  method run.
+    types: begin of ty_line,
+        a type i,
+      end of ty_line,
+      ty_lines type sorted table of ty_line with non-unique key a.
+    constants lc_max type i value 3.
+    data: lt_lines type ty_lines.
+  endmethod.
+endclass.
+
+---
+
+(program
+  (class_implementation
+    name: (name)
+    (method_implementation
+      name: (name)
+      (method_body
+        (chained_types_declaration
+          (structure_begin
+            name: (name))
+          (type_definition
+            name: (name)
+            typing: (typing
+              (type)))
+          (structure_end
+            name: (name))
+          (type_definition
+            name: (name)
+            typing: (typing
+              (type)
+              (name))))
+        (constants_declaration
+          name: (name)
+          typing: (typing
+            (type)
+            (numeric_literal)))
+        (chained_variable_declaration
+          (variable
+            (name)
+            (typing
+              (type))))))))

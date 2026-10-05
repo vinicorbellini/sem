@@ -37,22 +37,22 @@ data: begin of struc,
 
 ---
 (program
-  (chained_structure_declaration
-    (strucure_name)
-    (structure_components
-      (structure_component
+  (chained_variable_declaration
+    (structure_declaration
+      (name)
+      (component
         (name)
-        (complete_typing
+        (typing
           (type)))
-      (structure_component
+      (component
         (name)
-        (complete_typing
+        (typing
           (type)))
-      (structure_component
+      (component
         (name)
-        (complete_typing
-          (type))))
-    (strucure_name)))
+        (typing
+          (type)))
+      (name))))
 
 ==================
 chained field-symbols declaration

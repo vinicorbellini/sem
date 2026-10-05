@@ -39,8 +39,9 @@ These differ from the first-draft implementation notes. Each story applies them.
    `macro_include` whose `name` is the keyword. `TYPES` parses as an `ERROR`
    node. `FOR TESTING` produces `ERROR` nodes inside `class_declaration` and
    `method_declaration`. Stories 1.3 and 1.6 handle this. (The fork's grammar
-   now reads `FOR TESTING`, `RISK LEVEL` and `DURATION`, see fact 12; the rest
-   of this fact still holds.)
+   now reads `FOR TESTING`, `RISK LEVEL` and `DURATION`, see fact 12, and
+   `TYPES`, see fact 14, though sem still takes `TYPES` from the fallback; the
+   rest of this fact still holds.)
 4. `function_implementation` already exists and covers `FUNCTION ... ENDFUNCTION`.
    The `REPORT` statement is a `report_statement`; the root is `program`.
 5. ABAP has `scope_resolve: None`, so `scope_resolve.rs` is not on the ABAP
@@ -98,7 +99,7 @@ These differ from the first-draft implementation notes. Each story applies them.
     grammar still loses whole implementations and stretches methods on other
     statements, for example a `*` mid-line, which `bol_comment` (`"*"` then
     the rest of the line, not anchored to column 1) reads as a comment that
-    eats the statement's period.
+    eats the statement's period (fixed in the fork, fact 13).
 
 12. Upstream's `class_declaration` took its additions in one fixed order
     and had no `FOR TESTING`, `RISK LEVEL` or `DURATION`, so every test
@@ -106,11 +107,63 @@ These differ from the first-draft implementation notes. Each story applies them.
     `METHODS x FOR TESTING.` too. Not the chained `METHODS: a, b FOR
     TESTING.`, 263 statements in abapGit: the grammar has no chained
     `METHODS` at all, nor chained `INTERFACES:`, and either one still puts a
-    class definition in an `ERROR`. Error recovery around such an `ERROR`
+    class definition in an `ERROR` (fixed in the fork, fact 14). Error recovery around such an `ERROR`
     moves with every grammar change, so a fix can lose a few entities in one
     file while it gains them in others (after this fix,
     `zcl_abapgit_gui_page_repo_view` lost its 15 `DATA` attributes and the
     ajson test classes gained 17 `TYPES`); the totals are in the table below.
+
+13. A `*` starts a comment only in column 1. Upstream's `bol_comment` took
+    any `*` and the rest of its line, so `lv = lines( lt ) * 2.` lost its
+    period. A tree-sitter token cannot see the column, so the fork reads
+    `bol_comment` with an external scanner (`src/scanner.c` in the grammar
+    crate). On its own the fix does not reduce the methods the fallback adds:
+    the scanner also stops tokens taking a leading space with them, which
+    moves error recovery around the statements the grammar still cannot read.
+    Three class files lost most of their grammar methods to it:
+    `zcl_abapgit_object_clas` and `zcl_abapgit_object_intf`, whose
+    definitions hold a `CONSTANTS: BEGIN OF` with a component named `methods`
+    that recovery now reads as the `METHODS` keyword, and
+    `zcl_abapgit_gui_page_repo_view`, which became one `ERROR`, as did
+    `zif_abapgit_git_definitions`, which lost its interface entity. Fact
+    14's fix takes all four back.
+
+14. Upstream had no chained `METHODS:`, `CLASS-METHODS:` or `INTERFACES:`,
+    and no `INTERFACES`, `CLASS-DATA`, `CONSTANTS` or `TYPES` statement at
+    all; a class definition took only single `DATA`. In abapGit's class
+    definitions and interfaces that is 263 chained `METHODS:`, 34 chained
+    `CLASS-METHODS:`, 417 `INTERFACES`, 99 `CLASS-DATA`, 352 `CONSTANTS`,
+    661 `TYPES` and 143 chained `DATA:` statements, each of which put its
+    definition in an `ERROR`. The fork reads all of them, single and chained,
+    and `TYPES` and `CONSTANTS` in method bodies too (the crate's README,
+    fix 5, has the node shapes). Every attribute of a class or interface is
+    now a `variable_declaration` right under its section, so a chained `DATA:`
+    or `CLASS-DATA` gives a `variable` entity per part; before, some of these
+    were variables only when error recovery happened to leave a
+    `DATA x TYPE y` behind, and others were not entities at all. `TYPES` are
+    still entities from the fallback: the grammar's `types_declaration`
+    and `chained_types_declaration` are not in `ABAP_CONFIG` yet. With the
+    definitions readable, error recovery no longer swallows some
+    implementations whole, so a few files show more error nodes than before
+    (`zcl_abapgit_object_iaxu`: its definition used to run to the end of the
+    file).
+
+15. The grammar's `name` stops at a `~`, so `METHOD zif_x~m.` was the method
+    `zif_x` and an `ERROR`, and sem joined the name back from the `ERROR`
+    (`entity_extractor.rs`) only when it held just `~m`; when it held more (a
+    long name, part of the body), the method had no name and came from the
+    fallback. 3290 of abapGit's 7591 `METHOD` statements name an interface
+    method, and after fact 14's fix about 700 of the 1685 fallback entities
+    were such methods, with 387 `TYPES` and 591 other lost methods the rest.
+    The fork reads `zif_x~m` as one `name` token in `METHOD` and in
+    `METHODS ... REDEFINITION`. That halves the fallback (1685 to 843) and
+    changes no entity: the same 9934, each method named as before, now from
+    the grammar. What the fallback still adds is 387 `TYPES` (the grammar
+    reads them since fact 14, but `ABAP_CONFIG` does not list
+    `types_declaration` yet), about 440 methods the grammar still loses in 66
+    files (`zcl_abapgit_ajson.clas.locals_imp`, `_object_tabl_ddl`,
+    `_html_form`, `_gui_page_diff_base` lose more than 20 each), 6 forms and
+    a few classes. No single statement accounts for those methods.
 
 ## Grammar fork
 
@@ -149,9 +202,27 @@ for 7577 `METHOD` blocks):
 | upstream `c7604df` | 39314 | 731 | 9703 | 6786 | 2917 | 5705 |
 | 1. literals end at their line | 37305 | 731 | 9808 | 7966 | 1842 | 6818 |
 | 2. `FOR TESTING`, `RISK LEVEL`, `DURATION` | 37198 | 727 | 9719 | 7963 | 1756 | 6912 |
+| 3. `*` comments in column 1 only | 36558 | 727 | 9731 | 7874 | 1857 | 6801 |
+| 4. chained declarations, `INTERFACES`, `CLASS-DATA`, `CONSTANTS`, `TYPES` | 30435 | 632 | 9934 | 8249 | 1685 | 6991 |
+| 5. `zif_x~m` method names | 27637 | 626 | 9934 | 9091 | 843 | 7144 |
 
-Through both fixes every `METHOD` block stays a method entity (7582 method
+Through every fix every `METHOD` block stays a method entity (7582 method
 entities each time, the grammar's plus the fallback's), so the entity totals
-move only with class-level `DATA` and `TYPES`. Fix 1 also let 90 local `DATA`
-in test method bodies through as class variables (the ajson test classes);
-fix 2 removed them again.
+move only with class-level `DATA` and `TYPES` and the odd class or interface.
+Fix 1 also let 90 local `DATA` in test method bodies through as class
+variables (the ajson test classes); fix 2 removed them again. Fix 3 moved
+error recovery (fact 13): 94 files have more error nodes and 79 fewer, the
+fallback adds methods in 15 files and fewer in 11, and the entities gain 10
+`DATA` and 3 `TYPES` and lose `zif_abapgit_git_definitions`. Fix 4 takes back
+those three files' methods and the interface, makes 95 more files parse with
+no error node, and adds 203 `variable` entities (239 class attributes written
+as chained `DATA:` or `CLASS-DATA`, less 36 that recovery had made of local
+`DATA` in method bodies and of `CONSTANTS` and `TYPES`); error nodes fall in
+655 files and rise in 30, where a definition no longer runs on over the
+implementation after it. Fix 5 leaves the entity set as it was, moves 842
+of them from the fallback to the grammar, cleans 6 more files, and lowers
+error nodes in 330 files; 13 have more (`zcl_abapgit_object_tran` +54,
+`_object_wdca` +39, `zcl_abapgit_gui_page_flowcons` +37), where methods that
+error recovery used to fold into one are now separate and their bodies'
+unread statements count on their own. No file that had no error node has one
+after any fix.
