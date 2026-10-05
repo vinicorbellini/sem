@@ -821,7 +821,7 @@
         ]
       },
       "superclass": {
-        "multiple": false,
+        "multiple": true,
         "required": false,
         "types": [
           {
@@ -3539,6 +3539,14 @@
     "named": false
   },
   {
+    "type": "critical",
+    "named": false
+  },
+  {
+    "type": "dangerous",
+    "named": false
+  },
+  {
     "type": "data",
     "named": false
   },
@@ -3556,6 +3564,10 @@
   },
   {
     "type": "definition",
+    "named": false
+  },
+  {
+    "type": "duration",
     "named": false
   },
   {
@@ -3663,6 +3675,10 @@
     "named": false
   },
   {
+    "type": "harmless",
+    "named": false
+  },
+  {
     "type": "hashed",
     "named": false
   },
@@ -3719,6 +3735,10 @@
     "named": false
   },
   {
+    "type": "level",
+    "named": false
+  },
+  {
     "type": "like",
     "named": false
   },
@@ -3731,7 +3751,15 @@
     "named": false
   },
   {
+    "type": "long",
+    "named": false
+  },
+  {
     "type": "loop",
+    "named": false
+  },
+  {
+    "type": "medium",
     "named": false
   },
   {
@@ -3847,6 +3875,10 @@
     "named": false
   },
   {
+    "type": "risk",
+    "named": false
+  },
+  {
     "type": "rows",
     "named": false
   },
@@ -3864,6 +3896,10 @@
   },
   {
     "type": "shared",
+    "named": false
+  },
+  {
+    "type": "short",
     "named": false
   },
   {
@@ -3896,6 +3932,10 @@
   },
   {
     "type": "table",
+    "named": false
+  },
+  {
+    "type": "testing",
     "named": false
   },
   {

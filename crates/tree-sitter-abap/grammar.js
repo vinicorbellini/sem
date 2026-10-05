@@ -58,14 +58,10 @@ module.exports = grammar({
         kw("class"),
         field("name", $.name),
         kw("definition"),
-        optional(kw("public")),
-        optional(
-          seq(kw("inheriting"), kw("from"), field("superclass", $.name))
-        ),
-        optional(kw("abstract")),
-        optional(kw("final")),
-        optional($._create_addition),
-        optional(seq(kw("shared"), kw("memory"), kw("enabled"))),
+        // ABAP takes the additions in any order (abapGit writes both
+        // `FINAL FOR TESTING DURATION SHORT RISK LEVEL HARMLESS` and
+        // `FOR TESTING RISK LEVEL HARMLESS DURATION SHORT FINAL`).
+        repeat($._class_option),
         optional(
           seq(
             optional(kw("global")),
@@ -80,6 +76,25 @@ module.exports = grammar({
         kw("endclass"),
         "."
       ),
+
+    _class_option: $ =>
+      choice(
+        kw("public"),
+        seq(kw("inheriting"), kw("from"), field("superclass", $.name)),
+        kw("abstract"),
+        kw("final"),
+        $._create_addition,
+        seq(kw("shared"), kw("memory"), kw("enabled")),
+        $._for_testing,
+        seq(
+          kw("risk"),
+          kw("level"),
+          choice(kw("critical"), kw("dangerous"), kw("harmless"))
+        ),
+        seq(kw("duration"), choice(kw("short"), kw("medium"), kw("long")))
+      ),
+
+    _for_testing: $ => seq(kw("for"), kw("testing")),
 
     _create_addition: $ =>
       seq(kw("create"), choice(kw("public"), kw("protected"), kw("private"))),
@@ -119,6 +134,7 @@ module.exports = grammar({
         kw("methods"),
         field("name", $.name),
         optional(choice(kw("abstract"), kw("final"))),
+        optional($._for_testing),
         field(
           "importing_parameters",
           optional($._method_declaration_importing)

@@ -70,3 +70,17 @@ newer CLI writes (`$schema`, `reserved`, `extra`, `root`).
    embedded expressions are kept opaque (they may run over lines but may not
    contain a `}`, so a nested template with an embedded expression is not
    read). Corpus: `test/corpus/literals.txt`.
+3. **`FOR TESTING` on class and method declarations.** Upstream read a
+   class definition's additions in one fixed order and had no `FOR TESTING`,
+   `RISK LEVEL` or `DURATION` (its own corpus test for them was a skipped
+   TODO), so every test class definition was an `ERROR`. The additions are now
+   `repeat($._class_option)`, in any order, as ABAP and abapGit write them
+   (`FINAL FOR TESTING DURATION SHORT RISK LEVEL HARMLESS`,
+   `FOR TESTING RISK LEVEL HARMLESS DURATION SHORT FINAL`), with
+   `FOR TESTING`, `RISK LEVEL CRITICAL|DANGEROUS|HARMLESS` and
+   `DURATION SHORT|MEDIUM|LONG` among them; `GLOBAL FRIENDS` stays last. A
+   `METHODS x` declaration takes `FOR TESTING` after `ABSTRACT`/`FINAL`. The
+   chained form `METHODS: a, b FOR TESTING.` is still not in the grammar (no
+   chained `METHODS` is). Upstream's skipped TODO in
+   `test/corpus/class_declaration.txt` is now a real test; more in
+   `test/corpus/for_testing.txt`.

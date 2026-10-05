@@ -2742,8 +2742,9 @@ DATA gv_global TYPE i.
     #[test]
     #[cfg(feature = "lang-abap")]
     fn abap_fixture_1_6_errors_still_yield_entities() {
-        // `FOR TESTING` and `DURATION SHORT RISK LEVEL` are ERROR nodes inside the
-        // definition; the class and every method are still there.
+        // The method bodies hold ERROR nodes (and, before the fork's grammar
+        // read them, `FOR TESTING` and `DURATION SHORT RISK LEVEL` in the
+        // definition did too); the class and every method are still there.
         let rows = abap_fixture_rows("zcl_fx_order.clas.testclasses.abap");
         let names = |kind: &str| -> Vec<&str> {
             rows.iter().filter(|r| r.0 == kind).map(|r| r.1.as_str()).collect()

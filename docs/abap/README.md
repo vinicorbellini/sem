@@ -38,7 +38,9 @@ These differ from the first-draft implementation notes. Each story applies them.
    `FORM`, `ENDFORM`, `MODULE`, `ENDMODULE`, `DEFINE` and `PERFORM` all parse as
    `macro_include` whose `name` is the keyword. `TYPES` parses as an `ERROR`
    node. `FOR TESTING` produces `ERROR` nodes inside `class_declaration` and
-   `method_declaration`. Stories 1.3 and 1.6 handle this.
+   `method_declaration`. Stories 1.3 and 1.6 handle this. (The fork's grammar
+   now reads `FOR TESTING`, `RISK LEVEL` and `DURATION`, see fact 12; the rest
+   of this fact still holds.)
 4. `function_implementation` already exists and covers `FUNCTION ... ENDFUNCTION`.
    The `REPORT` statement is a `report_statement`; the root is `program`.
 5. ABAP has `scope_resolve: None`, so `scope_resolve.rs` is not on the ABAP
@@ -98,6 +100,18 @@ These differ from the first-draft implementation notes. Each story applies them.
     the rest of the line, not anchored to column 1) reads as a comment that
     eats the statement's period.
 
+12. Upstream's `class_declaration` took its additions in one fixed order
+    and had no `FOR TESTING`, `RISK LEVEL` or `DURATION`, so every test
+    class definition was an `ERROR`. The fork takes them in any order, and
+    `METHODS x FOR TESTING.` too. Not the chained `METHODS: a, b FOR
+    TESTING.`, 263 statements in abapGit: the grammar has no chained
+    `METHODS` at all, nor chained `INTERFACES:`, and either one still puts a
+    class definition in an `ERROR`. Error recovery around such an `ERROR`
+    moves with every grammar change, so a fix can lose a few entities in one
+    file while it gains them in others (after this fix,
+    `zcl_abapgit_gui_page_repo_view` lost its 15 `DATA` attributes and the
+    ajson test classes gained 17 `TYPES`); the totals are in the table below.
+
 ## Grammar fork
 
 sem builds against its own copy of mkoval1/tree-sitter-abap, in
@@ -134,3 +148,10 @@ for 7577 `METHOD` blocks):
 |---|---:|---:|---:|---:|---:|---:|
 | upstream `c7604df` | 39314 | 731 | 9703 | 6786 | 2917 | 5705 |
 | 1. literals end at their line | 37305 | 731 | 9808 | 7966 | 1842 | 6818 |
+| 2. `FOR TESTING`, `RISK LEVEL`, `DURATION` | 37198 | 727 | 9719 | 7963 | 1756 | 6912 |
+
+Through both fixes every `METHOD` block stays a method entity (7582 method
+entities each time, the grammar's plus the fallback's), so the entity totals
+move only with class-level `DATA` and `TYPES`. Fix 1 also let 90 local `DATA`
+in test method bodies through as class variables (the ajson test classes);
+fix 2 removed them again.

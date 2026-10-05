@@ -113,8 +113,7 @@ endclass.
     name: (name)))
 
 ==================
-TODO: class declaration for testing
-:skip
+class declaration for testing
 ==================
 
 class class definition 
@@ -124,7 +123,9 @@ endclass.
 
 ---
 
-(program)
+(program
+  (class_declaration
+    name: (name)))
 
 ==================
 TODO: class declaration for behavior definition

@@ -1,0 +1,57 @@
+==================
+test class with risk level and duration
+==================
+
+CLASS ltcl_test DEFINITION FINAL FOR TESTING
+  DURATION SHORT
+  RISK LEVEL HARMLESS.
+
+  PRIVATE SECTION.
+    METHODS setup.
+    METHODS run FOR TESTING RAISING zcx_error.
+ENDCLASS.
+
+---
+
+(program
+  (class_declaration
+    name: (name)
+    (private_section
+      (method_declaration
+        name: (name))
+      (method_declaration
+        name: (name)
+        raising: (name)))))
+
+==================
+test class additions in another order
+==================
+
+CLASS ltcl_other DEFINITION FOR TESTING RISK LEVEL HARMLESS DURATION SHORT
+  INHERITING FROM ltcl_test FINAL.
+ENDCLASS.
+
+---
+
+(program
+  (class_declaration
+    name: (name)
+    superclass: (name)))
+
+==================
+test class with dangerous risk and medium duration
+==================
+
+class ltcl_db definition for testing duration medium risk level dangerous create private.
+  public section.
+    methods read for testing.
+endclass.
+
+---
+
+(program
+  (class_declaration
+    name: (name)
+    (public_section
+      (method_declaration
+        name: (name)))))
