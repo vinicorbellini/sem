@@ -311,6 +311,15 @@ enum Commands {
         #[arg(long)]
         signatures: bool,
 
+        /// Listing: per file, its entity count (from the grammar and from a fallback pass) and its parse-error node count.
+        /// Lists every file, a file with no entities as 0. Example: sem find --in src --parse-report --json
+        #[arg(
+            long,
+            requires = "in_paths",
+            conflicts_with_all = ["callers", "refs", "context", "text", "only_kinds", "except_kinds", "signatures"]
+        )]
+        parse_report: bool,
+
         /// Only include files with these extensions
         #[arg(long, num_args = 1.., hide = true)]
         file_exts: Vec<String>,
@@ -1394,6 +1403,7 @@ struct EntitiesArgs {
     except_kinds: Vec<String>,
     text: Option<String>,
     signatures: bool,
+    parse_report: bool,
 }
 
 fn run_entities(a: EntitiesArgs) {
@@ -1407,6 +1417,7 @@ fn run_entities(a: EntitiesArgs) {
         except_kinds: a.except_kinds,
         text: a.text,
         signatures: a.signatures,
+        parse_report: a.parse_report,
     });
 }
 
@@ -1674,6 +1685,7 @@ fn sem_main() {
             except_kinds,
             text,
             signatures,
+            parse_report,
             file_exts,
             no_cache,
             no_default_excludes,
@@ -1683,6 +1695,10 @@ fn sem_main() {
             let mut in_paths = in_paths;
             in_paths.extend(file);
             let listing = queries.is_empty() && entity_id.is_none();
+            if parse_report && !listing {
+                eprintln!("error: --parse-report lists the files under --in; it takes no name (sem find --in src --parse-report)");
+                std::process::exit(2);
+            }
             if !listing && in_paths.len() > 1 {
                 eprintln!("error: with a name, --in takes one file or directory");
                 std::process::exit(2);
@@ -1732,6 +1748,7 @@ fn sem_main() {
                     except_kinds,
                     text,
                     signatures,
+                    parse_report,
                 });
             } else if entity_id.is_some() && queries.is_empty() {
                 eprintln!("error: --entity-id goes with --context (sem find --context --entity-id <id>)");
@@ -1854,6 +1871,7 @@ fn sem_main() {
                 except_kinds,
                 text,
                 signatures,
+                parse_report: false,
             });
         }
         Some(Commands::Imports { path, format, json }) => {

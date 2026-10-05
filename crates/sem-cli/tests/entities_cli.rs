@@ -342,3 +342,45 @@ fn entities_index_scopes_a_subdirectory_listing() {
     assert_eq!(counters["input_files"], 1);
     assert_eq!(counters["discovered_files"], 1);
 }
+
+#[test]
+fn entities_parse_report_lists_every_file_with_its_counts() {
+    let repo = TempDir::new().unwrap();
+    fs::create_dir(repo.path().join("src")).unwrap();
+    fs::write(
+        repo.path().join("src/zcl_ok.clas.abap"),
+        "CLASS zcl_ok DEFINITION PUBLIC CREATE PUBLIC.\n  PUBLIC SECTION.\n    METHODS run.\nENDCLASS.\n\nCLASS zcl_ok IMPLEMENTATION.\n  METHOD run.\n    WRITE 'x'.\n  ENDMETHOD.\nENDCLASS.\n",
+    )
+    .unwrap();
+    fs::write(repo.path().join("src/zbroken.prog.abap"), "WRITE 'never closed.\n").unwrap();
+    fs::write(repo.path().join("src/util.py"), "def helper():\n    return 1\n").unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_sem"))
+        .current_dir(repo.path())
+        .env("DO_NOT_TRACK", "1")
+        .env("SEM_LOCAL", "1")
+        .args(["find", "--in", "src", "--parse-report", "--json"])
+        .output()
+        .expect("run sem find --parse-report");
+    assert!(output.status.success(), "stderr: {}", String::from_utf8_lossy(&output.stderr));
+
+    let rows: Value = serde_json::from_slice(&output.stdout).expect("parse report json");
+    let row = |file: &str| rows.as_array().unwrap().iter().find(|r| r["file"] == file).unwrap().clone();
+    assert_eq!(rows.as_array().unwrap().len(), 3, "{rows}");
+    let ok = row("src/zcl_ok.clas.abap");
+    assert_eq!(
+        (ok["entity_count"].as_u64(), ok["fallback_entity_count"].as_u64(), ok["error_node_count"].as_u64()),
+        (Some(3), Some(0), Some(0))
+    );
+    // A file with nothing extractable is listed as zero, and named on stderr.
+    let broken = row("src/zbroken.prog.abap");
+    assert_eq!(broken["entity_count"], 0);
+    assert!(broken["error_node_count"].as_u64().unwrap() > 0);
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("src/zbroken.prog.abap: no entities extracted"),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    // Other languages are reported the same way.
+    assert_eq!(row("src/util.py")["entity_count"], 1);
+}

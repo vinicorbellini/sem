@@ -5,7 +5,9 @@ use std::path::{Path, PathBuf};
 use crate::timings::Timings;
 use colored::Colorize;
 use sem_core::model::entity::SemanticEntity;
+use rayon::prelude::*;
 use sem_core::parser::graph::EntityInfo;
+use sem_core::parser::plugin::ParseStats;
 use sem_core::parser::registry::ParserRegistry;
 use serde::Serialize;
 
@@ -25,6 +27,9 @@ pub struct EntitiesOptions {
     /// Show each entity's header (signature plus first doc-comment line)
     /// under its row.
     pub signatures: bool,
+    /// List each file's entity and parse-error counts instead of its
+    /// entities. When set, the kind filters and `signatures` are ignored.
+    pub parse_report: bool,
 }
 
 pub fn entities_command(opts: EntitiesOptions) {
@@ -35,6 +40,11 @@ pub fn entities_command(opts: EntitiesOptions) {
         .filter(|t| !t.is_empty())
     {
         text_search(&opts, needle);
+        return;
+    }
+
+    if opts.parse_report {
+        parse_report(&opts);
         return;
     }
 
@@ -267,6 +277,126 @@ pub fn entities_command(opts: EntitiesOptions) {
     }
     timings.mark("output_serialization");
     timings.finish();
+}
+
+#[derive(Serialize)]
+struct ParseReportRow<'a> {
+    file: &'a str,
+    #[serde(flatten)]
+    stats: ParseStats,
+}
+
+/// `--parse-report`: one row per file under the given paths, with how many
+/// entities it yielded (and how many of those the grammar gave, how many a
+/// fallback pass read off the tokens) and how many `ERROR` and `MISSING` nodes
+/// its parse tree has. Every file is listed, a file with no entities as zero,
+/// so a parse failure is never mistaken for an empty file. Always parses; never
+/// answers from the query index, which keeps neither tree nor counts.
+fn parse_report(opts: &EntitiesOptions) {
+    let path_args: Vec<String> = {
+        let cleaned: Vec<String> = opts
+            .paths
+            .iter()
+            .map(|p| p.trim().to_string())
+            .filter(|p| !p.is_empty())
+            .collect();
+        if cleaned.is_empty() {
+            vec![".".to_string()]
+        } else {
+            cleaned
+        }
+    };
+    let ext_filter = super::graph::normalize_exts(&opts.file_exts);
+    let root = Path::new(&opts.cwd);
+    let registry = super::create_registry(&opts.cwd);
+
+    let mut files: Vec<String> = Vec::new();
+    for path_arg in &path_args {
+        let (path_label, full_path) = resolve_path(root, path_arg);
+        if full_path.is_file() {
+            files.push(path_label);
+        } else if full_path.is_dir() {
+            files.extend(super::files::find_supported_files_in_path(
+                root,
+                &full_path,
+                &registry,
+                &ext_filter,
+                opts.no_default_excludes,
+            ));
+        } else {
+            eprintln!("{} Path not found '{}'", "error:".red().bold(), path_arg);
+            std::process::exit(1);
+        }
+    }
+    files.sort();
+    files.dedup();
+
+    let rows: Vec<(String, ParseStats)> = files
+        .par_iter()
+        .filter_map(|file| {
+            let stats = match std::fs::read_to_string(root.join(file)) {
+                Ok(content) => registry.parse_stats(file, &content)?,
+                Err(e) => {
+                    eprintln!(
+                        "{} Cannot read '{}': {}",
+                        "warning:".yellow().bold(),
+                        file,
+                        e
+                    );
+                    ParseStats::default()
+                }
+            };
+            Some((file.clone(), stats))
+        })
+        .collect();
+
+    for (file, stats) in &rows {
+        if stats.entity_count == 0 && stats.error_node_count > 0 {
+            eprintln!(
+                "{} {}: no entities extracted, {} error nodes",
+                "warning:".yellow().bold(),
+                file,
+                stats.error_node_count
+            );
+        }
+    }
+
+    if opts.json {
+        let json_rows: Vec<ParseReportRow> = rows
+            .iter()
+            .map(|(file, stats)| ParseReportRow { file, stats: *stats })
+            .collect();
+        match serde_json::to_writer(io::stdout().lock(), &json_rows) {
+            Ok(()) => println!(),
+            Err(e) => {
+                eprintln!("{} Cannot write JSON output: {}", "error:".red().bold(), e);
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
+
+    println!("{} {}\n", "parse report:".green().bold(), path_args.join(" ").bold());
+    for (file, stats) in &rows {
+        println!(
+            "  {}  {} entities ({} grammar, {} fallback), {} error nodes",
+            file.bold(),
+            stats.entity_count,
+            stats.grammar_entity_count,
+            stats.fallback_entity_count,
+            stats.error_node_count,
+        );
+    }
+    let total = |f: fn(&ParseStats) -> usize| rows.iter().map(|(_, s)| f(s)).sum::<usize>();
+    println!(
+        "\n  {} files, {} with error nodes, {} entities ({} grammar, {} fallback), {} error nodes",
+        rows.len(),
+        rows.iter().filter(|(_, s)| s.error_node_count > 0).count(),
+        total(|s| s.entity_count),
+        total(|s| s.grammar_entity_count),
+        total(|s| s.fallback_entity_count),
+        total(|s| s.error_node_count),
+    );
 }
 
 /// Filter entities by the `--only` / `--except` kind lists. Entity kinds are

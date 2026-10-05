@@ -17,7 +17,7 @@ macro_rules! maybe_par_iter {
         }
     }};
 }
-use super::plugin::{strip_entity_payloads, SemanticParserPlugin};
+use super::plugin::{strip_entity_payloads, ParseStats, SemanticParserPlugin};
 
 pub struct ParserRegistry {
     plugins: Vec<Box<dyn SemanticParserPlugin>>,
@@ -303,6 +303,16 @@ impl ParserRegistry {
             fix_entity_paths(&mut entities, file_path, rp);
         }
         entities
+    }
+
+    /// Entity and parse-error counts for one file, transparently handling
+    /// custom extension mappings. `None` when no plugin handles the file.
+    pub fn parse_stats(&self, file_path: &str, content: &str) -> Option<ParseStats> {
+        let resolved = self.resolve_file_path(file_path);
+        let detection_path = resolved.as_deref().unwrap_or(file_path);
+
+        let plugin = self.get_plugin_with_content(detection_path, content)?;
+        Some(plugin.parse_stats(content, detection_path))
     }
 
     /// Extract entities with tree, transparently handling custom extension mappings.

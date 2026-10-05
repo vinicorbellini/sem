@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use crate::model::entity::SemanticEntity;
 use crate::parser::cache;
 use crate::parser::fast_extractor;
-use crate::parser::plugin::SemanticParserPlugin;
+use crate::parser::plugin::{ParseStats, SemanticParserPlugin};
 use crate::utils::hash::{content_hash, structural_hash};
 use entity_extractor::extract_entities;
 use languages::{get_all_code_extensions, get_language_config};
@@ -55,6 +55,29 @@ pub fn parse_tree(
     content: &str,
 ) -> Option<tree_sitter::Tree> {
     parse_tree_incremental(config, content, None)
+}
+
+/// Count the `ERROR` and `MISSING` nodes of a parse tree, each once. A subtree
+/// the parser marks error-free is not entered.
+pub fn count_error_nodes(root: tree_sitter::Node) -> usize {
+    let mut count = 0;
+    let mut cursor = root.walk();
+    loop {
+        let node = cursor.node();
+        if node.has_error() || node.is_missing() {
+            if node.is_error() || node.is_missing() {
+                count += 1;
+            }
+            if cursor.goto_first_child() {
+                continue;
+            }
+        }
+        while !cursor.goto_next_sibling() {
+            if !cursor.goto_parent() {
+                return count;
+            }
+        }
+    }
 }
 
 /// One top-level import statement located by the tree-sitter parser: a direct
@@ -522,6 +545,27 @@ impl SemanticParserPlugin for CodeParserPlugin {
 
         let entities = extract_entities(&tree, file_path, config, content);
         (entities, Some(tree))
+    }
+
+    /// Parses from scratch, not through the entity cache: the error count
+    /// needs the tree, which the cache does not keep.
+    fn parse_stats(&self, content: &str, file_path: &str) -> ParseStats {
+        let (entities, tree) = self.extract_entities_with_tree(content, file_path);
+        let fallback_entity_count = entities
+            .iter()
+            .filter(|e| {
+                e.metadata
+                    .as_ref()
+                    .and_then(|m| m.get("source"))
+                    .is_some_and(|source| source == "abap-fallback")
+            })
+            .count();
+        ParseStats {
+            entity_count: entities.len(),
+            grammar_entity_count: entities.len() - fallback_entity_count,
+            fallback_entity_count,
+            error_node_count: tree.map_or(0, |t| count_error_nodes(t.root_node())),
+        }
     }
 
     /// Also content-addressed — it otherwise re-parses the file from scratch.
@@ -2612,6 +2656,135 @@ DATA gv_global TYPE i.
             edges(definition.to_string() + &implementation.to_ascii_uppercase()),
             as_written
         );
+    }
+
+    // Spec 1.6: a file the grammar cannot fully parse still yields what it can,
+    // and says how much it could not read.
+
+    /// `zcl_fx_order.clas.abap` with one deliberate break each: an `ENDMETHOD`
+    /// missing, a string literal never closed, modern syntax the grammar rejects.
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_broken_copies() -> Vec<(&'static str, String)> {
+        let clean = abap_fixture_text("zcl_fx_order.clas.abap");
+        let broken = |from: &str, to: &str| {
+            assert!(clean.contains(from), "fixture changed: {from}");
+            clean.replacen(from, to, 1)
+        };
+        vec![
+            (
+                "missing ENDMETHOD",
+                broken("  ENDMETHOD.\n\n  METHOD create.", "\n  METHOD create."),
+            ),
+            (
+                "unterminated string",
+                broken(
+                    "'calls get_total( ) and describe( ) in a literal'",
+                    "'calls get_total( ) and describe( ) in a literal",
+                ),
+            ),
+            (
+                "modern syntax",
+                broken(
+                    "ro_order = NEW #( iv_id = iv_id ).",
+                    "ro_order = COND #( WHEN iv_id > 0 THEN NEW #( iv_id = iv_id ) ELSE THROW zcx_x( ) ).\n    DATA(lt) = REDUCE i( INIT s = 0 FOR w IN mt_names NEXT s = s + 1 ).\n    FINAL(x) = SWITCH #( iv_id WHEN 1 THEN `a` ).",
+                ),
+            ),
+        ]
+    }
+
+    #[cfg(feature = "lang-abap")]
+    fn abap_stats(code: &str, file: &str) -> crate::parser::plugin::ParseStats {
+        let stats = CodeParserPlugin.parse_stats(code, file);
+        eprintln!("ABAP {file}: {stats:?}");
+        stats
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_1_6_errors_still_yield_entities() {
+        // `FOR TESTING` and `DURATION SHORT RISK LEVEL` are ERROR nodes inside the
+        // definition; the class and every method are still there.
+        let rows = abap_fixture_rows("zcl_fx_order.clas.testclasses.abap");
+        let names = |kind: &str| -> Vec<&str> {
+            rows.iter().filter(|r| r.0 == kind).map(|r| r.1.as_str()).collect()
+        };
+        assert!(names("class").contains(&"ltc_order"), "got: {rows:?}");
+        assert_eq!(
+            names("method"),
+            vec!["setup", "total_starts_at_zero", "describe_mentions_id"],
+            "got: {rows:?}"
+        );
+
+        // An ERROR swallows ENDFORM and the grammar has no `form` node at all.
+        let rows = abap_fixture_rows("zfx_report.prog.abap");
+        assert!(rows.contains(&abap_row("report", "zfx_report", 2, 2)), "got: {rows:?}");
+        assert!(rows.contains(&abap_row("form", "show_order", 21, 24)), "got: {rows:?}");
+
+        // Broken copies of the global class keep the class and the implementation's
+        // methods the parse reaches. A method after a missing `ENDMETHOD` is read
+        // as part of the one before it (`create` inside `constructor`).
+        let expected: [(&str, &[&str]); 3] = [
+            (
+                "missing ENDMETHOD",
+                &["constructor", "describe", "zif_fx_order~add_item", "zif_fx_order~get_total"],
+            ),
+            (
+                "unterminated string",
+                &["constructor", "create", "describe", "zif_fx_order~add_item"],
+            ),
+            (
+                "modern syntax",
+                &["constructor", "create", "describe", "zif_fx_order~add_item", "zif_fx_order~get_total"],
+            ),
+        ];
+        for ((label, code), (expected_label, methods)) in
+            abap_fixture_broken_copies().iter().zip(expected)
+        {
+            assert_eq!(*label, expected_label);
+            let rows = abap_rows(code, "zcl_fx_order.clas.abap");
+            assert!(
+                rows.iter().any(|r| r.0 == "class" && r.1 == "zcl_fx_order"),
+                "{label}: class, got: {rows:?}"
+            );
+            let found: Vec<&str> = rows.iter().filter(|r| r.0 == "method").map(|r| r.1.as_str()).collect();
+            assert_eq!(found, methods, "{label}: methods, got: {rows:?}");
+        }
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_1_6_error_count_reported() {
+        // A file the grammar reads whole has no error nodes.
+        let clean = "CLASS zcl_demo DEFINITION PUBLIC CREATE PUBLIC.\n  PUBLIC SECTION.\n    METHODS run.\nENDCLASS.\n\nCLASS zcl_demo IMPLEMENTATION.\n  METHOD run.\n    WRITE 'x'.\n  ENDMETHOD.\nENDCLASS.\n";
+        let stats = abap_stats(clean, "zcl_demo.clas.abap");
+        assert_eq!((stats.entity_count, stats.fallback_entity_count, stats.error_node_count), (3, 0, 0));
+
+        // The fixture report has error nodes, and its form and report are the
+        // fallback's: counted apart from the grammar's own entities.
+        let stats = abap_stats(&abap_fixture_text("zfx_report.prog.abap"), "zfx_report.prog.abap");
+        assert!(stats.error_node_count > 0, "got: {stats:?}");
+        assert_eq!(
+            (stats.entity_count, stats.grammar_entity_count, stats.fallback_entity_count),
+            (3, 1, 2)
+        );
+
+        // Each break adds error nodes over the unbroken fixture, and entities
+        // are never counted twice.
+        let fixture = abap_stats(&abap_fixture_text("zcl_fx_order.clas.abap"), "zcl_fx_order.clas.abap");
+        assert_eq!(fixture.entity_count, fixture.grammar_entity_count + fixture.fallback_entity_count);
+        for (label, code) in abap_fixture_broken_copies() {
+            if label == "missing ENDMETHOD" {
+                continue; // read as a call to a macro named METHOD: no error node
+            }
+            let stats = abap_stats(&code, "zcl_fx_order.clas.abap");
+            assert!(stats.error_node_count > fixture.error_node_count, "{label}: {stats:?}");
+            assert_eq!(stats.entity_count, stats.grammar_entity_count + stats.fallback_entity_count);
+        }
+
+        // A file with nothing extractable is still counted, as zero.
+        let stats = abap_stats("WRITE 'never closed.\n", "zbroken.prog.abap");
+        assert_eq!(stats.entity_count, 0);
+        assert!(stats.error_node_count > 0, "got: {stats:?}");
     }
 
     #[test]

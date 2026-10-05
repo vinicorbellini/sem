@@ -16,6 +16,8 @@ All notable changes to sem are documented in this file.
 
 - **ABAP names are case-insensitive.** `sem find ZCL_FOO`, `sem find zcl_foo` and `sem find Zcl_Foo` return the same entities, named as written in source, and a reference written in one case resolves to a definition written in another. Only ABAP folds names, and only ASCII; every other language's output is unchanged. The index files ABAP names under their lowercased form, so an index written before this change keeps answering exact spellings until it is rebuilt.
 
+- **`sem find --in <path> --parse-report` lists each file's entity and parse-error counts.** One row per file, with `--json` an array of `{file, entity_count, grammar_entity_count, fallback_entity_count, error_node_count}`: how many entities the file yielded, how many of those the grammar gave and how many a fallback pass read off the tokens (ABAP's `form`, `module`, `macro`, `report` and class `type`), and how many tree-sitter `ERROR` and `MISSING` nodes its parse tree has. A file with no entities is listed with zeros, and one with error nodes and no entities is also named on stderr, so a parse failure is never mistaken for an empty file. Without `--json` the rows are followed by the totals. It always parses, never answering from the index, and any other `sem find` output is unchanged. On a real repository, `sem find --in src --parse-report --json --file-exts .abap` is the parse-error census in one command.
+
 ### Changed
 
 - **Telemetry is off by default in this fork.** A fresh install used to count command names locally (mode `local`, never uploaded); it now records nothing until `sem config telemetry local` or `on` is run. A mode already stored in `~/.sem/telemetry.json` is respected.
