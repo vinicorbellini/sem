@@ -78,3 +78,4 @@ by `test_abap_fixture_layout`.
 | `abap_fixture_1_10_interface_method_names` | 1.10 |
 | `abap_fixture_2_0_incremental_follows_other_files` (definitions gained and lost in other files) | 2.0 |
 | `abap_fixture_2_1_incremental_static_call` (a static call's target lost and regained in another file) | 2.1 |
+| `abap_fixture_2_1_keyword_is_not_a_unique_name` (`CREATE PUBLIC` against a unique `create`; also reads the 2.0 fixture objects) | 2.0 |

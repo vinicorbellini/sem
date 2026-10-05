@@ -1462,7 +1462,9 @@ fn build_abap_global_table<'a>(
 /// The ABAP candidate `key` names for the entity `entity_id` when its own file
 /// has none: the first one in its own object, else the single repo-wide one.
 /// `None` when two or more global classes define the name: the reference
-/// stays unbound rather than guessed.
+/// stays unbound rather than guessed. `None` too for an ABAP keyword the
+/// entity never writes as a call (`written_as_call`, see
+/// `abap_writes_as_call`): `CREATE PUBLIC` does not call a method `create`.
 ///
 /// Interim: story 2.2 binds receivers by type, and once the calls pipeline
 /// `replaces_bow()` for ABAP this name guess goes, with `abap_global`.
@@ -1471,8 +1473,12 @@ fn abap_scoped_target<'a>(
     key: &str,
     entity_id: &str,
     own_object: Option<&str>,
+    written_as_call: impl FnOnce() -> bool,
 ) -> Option<&'a str> {
     let candidates = abap_global.get(key)?;
+    if crate::parser::plugins::code::abap_name::is_abap_keyword(key) && !written_as_call() {
+        return None;
+    }
     if let Some(ids) = own_object.and_then(|object| candidates.by_object.get(object)) {
         if let Some(id) = ids.iter().find(|id| **id != entity_id) {
             return Some(id);
@@ -1482,6 +1488,37 @@ fn abap_scoped_target<'a>(
         [id] if *id != entity_id => Some(id),
         _ => None,
     }
+}
+
+/// Whether folded ABAP `content`, an entity's text from line `first_line`,
+/// writes `name` as a call (`name(`) or a component (`->name`, `=>name`,
+/// `~name`) on a line of its own (`ranges`, not its children's), comments and
+/// literals aside, rather than only as the keyword it also is.
+fn abap_writes_as_call(
+    content: &str,
+    first_line: usize,
+    ranges: &[(usize, usize)],
+    name: &str,
+) -> bool {
+    let ident = |b: &u8| b.is_ascii_alphanumeric() || *b == b'_';
+    let stripped = strip_abap_content(content);
+    stripped.lines().enumerate().any(|(local_line, line)| {
+        let line_no = first_line + local_line;
+        if !ranges.iter().any(|(start, end)| (*start..=*end).contains(&line_no)) {
+            return false;
+        }
+        let bytes = line.as_bytes();
+        line.match_indices(name).any(|(at, _)| {
+            let (before, after) = (&bytes[..at], bytes.get(at + name.len()));
+            if before.last().is_some_and(ident) || after.is_some_and(ident) {
+                return false;
+            }
+            after == Some(&b'(')
+                || before.ends_with(b"->")
+                || before.ends_with(b"=>")
+                || before.ends_with(b"~")
+        })
+    })
 }
 
 struct ReferenceResolutionContext<'a> {
@@ -2144,6 +2181,14 @@ fn resolve_entity_references(
                             ref_name,
                             entity_id,
                             own_object.as_deref(),
+                            || {
+                                abap_writes_as_call(
+                                    content,
+                                    entity.start_line,
+                                    &fallback_ranges,
+                                    ref_name,
+                                )
+                            },
                         )
                     })
                     .flatten()
@@ -2205,7 +2250,13 @@ fn resolve_entity_references(
                     .and_then(|ids| ids.iter().find(|id| **id != entity_id))
                     .copied();
                 let Some(target_id) = own_file_target.or_else(|| {
-                    abap_scoped_target(context.abap_global, key, entity_id, own_object.as_deref())
+                    abap_scoped_target(
+                        context.abap_global,
+                        key,
+                        entity_id,
+                        own_object.as_deref(),
+                        || abap_writes_as_call(content, entity.start_line, &fallback_ranges, key),
+                    )
                 }) else {
                     continue;
                 };

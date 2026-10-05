@@ -3261,6 +3261,44 @@ DATA gv_global TYPE i.
         }
     }
 
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_1_keyword_is_not_a_unique_name() {
+        // `CREATE PUBLIC` in a class definition is a keyword, not a call of
+        // `zcl_fx_order.create`, the repo's one `create`: no class reaches it.
+        // `run`'s `ZCL_FX_ORDER=>CREATE( 1 )` writes it as a call and still does.
+        let edges = abap_fixture_2_0_edges();
+        for class in ["zcl_fx_user", "zcl_fx_other", "zcl_fx_order_sub"] {
+            assert!(!edges.contains(&abap_edge(class, "zcl_fx_order.create")), "{class}: {edges:?}");
+        }
+        assert!(edges.contains(&abap_edge("zcl_fx_user.run", "zcl_fx_order.create")), "got: {edges:?}");
+
+        // A keyword written as a call through an untyped receiver still binds
+        // by the unique name, in any case; one written only as a keyword, in
+        // the method's own lines, does not.
+        let class = |name: &str, body: &str| {
+            format!(
+                "CLASS {name} DEFINITION PUBLIC CREATE PUBLIC.\n  PUBLIC SECTION.\n    METHODS create.\nENDCLASS.\n\n\nCLASS {name} IMPLEMENTATION.\n\n  METHOD create.\n    {body}\n  ENDMETHOD.\n\nENDCLASS.\n"
+            )
+        };
+        let user = |name: &str, body: &str| {
+            format!(
+                "CLASS {name} DEFINITION PUBLIC CREATE PUBLIC.\n  PUBLIC SECTION.\n    METHODS go.\nENDCLASS.\n\n\nCLASS {name} IMPLEMENTATION.\n\n  METHOD go.\n    {body}\n  ENDMETHOD.\n\nENDCLASS.\n"
+            )
+        };
+        let graph = abap_graph(&[
+            ("zcl_a.clas.abap", class("zcl_a", "WRITE 'a'.")),
+            ("zcl_b.clas.abap", user("zcl_b", "lo_a->CREATE( ).")),
+            ("zcl_c.clas.abap", user("zcl_c", "CREATE OBJECT lo_a.")),
+        ]);
+        let edges = abap_edges(&graph);
+        assert!(edges.contains(&abap_edge("zcl_b.go", "zcl_a.create")), "got: {edges:?}");
+        assert!(
+            !edges.iter().any(|(from, to)| from.starts_with("zcl_c") && to == "zcl_a.create"),
+            "got: {edges:?}"
+        );
+    }
+
     // Spec 2.1: a call written in a static form resolves exactly, through the
     // calls pipeline, beside the bag-of-words resolver until receivers are typed.
 
