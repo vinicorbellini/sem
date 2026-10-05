@@ -1950,8 +1950,9 @@ return M
     #[cfg(feature = "lang-abap")]
     fn test_abap_entity_extraction() {
         // ABAP, as abapGit serializes a class (`.clas.abap`). The definition and
-        // the implementation are separate top-level blocks; METHOD blocks sit
-        // directly under the implementation and nest there as its children.
+        // the implementation are separate top-level blocks of one class; the
+        // METHOD blocks sit directly under the implementation and nest under
+        // the class.
         let code = "CLASS zcl_demo DEFINITION PUBLIC CREATE PUBLIC.\n  PUBLIC SECTION.\n    METHODS run.\n    METHODS helper IMPORTING iv_x TYPE i.\nENDCLASS.\n\nCLASS zcl_demo IMPLEMENTATION.\n  METHOD run.\n    helper( 1 ).\n  ENDMETHOD.\n  METHOD helper.\n    \" a comment with helper( ) in it\n  ENDMETHOD.\nENDCLASS.\n";
         let plugin = CodeParserPlugin;
         let entities = plugin.extract_entities(code, "zcl_demo.clas.abap");
@@ -1960,39 +1961,63 @@ return M
             .map(|e| (e.name.as_str(), e.entity_type.as_str()))
             .collect();
 
-        assert!(
-            names.contains(&("zcl_demo", "class")),
-            "class definition, got: {names:?}"
-        );
-        assert!(
-            names.contains(&("zcl_demo", "impl")),
-            "class implementation, got: {names:?}"
-        );
-        assert!(names.contains(&("run", "method")), "method, got: {names:?}");
-        assert!(
-            names.contains(&("helper", "method")),
-            "method, got: {names:?}"
-        );
         assert_eq!(
-            entities.len(),
-            4,
-            "only classes and methods, got: {names:?}"
+            names,
+            vec![("zcl_demo", "class"), ("run", "method"), ("helper", "method")],
+            "one class and its methods, no impl"
         );
 
-        let implementation = entities
-            .iter()
-            .find(|e| e.entity_type == "impl")
-            .expect("Should find the class implementation");
-        for method in ["run", "helper"] {
-            let entity = entities
-                .iter()
-                .find(|e| e.name == method)
-                .unwrap_or_else(|| panic!("Should find {method}"));
-            assert_eq!(
-                entity.parent_id.as_deref(),
-                Some(implementation.id.as_str())
-            );
+        let class = &entities[0];
+        assert_eq!(class.id, "zcl_demo.clas.abap::class::zcl_demo");
+        assert_eq!((class.start_line, class.end_line), (1, 14));
+        for method in &entities[1..] {
+            assert_eq!(method.parent_id.as_deref(), Some(class.id.as_str()));
+            assert_eq!(method.id, format!("{}::{}", class.id, method.name));
         }
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn test_abap_class_two_ranges() {
+        // Spec 1.4: the class spans its definition and its implementation, and
+        // records each block's lines. The text between them is blanked, so the
+        // content keeps the file's lines and leaves the comment out.
+        let code = "CLASS zcl_r DEFINITION.\n  PUBLIC SECTION.\n    METHODS run.\nENDCLASS.\n\n* between the blocks\n\nCLASS zcl_r IMPLEMENTATION.\n  METHOD run.\n  ENDMETHOD.\nENDCLASS.\n";
+        let entities = CodeParserPlugin.extract_entities(code, "zcl_r.clas.abap");
+        let class = &entities[0];
+        assert_eq!((class.entity_type.as_str(), class.start_line, class.end_line), ("class", 1, 11));
+        let metadata = class.metadata.as_ref().expect("ranges in metadata");
+        assert_eq!(metadata.get("range.definition").map(String::as_str), Some("1-4"));
+        assert_eq!(metadata.get("range.implementation").map(String::as_str), Some("8-11"));
+        assert!(!class.content.contains("between"), "{:?}", class.content);
+        assert_eq!(class.content.lines().count(), 11);
+        assert_eq!(class.content.len(), code.trim_end().len());
+
+        // The hash does not see the gap, nor which block comes first.
+        let wider = code.replace("* between the blocks", "* another comment\n\n");
+        let swapped = "CLASS zcl_r IMPLEMENTATION.\n  METHOD run.\n  ENDMETHOD.\nENDCLASS.\nCLASS zcl_r DEFINITION.\n  PUBLIC SECTION.\n    METHODS run.\nENDCLASS.\n";
+        for other in [wider.as_str(), swapped] {
+            let other = CodeParserPlugin.extract_entities(other, "zcl_r.clas.abap");
+            assert_eq!(other[0].entity_type, "class");
+            assert_eq!(other[0].content_hash, class.content_hash);
+            assert_eq!(other[0].structural_hash, class.structural_hash);
+        }
+
+        // An edit to either block changes it.
+        for edited in [
+            code.replace("METHODS run.", "METHODS run IMPORTING iv TYPE i."),
+            code.replace("  METHOD run.\n", "  METHOD run.\n    WRITE 1.\n"),
+        ] {
+            let edited = CodeParserPlugin.extract_entities(&edited, "zcl_r.clas.abap");
+            assert_ne!(edited[0].content_hash, class.content_hash);
+        }
+
+        // A definition on its own is one range, and needs no metadata.
+        let definition_only = CodeParserPlugin
+            .extract_entities("CLASS zcl_a DEFINITION ABSTRACT.\nENDCLASS.\n", "zcl_a.clas.abap");
+        assert_eq!(definition_only.len(), 1);
+        assert_eq!(definition_only[0].entity_type, "class");
+        assert!(definition_only[0].metadata.is_none());
     }
 
     // ---- ABAP fixture repository: tests/fixtures/abap/ ----
@@ -2053,7 +2078,6 @@ return M
 
     #[test]
     #[cfg(feature = "lang-abap")]
-    #[ignore = "spec 1.4: class collapse (definition + implementation -> one class entity)"]
     fn test_abap_fixture_clas() {
         assert_eq!(
             abap_fixture_entities("zcl_fx_order.clas.abap"),
@@ -2087,7 +2111,6 @@ return M
 
     #[test]
     #[cfg(feature = "lang-abap")]
-    #[ignore = "spec 1.4: class collapse (an implementation-only file yields one class entity)"]
     fn test_abap_fixture_clas_locals_imp() {
         assert_eq!(
             abap_fixture_entities("zcl_fx_order.clas.locals_imp.abap"),
@@ -2100,7 +2123,6 @@ return M
 
     #[test]
     #[cfg(feature = "lang-abap")]
-    #[ignore = "spec 1.4: class collapse (local test class definition + implementation -> one class entity)"]
     fn test_abap_fixture_clas_testclasses() {
         assert_eq!(
             abap_fixture_entities("zcl_fx_order.clas.testclasses.abap"),
@@ -2136,7 +2158,6 @@ return M
 
     #[test]
     #[cfg(feature = "lang-abap")]
-    #[ignore = "spec 1.4: class collapse (definition + implementation -> one class entity)"]
     fn test_abap_fixture_clas_sub() {
         assert_eq!(
             abap_fixture_entities("zcl_fx_order_sub.clas.abap"),
@@ -2335,8 +2356,9 @@ return M
     #[cfg(feature = "lang-abap")]
     fn abap_fixture_1_3_class() {
         let rows = abap_fixture_rows("zcl_fx_order.clas.abap");
-        assert!(rows.contains(&abap_row("class", "zcl_fx_order", 2, 15)), "got: {rows:?}");
-        assert!(rows.contains(&abap_row("impl", "zcl_fx_order", 18, 44)), "got: {rows:?}");
+        // Spec 1.4: one class from the definition's start to the implementation's end.
+        assert!(rows.contains(&abap_row("class", "zcl_fx_order", 2, 44)), "got: {rows:?}");
+        assert!(!rows.iter().any(|(t, _, _, _)| t == "impl"), "got: {rows:?}");
     }
 
     #[test]
@@ -2386,7 +2408,7 @@ DATA gv_global TYPE i.
         assert_eq!(
             rows,
             vec![
-                abap_row("class", "zcl_t", 1, 17),
+                abap_row("class", "zcl_t", 1, 24),
                 abap_row("type", "ty_id", 3, 3),
                 abap_row("type", "ty_s", 4, 6),
                 abap_row("type", "ty_a", 8, 8),
@@ -2395,7 +2417,6 @@ DATA gv_global TYPE i.
                 abap_row("type", "ty_c", 11, 11),
                 abap_row("type", "ty_old", 13, 15),
                 abap_row("variable", "mv_y", 16, 16),
-                abap_row("impl", "zcl_t", 19, 24),
                 abap_row("method", "run", 20, 23),
             ]
         );
@@ -2449,8 +2470,8 @@ DATA gv_global TYPE i.
                     "{file}: {}",
                     e.name
                 );
-                // The id itself is unchanged, so a definition and an
-                // implementation of one local class stay apart.
+                // The id itself is unchanged: it carries the file, so a local
+                // class's definition and implementation in two files stay apart.
                 assert_eq!(e.id, format!("src/{file}::{}::{}", e.entity_type, e.name));
             }
         }
@@ -2623,9 +2644,9 @@ DATA gv_global TYPE i.
     #[test]
     #[cfg(feature = "lang-abap")]
     fn abap_fixture_1_1_refs_any_case() {
-        // The class definition names its methods (`METHODS describe ...`) and
-        // the implementation defines them (`METHOD describe.`). Shifting the
-        // case of either half must give back the same edges.
+        // The class definition declares the attributes (`DATA mv_id ...`) and
+        // the implementation's methods use them (`mv_id = iv_id.`). Shifting
+        // the case of either half must give back the same edges.
         let source = abap_fixture_text("zcl_fx_order.clas.abap");
         let (definition, implementation) =
             source.split_at(source.find("CLASS zcl_fx_order IMPLEMENTATION").unwrap());
@@ -2643,7 +2664,7 @@ DATA gv_global TYPE i.
 
         let as_written = edges(source.clone());
         assert!(
-            as_written.contains(&("zcl_fx_order".to_string(), "describe".to_string())),
+            as_written.contains(&("constructor".to_string(), "mv_id".to_string())),
             "got: {as_written:?}"
         );
         // Uppercase use, lowercase definition.

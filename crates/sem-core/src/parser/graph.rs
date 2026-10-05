@@ -4669,6 +4669,19 @@ impl EntityGraph {
                 test_ids.insert(entity.id.as_str());
             }
         }
+        // ABAP marks the class `FOR TESTING`, not each of its methods: outside a
+        // `*.testclasses.abap` file a method is a test because its class is.
+        let abap_test_members: Vec<&str> = entities
+            .iter()
+            .filter(|e| e.file_path.to_ascii_lowercase().ends_with(".abap"))
+            .filter(|e| {
+                e.parent_id
+                    .as_deref()
+                    .is_some_and(|pid| test_ids.contains(pid))
+            })
+            .map(|e| e.id.as_str())
+            .collect();
+        test_ids.extend(abap_test_members);
         test_ids
     }
 
@@ -12781,6 +12794,24 @@ export function caller() {
             "METHOD run.\n  rv_ok = abap_true.\nENDMETHOD.",
         );
         assert!(!is_test_entity(&method, &[]));
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn test_abap_test_detect_methods_of_for_testing_class() {
+        use crate::parser::plugin::SemanticParserPlugin;
+        // Spec 1.4 gives a local class's methods the class as parent, so a
+        // `FOR TESTING` class outside `*.testclasses.abap` makes them tests.
+        let file = "src/zcl_foo.clas.locals_imp.abap";
+        let code = "CLASS ltc_t DEFINITION FOR TESTING.\n  PRIVATE SECTION.\n    METHODS run FOR TESTING.\nENDCLASS.\nCLASS ltc_t IMPLEMENTATION.\n  METHOD run.\n  ENDMETHOD.\nENDCLASS.\nCLASS lcl_x DEFINITION.\n  PUBLIC SECTION.\n    METHODS go.\nENDCLASS.\nCLASS lcl_x IMPLEMENTATION.\n  METHOD go.\n  ENDMETHOD.\nENDCLASS.\n";
+        let entities = crate::parser::plugins::code::CodeParserPlugin.extract_entities(code, file);
+        let graph = EntityGraph::from_parts(EntityInfoMap::default(), vec![]);
+        let tests = graph.filter_test_entities(&entities);
+        let method = |name: &str| entities.iter().find(|e| e.name == name).unwrap().id.as_str();
+        assert!(tests.contains(method("ltc_t")));
+        assert!(tests.contains(method("run")), "got: {tests:?}");
+        assert!(!tests.contains(method("go")), "got: {tests:?}");
+        assert!(!tests.contains(method("lcl_x")), "got: {tests:?}");
     }
 
     #[test]

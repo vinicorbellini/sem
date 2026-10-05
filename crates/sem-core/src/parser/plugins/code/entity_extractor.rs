@@ -33,6 +33,8 @@ pub fn extract_entities(
             source_code.as_bytes(),
             &mut entities,
         );
+        // A class's definition and implementation are one class entity.
+        collapse_abap_classes(source_code.as_bytes(), &mut entities);
         // Local and test classes belong to the global class of their file name.
         attach_abap_local_classes(file_path, &mut entities);
     }
@@ -1482,7 +1484,8 @@ fn abap_period_before_end(node: Node) -> Option<Node> {
 /// `zcl_foo.clas.abap` next to them. Give the file's top-level entities that
 /// entity's id as parent, built from the file name alone without reading the
 /// other file. Their own ids stay as they are: a parent in the id would give
-/// a local class's definition and implementation the same id.
+/// a local class's definition in `.locals_def.abap` and its implementation in
+/// `.locals_imp.abap` the same id, and those stay two entities.
 fn attach_abap_local_classes(file_path: &str, entities: &mut [SemanticEntity]) {
     let Some(object) = parse_abapgit_name(file_path) else {
         return;
@@ -1514,7 +1517,8 @@ fn attach_abap_local_classes(file_path: &str, entities: &mut [SemanticEntity]) {
 }
 
 /// For ABAP `CLASS x IMPLEMENTATION` blocks, push the METHOD blocks (direct
-/// children, with no body node in between) so they nest under the implementation.
+/// children, with no body node in between) so they nest under the
+/// implementation, which `collapse_abap_classes` then folds into its class.
 fn push_abap_method_implementations<'tree>(
     worklist: &mut Vec<(Node<'tree>, Option<String>, Option<String>)>,
     node: Node<'tree>,
@@ -1526,6 +1530,157 @@ fn push_abap_method_implementations<'tree>(
     for n in nested.into_iter().rev() {
         worklist.push((n, Some(entity_id.to_string()), suppression_context.clone()));
     }
+}
+
+/// ABAP writes a class as two top-level blocks, `CLASS x DEFINITION` and
+/// `CLASS x IMPLEMENTATION`, which the walk extracts as a `class` and an `impl`
+/// with the same name. They are one class, so fold each implementation into
+/// the definition of the same name (case-folded, like every ABAP name): the
+/// class keeps the definition's id, spans both blocks, and takes over the
+/// implementation's methods. Its content is the file from the definition's
+/// start to the implementation's end with the text between the two blocks
+/// blanked, so line numbers and byte offsets inside it still match the file;
+/// its hashes combine the two blocks' own, definition first, so neither that
+/// gap nor the order of the blocks changes them. Its metadata gives each
+/// block's lines as `range.definition` and `range.implementation`.
+///
+/// An implementation with no definition in the file (`.locals_imp.abap`, whose
+/// definitions are in `.locals_def.abap`) is the class on its own. Classes in
+/// different files are not merged.
+fn collapse_abap_classes(source: &[u8], entities: &mut Vec<SemanticEntity>) {
+    let mut definitions: HashMap<String, usize> = HashMap::new();
+    for (i, entity) in entities.iter().enumerate() {
+        if entity.entity_type == "class" && entity.parent_id.is_none() {
+            definitions
+                .entry(entity.name.to_ascii_lowercase())
+                .or_insert(i);
+        }
+    }
+
+    let mut dropped = vec![false; entities.len()];
+    let mut renamed_ids: Vec<(String, String)> = Vec::new();
+    for i in 0..entities.len() {
+        if entities[i].entity_type != "impl" || entities[i].parent_id.is_some() {
+            continue;
+        }
+        let implementation = entities[i].clone();
+        let definition = definitions.remove(&implementation.name.to_ascii_lowercase());
+        let class_id = match definition {
+            Some(d) => {
+                let Some(merged) = merge_abap_class_blocks(source, &entities[d], &implementation)
+                else {
+                    continue;
+                };
+                entities[d] = merged;
+                dropped[i] = true;
+                entities[d].id.clone()
+            }
+            None => {
+                let entity = &mut entities[i];
+                entity.entity_type = "class".to_string();
+                entity.id = build_entity_id(&entity.file_path, "class", &entity.name, None);
+                entity.id.clone()
+            }
+        };
+        renamed_ids.push((implementation.id, class_id));
+    }
+
+    // Methods hang off the implementation's id, in their own ids too.
+    for (old_id, class_id) in &renamed_ids {
+        let old_prefix = format!("{old_id}::");
+        let reparent = |id: &str| {
+            id.strip_prefix(&old_prefix)
+                .map(|rest| format!("{class_id}::{rest}"))
+        };
+        for entity in entities.iter_mut() {
+            if let Some(id) = reparent(&entity.id) {
+                entity.id = id;
+            }
+            match entity.parent_id.as_deref() {
+                Some(pid) if pid == old_id => entity.parent_id = Some(class_id.clone()),
+                Some(pid) => {
+                    if let Some(pid) = reparent(pid) {
+                        entity.parent_id = Some(pid);
+                    }
+                }
+                None => {}
+            }
+        }
+    }
+
+    let mut index = 0;
+    entities.retain(|_| {
+        index += 1;
+        !dropped[index - 1]
+    });
+    // An implementation written before its definition leaves the class after
+    // its own methods; put it back in source order.
+    entities.sort_by_key(|e| {
+        (
+            e.start_byte.unwrap_or(0),
+            std::cmp::Reverse(e.end_byte.unwrap_or(0)),
+        )
+    });
+}
+
+/// One `class` entity for an ABAP class's definition and implementation, or
+/// `None` when either block has no byte span to cut the content from.
+fn merge_abap_class_blocks(
+    source: &[u8],
+    definition: &SemanticEntity,
+    implementation: &SemanticEntity,
+) -> Option<SemanticEntity> {
+    let (first, second) = if definition.start_byte <= implementation.start_byte {
+        (definition, implementation)
+    } else {
+        (implementation, definition)
+    };
+    let (start_byte, gap_start) = (first.start_byte?, first.end_byte?);
+    let (gap_end, end_byte) = (second.start_byte?, second.end_byte?);
+    if gap_start > gap_end || end_byte > source.len() {
+        return None;
+    }
+
+    // Blank the gap byte for byte, keeping line breaks, as the ABAP stripper does.
+    let mut bytes = source[start_byte..end_byte].to_vec();
+    for b in &mut bytes[gap_start - start_byte..gap_end - start_byte] {
+        if !matches!(*b, b'\n' | b'\r') {
+            *b = b' ';
+        }
+    }
+    let content = String::from_utf8(bytes).ok()?;
+
+    let combine =
+        |a: Option<&String>, b: Option<&String>| Some(content_hash(&format!("{}{}", a?, b?)));
+    let mut metadata = definition.metadata.clone().unwrap_or_default();
+    for (role, block) in [
+        ("definition", definition),
+        ("implementation", implementation),
+    ] {
+        metadata.insert(
+            format!("range.{role}"),
+            format!("{}-{}", block.start_line, block.end_line),
+        );
+    }
+
+    Some(SemanticEntity {
+        content_hash: content_hash(&format!(
+            "{}{}",
+            definition.content_hash, implementation.content_hash
+        )),
+        structural_hash: combine(
+            definition.structural_hash.as_ref(),
+            implementation.structural_hash.as_ref(),
+        ),
+        kappa: combine(definition.kappa.as_ref(), implementation.kappa.as_ref()),
+        content,
+        start_line: first.start_line,
+        end_line: second.end_line,
+        start_byte: Some(start_byte),
+        end_byte: Some(end_byte),
+        metadata: Some(metadata),
+        ..definition.clone()
+    })
 }
 
 /// Compute `structural_hash` and kappa (the semantic identity hash; see
