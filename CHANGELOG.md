@@ -8,6 +8,8 @@ All notable changes to sem are documented in this file.
 
 - **ABAP language support.** Classes, class implementations, interfaces, methods and function modules are extracted as entities from `.abap` files (the files abapGit writes) via the mkoval1/tree-sitter-abap grammar, behind a `lang-abap` feature included in `grammar-all`. Methods nest under their `CLASS ... IMPLEMENTATION` block, which is an `impl` entity, the same type as a Rust `impl`.
 
+- **ABAP comments and strings no longer count as references.** A name in a `*` column-1 comment, a `"` trailing comment, a `'...'` or backtick literal, or the literal part of a `|...|` template is not a call; names inside a template's `{ ... }` expressions still are. Line numbers and byte offsets are preserved, and no other language's scan changes.
+
 ### Changed
 
 - **Telemetry is off by default in this fork.** A fresh install used to count command names locally (mode `local`, never uploaded); it now records nothing until `sem config telemetry local` or `on` is run. A mode already stored in `~/.sem/telemetry.json` is respected.

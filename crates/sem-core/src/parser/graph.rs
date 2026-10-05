@@ -7405,6 +7405,113 @@ fn strip_clojure_content(content: &str) -> String {
     String::from_utf8(result).expect("stripped source preserves UTF-8 boundaries")
 }
 
+/// Longest span, in bytes, a single ABAP `|...|` template may blank before the stripper gives up
+/// and resumes as code. Templates may span lines, so this is all that keeps one stray `|` from
+/// swallowing the rest of the file.
+const ABAP_TEMPLATE_SPAN_CAP: usize = 4096;
+
+/// Strip comments and string literals from ABAP content, preserving everything else.
+///
+/// ABAP uses none of the generic stripper's comment forms: a comment is `*` in column 1 (byte
+/// offset 0 of the line, not the first non-blank, so `lv_a = 2 * lv_b.` is untouched) or `"` to
+/// end of line. Strings are `'...'` and backtick literals, where a doubled quote is the escape,
+/// and `|...|` templates, where a backslash escapes `|`, `{` and `}`. The `{ ... }` expressions
+/// embedded in a template are code and are copied through, so names inside them stay
+/// references; only the literal parts are blanked.
+///
+/// `'` and backtick literals do not span lines: with no closing quote the rest of the line is
+/// blanked, so one stray quote cannot swallow the file. Templates may span lines, capped at
+/// `ABAP_TEMPLATE_SPAN_CAP`. Everything is one pass, since the line comment rules share the
+/// state machine, so there is no second pass as in `strip_clojure_line_comments`.
+fn strip_abap_content(content: &str) -> String {
+    let bytes = content.as_bytes();
+    let len = bytes.len();
+    let mut result = vec![b' '; len];
+    let mut i = 0;
+
+    while i < len {
+        // `*` in column 1 and `"` both comment out the rest of the line (the newline stays)
+        if (bytes[i] == b'*' && (i == 0 || bytes[i - 1] == b'\n')) || bytes[i] == b'"' {
+            let span_start = i;
+            while i < len && bytes[i] != b'\n' {
+                i += 1;
+            }
+            blank_span_preserving_newlines(&mut result, bytes, span_start, i);
+            continue;
+        }
+        // `'...'` and backtick literals: a doubled quote is an escape, and no closing quote
+        // before the newline blanks to end of line
+        if bytes[i] == b'\'' || bytes[i] == b'`' {
+            let quote = bytes[i];
+            let span_start = i;
+            i += 1;
+            while i < len && bytes[i] != b'\n' {
+                if bytes[i] == quote {
+                    if i + 1 < len && bytes[i + 1] == quote {
+                        i += 2;
+                        continue;
+                    }
+                    i += 1;
+                    break;
+                }
+                i += 1;
+            }
+            blank_span_preserving_newlines(&mut result, bytes, span_start, i);
+            continue;
+        }
+        // `|...|` templates: blank the literal parts, copy the `{ ... }` expressions through
+        if bytes[i] == b'|' {
+            let mut span_start = i;
+            let cap = (i + ABAP_TEMPLATE_SPAN_CAP).min(len);
+            i += 1;
+            while i < cap {
+                if bytes[i] == b'\\' {
+                    i = (i + 2).min(len);
+                    continue;
+                }
+                if bytes[i] == b'|' {
+                    i += 1;
+                    break;
+                }
+                if bytes[i] == b'{' {
+                    blank_span_preserving_newlines(&mut result, bytes, span_start, i + 1);
+                    let mut depth = 1;
+                    i += 1;
+                    while i < cap {
+                        if bytes[i] == b'{' {
+                            depth += 1;
+                        } else if bytes[i] == b'}' {
+                            depth -= 1;
+                            if depth == 0 {
+                                break;
+                            }
+                        }
+                        result[i] = bytes[i];
+                        i += 1;
+                    }
+                    span_start = i;
+                    if depth == 0 {
+                        i += 1;
+                    }
+                    continue;
+                }
+                i += 1;
+            }
+            // The cap can land inside a multi-byte character; blank the rest of it too
+            while i < len && !content.is_char_boundary(i) {
+                i += 1;
+            }
+            blank_span_preserving_newlines(&mut result, bytes, span_start, i);
+            continue;
+        }
+        // Regular code: copy through
+        result[i] = bytes[i];
+        i += 1;
+    }
+
+    String::from_utf8(result).expect("stripped source preserves UTF-8 boundaries")
+}
+
 /// Dispatch to the appropriate content stripper for the given language strategy.
 /// Each `StripStrategy` variant must be handled explicitly.
 fn strip_for_language(
@@ -7415,6 +7522,7 @@ fn strip_for_language(
     match strategy {
         StripStrategy::Generic => strip_comments_and_strings(content),
         StripStrategy::Clojure => strip_clojure_line_comments(&strip_clojure_content(content)),
+        StripStrategy::Abap => strip_abap_content(content),
     }
 }
 
@@ -8800,6 +8908,89 @@ comment with Helper
         let triple = strip_comments_and_strings("'''doc\nwith Helper");
         assert_eq!(newline_count(&triple), 1);
         assert!(!triple.contains("Helper"));
+    }
+
+    #[test]
+    fn strip_abap_comments() {
+        let content = "\
+* full-line comment calls Helper
+DATA lv_a TYPE i.   \" trailing comment calls Helper
+lv_a = 2 * lv_b.
+  * indented star is not a comment
+";
+
+        let stripped = strip_abap_content(content);
+
+        assert_eq!(stripped.len(), content.len());
+        assert!(!stripped.contains("Helper"));
+        assert!(!stripped.contains("full-line"));
+        assert!(!stripped.contains("trailing"));
+        assert!(stripped.contains("DATA lv_a TYPE i."));
+        assert!(stripped.contains("lv_a = 2 * lv_b."));
+        assert!(stripped.contains("* indented star is not a comment"));
+    }
+
+    #[test]
+    fn strip_abap_quoted_literals() {
+        let content = "\
+lv_a = 'calls Helper( )'.
+lv_b = 'it''s Helper'.
+lv_c = `calls Helper( )`.
+lv_d = `it``s Helper`.
+lv_e = 'has \" inside' && lv_code.
+lv_f = 'unterminated Helper
+lv_g = lv_next.
+";
+
+        let stripped = strip_abap_content(content);
+
+        assert_eq!(stripped.len(), content.len());
+        assert!(!stripped.contains("Helper"));
+        assert!(!stripped.contains("inside"));
+        assert!(stripped.contains("lv_a ="));
+        assert!(stripped.contains("lv_d ="));
+        // A `"` inside a literal is not a comment, so the code after the literal survives
+        assert!(stripped.contains("&& lv_code."));
+        // An unterminated literal stops at the newline
+        assert!(stripped.contains("lv_g = lv_next."));
+    }
+
+    #[test]
+    fn strip_abap_template_keeps_embedded_expressions() {
+        let content = "\
+rv_text = |order { mv_id } total { zif_fx_order~get_total( ) } Helper|.
+rv_more = |a { lo_obj->tag( ) } b \\{ Helper \\} c { nested( VALUE #( ( 1 ) ) ) }|.
+rv_last = lv_after.
+";
+
+        let stripped = strip_abap_content(content);
+
+        assert_eq!(stripped.len(), content.len());
+        assert!(!stripped.contains("Helper"));
+        assert!(!stripped.contains("order "));
+        assert!(stripped.contains("mv_id"));
+        assert!(stripped.contains("zif_fx_order~get_total( )"));
+        assert!(stripped.contains("lo_obj->tag( )"));
+        assert!(stripped.contains("nested( VALUE #( ( 1 ) ) )"));
+        assert!(stripped.contains("rv_last = lv_after."));
+    }
+
+    #[test]
+    fn strip_abap_template_spans_lines_and_caps() {
+        let content = "lv_a = |first Helper\nsecond Helper|.\nlv_b = lv_c.\n";
+        let stripped = strip_abap_content(content);
+        let newline_count = |text: &str| text.bytes().filter(|byte| *byte == b'\n').count();
+
+        assert_eq!(newline_count(&stripped), newline_count(content));
+        assert!(!stripped.contains("Helper"));
+        assert!(stripped.contains("lv_b = lv_c."));
+
+        // One stray `|` blanks at most the cap, with multi-byte text across the cut
+        let runaway = format!("lv_a = |{}\nlv_tail = lv_next.\n", "é".repeat(ABAP_TEMPLATE_SPAN_CAP));
+        let capped = strip_abap_content(&runaway);
+        assert_eq!(capped.len(), runaway.len());
+        assert!(capped.contains("lv_next"));
+        assert_eq!(newline_count(&capped), newline_count(&runaway));
     }
 
     #[test]

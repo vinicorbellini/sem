@@ -18,6 +18,9 @@ pub(crate) enum StripStrategy {
     /// Clojure: blank double-quoted strings only (preserves `#` for gensyms and reader macros),
     /// then strip `;` line comments in a second pass.
     Clojure,
+    /// ABAP: blank `*` column-1 and `"` comments, `'...'` and backtick literals, and the literal
+    /// parts of `|...|` templates (the `{ ... }` expressions inside stay code), in a single pass.
+    Abap,
 }
 
 #[allow(dead_code)]
@@ -49,6 +52,7 @@ impl LanguageConfig {
     pub(crate) fn strip_strategy(&self) -> StripStrategy {
         match self.id {
             "clojure" | "edn" => StripStrategy::Clojure,
+            "abap" => StripStrategy::Abap,
             _ => StripStrategy::Generic,
         }
     }

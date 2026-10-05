@@ -2178,6 +2178,57 @@ return M
         }
     }
 
+    /// Names each ABAP fixture entity in `file` depends on in the reference graph, by entity
+    /// name: (entity name, sorted dependency names).
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_dependencies(files: &[&str]) -> Vec<(String, Vec<String>)> {
+        let dir = tempfile::TempDir::new().unwrap();
+        for file in files {
+            std::fs::copy(abap_fixture_dir().join(file), dir.path().join(file)).unwrap();
+        }
+        let registry = crate::parser::plugins::create_default_registry();
+        let file_paths: Vec<String> = files.iter().map(|f| f.to_string()).collect();
+        let (graph, _) = crate::parser::graph::EntityGraph::build(dir.path(), &file_paths, &registry);
+        let mut rows: Vec<(String, Vec<String>)> = graph
+            .entities
+            .iter()
+            .map(|(id, entity)| {
+                let mut deps: Vec<String> =
+                    graph.get_dependencies(id).iter().map(|d| d.name.clone()).collect();
+                deps.sort();
+                (entity.name.clone(), deps)
+            })
+            .collect();
+        eprintln!("ABAP fixture dependencies {files:?}: {rows:?}");
+        rows.sort();
+        rows
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_1_2_comment_not_reference() {
+        // Spec 1.2: the trailing `" ... describe( ) ..."` comment in `constructor`
+        // names a method of the same class, and a comment is not a reference.
+        let rows = abap_fixture_dependencies(&["zcl_fx_order.clas.abap"]);
+        let (_, deps) = rows.iter().find(|(name, _)| name == "constructor").expect("constructor");
+        assert!(!deps.contains(&"describe".to_string()), "got: {:?}", deps);
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_1_2_string_not_reference() {
+        // Spec 1.2: the `'calls get_total( ) and describe( ) in a literal'` literal
+        // is not a reference, while the `{ zif_fx_order~get_total( ) }` expression
+        // inside `describe`'s template is. Methods of the implemented interface are
+        // named for their interface until 1.3, so the row name is `zif_fx_order`.
+        let rows = abap_fixture_dependencies(&["zif_fx_order.intf.abap", "zcl_fx_order.clas.abap"]);
+        for (_, deps) in rows.iter().filter(|(name, _)| name == "zif_fx_order") {
+            assert!(!deps.contains(&"describe".to_string()), "got: {:?}", deps);
+        }
+        let (_, deps) = rows.iter().find(|(name, _)| name == "describe").expect("describe");
+        assert!(deps.contains(&"zif_fx_order".to_string()), "got: {:?}", deps);
+    }
+
     #[test]
     #[cfg(feature = "lang-fish")]
     fn test_fish_entity_extraction() {
