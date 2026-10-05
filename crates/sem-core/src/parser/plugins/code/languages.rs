@@ -1302,7 +1302,8 @@ static ABAP_CONFIG: LanguageConfig = LanguageConfig {
     // A class definition's `DATA` sits in its visibility sections. `CLASS x
     // IMPLEMENTATION` holds its METHOD blocks directly, with no body node in
     // between, so it has no container to declare: the extractor descends into
-    // the implementation itself (`push_abap_method_implementations`).
+    // the implementation itself (`push_abap_method_implementations`), then
+    // folds it into the class of the same name (`collapse_abap_classes`).
     container_node_types: &["public_section", "protected_section", "private_section"],
     call_entity_identifiers: &[],
     suppressed_nested_entities: &[],

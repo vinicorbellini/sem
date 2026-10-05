@@ -6,7 +6,7 @@ All notable changes to sem are documented in this file.
 
 ### Added
 
-- **ABAP language support.** Classes, class implementations, interfaces, methods and function modules are extracted as entities from `.abap` files (the files abapGit writes) via the mkoval1/tree-sitter-abap grammar, behind a `lang-abap` feature included in `grammar-all`. Methods nest under their `CLASS ... IMPLEMENTATION` block, which is an `impl` entity, the same type as a Rust `impl`. abapGit's `*.testclasses.abap` files count as test files, and a class declared `FOR TESTING` is a test entity in any file.
+- **ABAP language support.** Classes, class implementations, interfaces, methods and function modules are extracted as entities from `.abap` files (the files abapGit writes) via the mkoval1/tree-sitter-abap grammar, behind a `lang-abap` feature included in `grammar-all`. Methods nest under their class. abapGit's `*.testclasses.abap` files count as test files, and a class declared `FOR TESTING` is a test entity in any file.
 
 - **abapGit file names are read, and abapGit metadata is skipped by default.** `parse_abapgit_name` turns `zcl_foo.clas.testclasses.abap` into object `zcl_foo`, type `clas`, part `testclasses` (`#ns#` becomes `/ns/`), for attaching local and test classes to their global class. Repo-wide scans now skip `.abapgit.xml`, `package.devc.xml` and `<name>.<type>.xml` for the four-letter abapGit object types, so `pom.xml` and other XML are still scanned. `--no-default-excludes` brings them back.
 
@@ -17,6 +17,8 @@ All notable changes to sem are documented in this file.
 - **ABAP names are case-insensitive.** `sem find ZCL_FOO`, `sem find zcl_foo` and `sem find Zcl_Foo` return the same entities, named as written in source, and a reference written in one case resolves to a definition written in another. Only ABAP folds names, and only ASCII; every other language's output is unchanged. The index files ABAP names under their lowercased form, so an index written before this change keeps answering exact spellings until it is rebuilt.
 
 ### Changed
+
+- **An ABAP class is one entity.** `CLASS x DEFINITION` and `CLASS x IMPLEMENTATION` used to be a `class` and an `impl` with the same name; they are now one `class` that spans both blocks and owns the definition's `DATA` and `TYPES` and the implementation's methods, so `sem find zcl_foo` returns one entity. Its metadata gives each block's lines as `range.definition` and `range.implementation`. Its content blanks the text between the two blocks, and its hashes combine the two blocks' own, so neither that text nor the blocks' order changes them. `sem diff` reports a method body edit as the method and a definition edit as the class. An implementation with no definition in the file, as in `.locals_imp.abap`, is a `class` on its own. Methods of a `FOR TESTING` class are tests in any file, not only in `.testclasses.abap`.
 
 - **Telemetry is off by default in this fork.** A fresh install used to count command names locally (mode `local`, never uploaded); it now records nothing until `sem config telemetry local` or `on` is run. A mode already stored in `~/.sem/telemetry.json` is respected.
 
