@@ -1,43 +1,113 @@
-"""Tool sets for the ABAP agent benchmark.
+"""Tool sets and transcripts for the ABAP agent benchmark, on headless Claude Code.
 
-grep arm: grep, glob, read_file and bash over the run's abapGit checkout.
-sem arm:  the same four, plus sem_find, sem_impact and sem_certify, served by
-          `sem mcp` over newline-delimited JSON-RPC on stdio (docs/shared-mcp.md).
+grep arm: Claude Code's built-in Bash, Read, Grep and Glob (plus Edit and Write on B2).
+sem arm:  the same, plus the tools `sem mcp` lists (sem_find, sem_impact, sem_certify and
+          the rest of LISTED_TOOLS in crates/sem-mcp/src/server.rs), attached with
+          --mcp-config as a standalone stdio server (SEM_MCP_NO_SHARED=1, docs/shared-mcp.md).
 
-Tools here are plain Python: run.py wraps each one for the Anthropic SDK's tool
-runner, so this module never imports the SDK and --dry-run works without it.
-Every call is counted in a RunStats.
+Claude Code runs the agent loop and the tools. This module builds the command line, the
+MCP config and the environment for one run, and reads the run's stream-json transcript
+back into a RunStats. SemMcp is only used by --dry-run, to show the server answers.
 """
 
 import json
 import os
 import queue
 import re
+import shlex
 import subprocess
 import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable
 
 # ── Config ──────────────────────────────────────────────────────────────────
 
-MAX_TOOL_OUTPUT_BYTES = 60_000   # same cap for every tool, both arms
-GREP_MAX_MATCHES = 500
-GLOB_MAX_RESULTS = 1_000
-READ_DEFAULT_LIMIT = 2_000
-BASH_TIMEOUT_S = 900             # `npm run unit` takes ~35 s warm; first build fetches libraries
+CLAUDE = "claude"
+READ_TOOLS = ["Bash", "Read", "Grep", "Glob"]   # both arms, every class
+WRITE_TOOLS = ["Edit", "Write"]                 # both arms, B2 only
+MCP_SERVER = "sem"                              # tools appear as mcp__sem__<name>
+MCP_PREFIX = f"mcp__{MCP_SERVER}__"
 MCP_TIMEOUT_S = 300
+BASH_TIMEOUT_MS = 900_000        # `npm run unit` takes ~35 s warm; first build fetches libraries
 MCP_PROTOCOL_VERSION = "2025-03-26"  # as in benchmarks/shared-mcp/run.py
-SEM_TOOLS = ["sem_find", "sem_impact", "sem_certify"]
-EXCLUDED_DIRS = {".git", "node_modules", "output"}
+SEM_ENV = {"SEM_MCP_NO_SHARED": "1", "SEM_NO_TELEMETRY": "1", "SEM_NO_UPDATE_CHECK": "1",
+           "SEM_CLOUD": "0", "SEM_NO_NETWORK": "1"}
+
+# Variables of the Claude Code session that launches the benchmark. A child `claude` that
+# inherits them joins the parent's session id, extra directories (and their CLAUDE.md
+# files), effort level and remote messaging channel. Auth and proxy variables stay.
+PARENT_SESSION_ENV = [
+    "CLAUDE_CODE_SESSION_ID", "CLAUDE_CODE_REMOTE_SESSION_ID", "CLAUDE_CODE_CHILD_SESSION",
+    "CLAUDE_ADDITIONAL_DIRECTORIES", "CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD", "CLAUDE_EFFORT",
+    "CLAUDE_CODE_MESSAGING_SOCKET", "CLAUDE_CODE_MESSAGING_TOKEN", "CLAUDE_CODE_TEE_SDK_STDOUT",
+    "CLAUDE_CODE_REMOTE_TOOLS_FORWARD", "CLAUDE_CODE_SYNC_SKILLS", "CLAUDE_CODE_SYNC_SESSION_REFS",
+    "CLAUDE_CODE_DEBUG", "CLAUDE_CODE_SESSION_ATTENDED", "CLAUDE_CODE_DIAGNOSTICS_FILE",
+    "CLAUDE_AFTER_LAST_COMPACT", "CLAUDE_PID", "CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT",
+    "CLAUDE_CODE_HOLD_UNANSWERED_PARKED_PERMISSION", "CLAUDE_CODE_ARTIFACT_ASSETS",
+    "CLAUDE_AUTO_BACKGROUND_TASKS", "CLAUDE_CODE_BG_TASKS_REPORT_RUNNING", "CLAUDE_CODE_WORKER_EPOCH",
+    "MCP_CONNECTION_NONBLOCKING",  # the sem tools must be there from the first request
+    "SEM_MCP_REQUIRE_SHARED",
+]
 
 # One line per unit test method printed by abapGit's output/index.mjs, e.g.
 # "ZCL_ABAPGIT_PATH: running ltcl_path->split_file_location" (", skipped ..." when not run)
 TEST_LINE = re.compile(r"^(\w+): running (\w+)->(\w+)(, skipped.*)?$", re.M)
 
 
-# ── Stats ───────────────────────────────────────────────────────────────────
+# ── Command line ────────────────────────────────────────────────────────────
+
+
+def arm_tools(arm: str, writes: bool) -> tuple[list[str], list[str]]:
+    """(--tools, --allowedTools) for an arm. --tools decides which built-in tools exist at all."""
+    builtin = READ_TOOLS + (WRITE_TOOLS if writes else [])
+    allowed = builtin + ([f"mcp__{MCP_SERVER}"] if arm == "sem" else [])
+    return builtin, allowed
+
+
+def mcp_config(sem_binary: str, workspace: Path, log_path: Path) -> dict:
+    """`sem mcp` over stdio in the run's checkout, standalone, its stderr appended to log_path."""
+    return {"mcpServers": {MCP_SERVER: {
+        "type": "stdio",
+        "command": "sh",
+        "args": ["-c", 'cd "$2" && exec "$0" mcp 2>>"$1"', sem_binary, str(log_path), str(workspace)],
+        "env": {"SEM_REPO": str(workspace), **SEM_ENV},
+    }}}
+
+
+def claude_command(prompt: str, model: str, effort: str, max_turns: int, arm: str, writes: bool,
+                   session_id: str, mcp_config_path: Path | None, budget_usd: float | None) -> list[str]:
+    builtin, allowed = arm_tools(arm, writes)
+    cmd = [
+        CLAUDE, "-p", prompt,
+        "--output-format", "stream-json", "--verbose",   # stream-json is the only output with tool calls
+        "--model", model, "--effort", effort, "--max-turns", str(max_turns),
+        "--tools", ",".join(builtin),
+        "--allowedTools", ",".join(allowed),
+        "--permission-mode", "dontAsk",                  # anything not allowed is denied, never prompted
+        "--setting-sources", "",                         # no user/project/local settings, hooks or CLAUDE.md
+        "--strict-mcp-config",                           # no MCP server but the one passed here
+        "--no-session-persistence", "--session-id", session_id,
+    ]
+    if mcp_config_path is not None:
+        cmd += ["--mcp-config", str(mcp_config_path)]
+    if budget_usd is not None:
+        cmd += ["--max-budget-usd", f"{budget_usd:.2f}"]
+    return cmd
+
+
+def claude_env() -> dict:
+    env = {k: v for k, v in os.environ.items() if k not in PARENT_SESSION_ENV}
+    env.update({"CI": "1", "MCP_TOOL_TIMEOUT": str(MCP_TIMEOUT_S * 1000),
+                "BASH_DEFAULT_TIMEOUT_MS": str(BASH_TIMEOUT_MS), "BASH_MAX_TIMEOUT_MS": str(BASH_TIMEOUT_MS)})
+    return env
+
+
+def show_command(cmd: list[str]) -> str:
+    return shlex.join(cmd)
+
+
+# ── Transcript ──────────────────────────────────────────────────────────────
 
 
 @dataclass
@@ -47,11 +117,9 @@ class RunStats:
     files_read: set[str] = field(default_factory=set)
     bytes_read: int = 0  # bytes of tool output returned to the model, all tools
     test_classes: set[tuple[str, str]] = field(default_factory=set)  # (object, local class) that ran
-
-    def record(self, name: str, output: str):
-        self.tool_calls += 1
-        self.calls_by_tool[name] = self.calls_by_tool.get(name, 0) + 1
-        self.bytes_read += len(output.encode())
+    init: dict = field(default_factory=dict)     # the system/init event: tools, mcp_servers, model
+    result: dict = field(default_factory=dict)   # the final result event
+    usage_by_message: dict[str, dict] = field(default_factory=dict)  # fallback when there is no result
 
 
 def test_classes_in(output: str) -> set[tuple[str, str]]:
@@ -59,179 +127,88 @@ def test_classes_in(output: str) -> set[tuple[str, str]]:
     return {(m.group(1), m.group(2)) for m in TEST_LINE.finditer(output) if not m.group(4)}
 
 
-def truncate(text: str) -> str:
-    raw = text.encode()
-    if len(raw) <= MAX_TOOL_OUTPUT_BYTES:
-        return text
-    head = raw[:MAX_TOOL_OUTPUT_BYTES].decode(errors="ignore")
-    return head + f"\n\n... [truncated at {MAX_TOOL_OUTPUT_BYTES // 1000}KB of {len(raw) // 1000}KB] ..."
+def _result_text(content) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "\n".join(c.get("text", "") for c in content if isinstance(c, dict))
+    return ""
 
 
-# ── Tool ────────────────────────────────────────────────────────────────────
+def tool_name(name: str) -> str:
+    return name[len(MCP_PREFIX):] if name.startswith(MCP_PREFIX) else name
 
 
-@dataclass
-class Tool:
-    name: str
-    description: str
-    input_schema: dict
-    func: Callable[[dict], str]
-    stats: RunStats
-
-    def __call__(self, **kwargs) -> str:
-        """Run the tool. Errors raise; the SDK tool runner returns them to the model with is_error."""
-        try:
-            output = truncate(self.func(kwargs))
-        except Exception as e:
-            self.stats.record(self.name, str(e))
-            raise
-        self.stats.record(self.name, output)
-        return output
-
-    def definition(self) -> dict:
-        return {"name": self.name, "description": self.description, "input_schema": self.input_schema}
-
-
-def _schema(properties: dict, required: list[str]) -> dict:
-    return {"type": "object", "properties": properties, "required": required, "additionalProperties": False}
-
-
-def _inside(workspace: Path, rel: str) -> Path:
-    path = (workspace / rel).resolve()
-    if path != workspace and workspace not in path.parents:
-        raise ValueError(f"path outside the repository: {rel}")
-    return path
-
-
-def _glob_regex(pattern: str) -> re.Pattern:
-    """Glob with ** (any directories), * and ? (within one path segment)."""
-    out, i = "", 0
-    while i < len(pattern):
-        if pattern.startswith("**/", i):
-            out, i = out + "(?:.*/)?", i + 3
-        elif pattern.startswith("**", i):
-            out, i = out + ".*", i + 2
-        elif pattern[i] == "*":
-            out, i = out + "[^/]*", i + 1
-        elif pattern[i] == "?":
-            out, i = out + "[^/]", i + 1
-        else:
-            out, i = out + re.escape(pattern[i]), i + 1
-    return re.compile(out)
-
-
-# ── grep arm ────────────────────────────────────────────────────────────────
-
-
-def grep_arm_tools(workspace: Path, stats: RunStats) -> list[Tool]:
+def read_transcript(lines, workspace: Path) -> RunStats:
+    """Fold Claude Code's stream-json events into one run's stats."""
+    stats = RunStats()
     workspace = workspace.resolve()
-
-    def grep(args: dict) -> str:
-        path = args.get("path") or "."
-        _inside(workspace, path)
-        cmd = ["grep", "-rnE", "-I"] + [f"--exclude-dir={d}" for d in sorted(EXCLUDED_DIRS)]
-        if args.get("ignore_case"):
-            cmd.append("-i")
-        if args.get("glob"):
-            cmd.append(f"--include={args['glob']}")
-        cmd += ["-e", args["pattern"], "--", path]
-        result = subprocess.run(cmd, cwd=workspace, capture_output=True, text=True, errors="replace")
-        if result.returncode > 1:
-            raise RuntimeError(result.stderr.strip() or f"grep exited {result.returncode}")
-        lines = [l[2:] if l.startswith("./") else l for l in result.stdout.splitlines()]
-        if not lines:
-            return "No matches."
-        out = "\n".join(lines[:GREP_MAX_MATCHES])
-        if len(lines) > GREP_MAX_MATCHES:
-            out += f"\n... [{len(lines) - GREP_MAX_MATCHES} more matches, narrow the pattern or path]"
-        return out
-
-    def glob(args: dict) -> str:
-        # os.walk, not Path.glob: it prunes .git and node_modules instead of walking them.
-        pattern = _glob_regex(args["pattern"].lstrip("./"))
-        hits = []
-        for root, dirs, files in os.walk(workspace):
-            dirs[:] = sorted(d for d in dirs if d not in EXCLUDED_DIRS)
-            rel_root = Path(root).relative_to(workspace)
-            hits += [str(rel_root / f) if str(rel_root) != "." else f for f in files
-                     if pattern.fullmatch(str(rel_root / f) if str(rel_root) != "." else f)]
-        hits.sort()
-        if not hits:
-            return "No files."
-        out = "\n".join(hits[:GLOB_MAX_RESULTS])
-        if len(hits) > GLOB_MAX_RESULTS:
-            out += f"\n... [{len(hits) - GLOB_MAX_RESULTS} more files]"
-        return out
-
-    def read_file(args: dict) -> str:
-        path = _inside(workspace, args["path"])
-        offset = max(int(args.get("offset") or 1), 1)
-        limit = int(args.get("limit") or READ_DEFAULT_LIMIT)
-        lines = path.read_text(errors="replace").splitlines()
-        stats.files_read.add(str(path.relative_to(workspace)))
-        chunk = lines[offset - 1: offset - 1 + limit]
-        out = "\n".join(f"{offset + i:>6}\t{line}" for i, line in enumerate(chunk))
-        if offset - 1 + limit < len(lines):
-            out += f"\n... [{len(lines)} lines in total; continue with offset={offset + limit}]"
-        return out or "(empty)"
-
-    def bash(args: dict) -> str:
+    pending: dict[str, str] = {}  # tool_use id -> tool name
+    for line in lines:
         try:
-            result = subprocess.run(
-                ["bash", "-c", args["command"]], cwd=workspace, capture_output=True, text=True,
-                errors="replace", timeout=BASH_TIMEOUT_S, env=_bash_env(),
-            )
-        except subprocess.TimeoutExpired:
-            raise RuntimeError(f"command timed out after {BASH_TIMEOUT_S} s")
-        output = result.stdout + result.stderr
-        stats.test_classes |= test_classes_in(output)
-        return f"{output}\n[exit code {result.returncode}]"
+            event = json.loads(line)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        kind = event.get("type")
+        if kind == "system" and event.get("subtype") == "init":
+            stats.init = event
+        elif kind == "result":
+            stats.result = event
+        elif kind == "assistant" and not event.get("parent_tool_use_id"):
+            message = event.get("message", {})
+            if message.get("id") and message.get("usage"):
+                stats.usage_by_message[message["id"]] = message["usage"]
+            for block in message.get("content", []):
+                if block.get("type") != "tool_use":
+                    continue
+                name = tool_name(block.get("name", ""))
+                pending[block.get("id")] = name
+                stats.tool_calls += 1
+                stats.calls_by_tool[name] = stats.calls_by_tool.get(name, 0) + 1
+                if name == "Read" and block.get("input", {}).get("file_path"):
+                    path = Path(block["input"]["file_path"])
+                    path = path if path.is_absolute() else workspace / path
+                    try:
+                        stats.files_read.add(str(path.resolve().relative_to(workspace)))
+                    except ValueError:
+                        stats.files_read.add(str(path))
+        elif kind == "user":
+            for block in event.get("message", {}).get("content", []) or []:
+                if not isinstance(block, dict) or block.get("type") != "tool_result":
+                    continue
+                text = _result_text(block.get("content"))
+                stats.bytes_read += len(text.encode())
+                if pending.get(block.get("tool_use_id")) == "Bash":
+                    stats.test_classes |= test_classes_in(text)
+                    full = event.get("tool_use_result")
+                    if isinstance(full, dict):  # the untruncated output, when Claude Code includes it
+                        stats.test_classes |= test_classes_in(f"{full.get('stdout', '')}\n{full.get('stderr', '')}")
+    return stats
 
-    return [
-        Tool("grep", "Search file contents with an extended regular expression (grep -rnE). Returns file:line:text "
-             "hits, relative to the repository root.", _schema({
-                 "pattern": {"type": "string", "description": "Extended regular expression."},
-                 "path": {"type": "string", "description": "File or directory to search, relative to the repository root. Default '.'."},
-                 "glob": {"type": "string", "description": "Only files whose name matches this glob, e.g. '*.abap'."},
-                 "ignore_case": {"type": "boolean", "description": "Case-insensitive match."},
-             }, ["pattern"]), grep, stats),
-        Tool("glob", "List files matching a glob pattern relative to the repository root, e.g. 'src/**/*.clas.abap'.",
-             _schema({"pattern": {"type": "string", "description": "Glob pattern; ** matches directories recursively."}},
-                     ["pattern"]), glob, stats),
-        Tool("read_file", "Read a text file with line numbers. Use offset and limit for long files.", _schema({
-            "path": {"type": "string", "description": "Path relative to the repository root."},
-            "offset": {"type": "integer", "description": "First line to return, 1-based. Default 1."},
-            "limit": {"type": "integer", "description": f"Number of lines. Default {READ_DEFAULT_LIMIT}."},
-        }, ["path"]), read_file, stats),
-        Tool("bash", "Run a bash command in the repository root and return its output and exit code. Use it to edit "
-             "files (sed, heredocs, python) and to run `npm run unit`.",
-             _schema({"command": {"type": "string", "description": "The command to run."}}, ["command"]), bash, stats),
-    ]
+
+def usage_of(stats: RunStats) -> dict:
+    """Token totals: the result event's, else the sum over the transcript's requests (a killed run)."""
+    u = stats.result.get("usage")
+    if not u:
+        u = {}
+        for m in stats.usage_by_message.values():
+            for k in ("input_tokens", "output_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"):
+                u[k] = u.get(k, 0) + (m.get(k) or 0)
+    return {"input_tokens": u.get("input_tokens", 0) or 0,
+            "output_tokens": u.get("output_tokens", 0) or 0,
+            "cache_read_tokens": u.get("cache_read_input_tokens", 0) or 0,
+            "cache_write_tokens": u.get("cache_creation_input_tokens", 0) or 0}
 
 
-def _bash_env() -> dict:
-    env = {k: v for k, v in os.environ.items() if not k.startswith("ANTHROPIC_")}
-    env["CI"] = "1"
-    return env
-
-
-# ── sem arm ─────────────────────────────────────────────────────────────────
+# ── sem mcp, for --dry-run ───────────────────────────────────────────────────
 
 
 class SemMcp:
-    """A `sem mcp` process for one checkout, spoken to over stdio.
-
-    Standalone stdio (SEM_MCP_NO_SHARED=1): each run has its own checkout, and the
-    process ends with the run instead of leaving a daemon behind.
-    """
+    """A `sem mcp` process for one checkout, spoken to over stdio, the way Claude Code starts it."""
 
     def __init__(self, sem_binary: str, workspace: Path, log_path: Path):
-        env = dict(os.environ)
-        env.update({
-            "SEM_REPO": str(workspace), "SEM_MCP_NO_SHARED": "1", "SEM_NO_TELEMETRY": "1",
-            "SEM_NO_UPDATE_CHECK": "1", "SEM_CLOUD": "0", "SEM_NO_NETWORK": "1",
-        })
-        env.pop("SEM_MCP_REQUIRE_SHARED", None)
+        env = {k: v for k, v in os.environ.items() if k != "SEM_MCP_REQUIRE_SHARED"}
+        env.update({"SEM_REPO": str(workspace), **SEM_ENV})
         self._log = open(log_path, "ab")
         self._next_id = 0
         self.process = subprocess.Popen(
@@ -296,20 +273,3 @@ class SemMcp:
             self.process.wait()
         self.process.stdout.close()
         self._log.close()
-
-
-def sem_arm_tools(workspace: Path, stats: RunStats, sem_binary: str, log_path: Path) -> tuple[list[Tool], SemMcp]:
-    """The grep arm's tools plus SEM_TOOLS, with the schemas and descriptions `sem mcp` lists."""
-    workspace = workspace.resolve()
-    mcp = SemMcp(sem_binary, workspace, log_path)
-    listed = {t["name"]: t for t in mcp.list_tools()}
-    missing = [n for n in SEM_TOOLS if n not in listed]
-    if missing:
-        mcp.close()
-        raise RuntimeError(f"sem mcp does not list {missing}; listed: {sorted(listed)}")
-    tools = grep_arm_tools(workspace, stats)
-    for name in SEM_TOOLS:
-        schema = {k: v for k, v in listed[name]["inputSchema"].items() if k not in ("$schema", "title")}
-        tools.append(Tool(name, listed[name].get("description", ""), schema,
-                          lambda args, n=name: mcp.call(n, args), stats))
-    return tools, mcp
