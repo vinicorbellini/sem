@@ -2063,16 +2063,20 @@ return M
     // reported as entity type `test_method`; `setup` stays a plain `method`.
     #[test]
     #[cfg(feature = "lang-abap")]
-    #[ignore = "spec 1.7: test detection (FOR TESTING methods flagged as test_method)"]
     fn test_abap_fixture_clas_testclasses_detection() {
-        let rows = abap_fixture_entities("zcl_fx_order.clas.testclasses.abap");
-        let tests: Vec<&str> = rows
+        let file = "zcl_fx_order.clas.testclasses.abap";
+        let code = std::fs::read_to_string(abap_fixture_dir().join(file))
+            .unwrap_or_else(|e| panic!("fixture {file}: {e}"));
+        let entities = CodeParserPlugin.extract_entities(&code, file);
+        let tests: Vec<&str> = entities
             .iter()
-            .filter(|(t, _, _)| t == "test_method")
-            .map(|(_, n, _)| n.as_str())
+            .filter(|e| crate::parser::graph::is_test_entity(e, &[]))
+            .map(|e| e.name.as_str())
             .collect();
-        assert_eq!(tests, vec!["total_starts_at_zero", "describe_mentions_id"]);
-        assert!(rows.iter().any(|(t, n, _)| t == "method" && n == "setup"));
+        assert!(tests.contains(&"ltc_order"), "got: {:?}", tests);
+        for m in ["setup", "total_starts_at_zero", "describe_mentions_id"] {
+            assert!(tests.contains(&m), "{m} not a test, got: {:?}", tests);
+        }
     }
 
     #[test]

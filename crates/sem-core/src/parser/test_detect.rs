@@ -24,7 +24,7 @@ const EXACT_DIR_NAMES: &[&str] = &[
 ];
 
 /// File-name patterns that indicate a test file regardless of directory.
-const TEST_FILE_PATTERNS: &[&str] = &["_test.", ".test.", "_spec.", ".spec."];
+const TEST_FILE_PATTERNS: &[&str] = &["_test.", ".test.", "_spec.", ".spec.", ".testclasses."];
 
 /// Returns `true` if any path component (directory or file stem) matches
 /// built-in test heuristics.
@@ -131,6 +131,8 @@ mod tests {
         assert!(is_test_path("src/utils.test.ts"));
         assert!(is_test_path("src/utils_spec.rb"));
         assert!(is_test_path("src/utils.spec.js"));
+        assert!(is_test_path("src/zcl_foo.clas.testclasses.abap"));
+        assert!(is_test_path("src/ZCL_FOO.CLAS.TESTCLASSES.ABAP"));
     }
 
     // ── Negative cases ───────────────────────────────────────────────────
@@ -144,6 +146,8 @@ mod tests {
         assert!(!is_test_path("src/latest/handler.js"));
         assert!(!is_test_path("src/protest/rally.rb"));
         assert!(!is_test_path("lib/fastest/core.ts"));
+        assert!(!is_test_path("src/zcl_foo.clas.abap"));
+        assert!(!is_test_path("src/zcl_foo.clas.locals_imp.abap"));
     }
 
     // ── Custom directories ───────────────────────────────────────────────
