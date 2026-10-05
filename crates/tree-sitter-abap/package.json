@@ -1,0 +1,7 @@
+{
+  "name": "tree-sitter-abap-sem",
+  "private": true,
+  "description": "sem's fork of mkoval1/tree-sitter-abap. Only here so grammar.js loads as CommonJS under the repository's ESM package.json.",
+  "type": "commonjs",
+  "license": "MIT"
+}

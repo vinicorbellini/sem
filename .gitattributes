@@ -2,3 +2,6 @@
 # keep LF on every platform, so a Windows checkout does not rewrite them.
 crates/sem-core/tests/fixtures/abap/** text eol=lf
 crates/sem-cli/tests/fixtures/cli_simplify/** text eol=lf
+# The vendored grammar: parser.c is regenerated from grammar.js and compared,
+# and the corpus tests compare trees byte for byte.
+crates/tree-sitter-abap/** text eol=lf

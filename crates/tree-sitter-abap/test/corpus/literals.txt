@@ -1,0 +1,113 @@
+==================
+character literal with a doubled quote
+==================
+
+write 'it''s'.
+
+---
+
+(program
+  (write_statement
+    (character_literal)))
+
+==================
+empty character literal ends on its line
+==================
+
+a = ''.
+b = 'x'.
+
+---
+
+(program
+  (assignment
+    (name)
+    (character_literal))
+  (assignment
+    (name)
+    (character_literal)))
+
+==================
+string literal with a doubled backtick
+==================
+
+a = `it``s`.
+b = 'x'.
+
+---
+
+(program
+  (assignment
+    (name)
+    (string_literal))
+  (assignment
+    (name)
+    (character_literal)))
+
+==================
+quote inside a string template
+==================
+
+a = |it's { name }!|.
+b = 'x'.
+
+---
+
+(program
+  (assignment
+    (name)
+    (string_template))
+  (assignment
+    (name)
+    (character_literal)))
+
+==================
+escaped characters in a string template
+==================
+
+a = |a\|b\{c\}\\|.
+b = 'x'.
+
+---
+
+(program
+  (assignment
+    (name)
+    (string_template))
+  (assignment
+    (name)
+    (character_literal)))
+
+==================
+string template whose embedded expression runs over lines
+==================
+
+a = |{ cond #(
+  when x = 1 then 'one' ) }|.
+b = 'x'.
+
+---
+
+(program
+  (assignment
+    (name)
+    (string_template))
+  (assignment
+    (name)
+    (character_literal)))
+
+==================
+quote inside an end-of-line comment
+==================
+
+write 'a'. " don't
+write 'b'.
+
+---
+
+(program
+  (write_statement
+    (character_literal))
+  (eol_comment)
+  (write_statement
+    (character_literal)))

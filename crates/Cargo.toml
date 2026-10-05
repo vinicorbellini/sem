@@ -1,5 +1,5 @@
 [workspace]
-members = ["sem-core", "sem-cli", "sem-mcp", "sem-plugin", "sem-cloud-client"]
+members = ["sem-core", "sem-cli", "sem-mcp", "sem-plugin", "sem-cloud-client", "tree-sitter-abap"]
 resolver = "2"
 
 [profile.release]

@@ -17,7 +17,8 @@ stories describe may be offered upstream separately, with their own
 ## Starting point
 
 Commit `2618ff1` on the `abap` branch adds the `lang-abap` feature, the
-`tree-sitter-abap-sqry` grammar, `ABAP_CONFIG`, and extraction of
+`tree-sitter-abap-sqry` grammar (since replaced by the fork in
+`crates/tree-sitter-abap`, see "Grammar fork" below), `ABAP_CONFIG`, and extraction of
 `class_declaration`, `class_implementation`, `interface_declaration`,
 `method_implementation` and `function_implementation`. Everything in the stories
 builds on that commit.
@@ -37,7 +38,9 @@ These differ from the first-draft implementation notes. Each story applies them.
    `FORM`, `ENDFORM`, `MODULE`, `ENDMODULE`, `DEFINE` and `PERFORM` all parse as
    `macro_include` whose `name` is the keyword. `TYPES` parses as an `ERROR`
    node. `FOR TESTING` produces `ERROR` nodes inside `class_declaration` and
-   `method_declaration`. Stories 1.3 and 1.6 handle this.
+   `method_declaration`. Stories 1.3 and 1.6 handle this. (The fork's grammar
+   now reads `FOR TESTING`, `RISK LEVEL` and `DURATION`, see fact 12; the rest
+   of this fact still holds.)
 4. `function_implementation` already exists and covers `FUNCTION ... ENDFUNCTION`.
    The `REPORT` statement is a `report_statement`; the root is `program`.
 5. ABAP has `scope_resolve: None`, so `scope_resolve.rs` is not on the ABAP
@@ -82,3 +85,73 @@ These differ from the first-draft implementation notes. Each story applies them.
     `zif_x~get_steps`) is dropped. On abapGit every one of the 7577 `METHOD x.`
     blocks is now a method entity and none spans another
     (`census-gate1.md`, "After story 1.10").
+11. The grammar's `character_literal` was `/'[^']+'/`: no `''` escape, no
+    empty literal, nothing to stop it at a line end, and no token at all for
+    backtick literals or `|...|` templates. That is the runaway literal of
+    fact 10. sem's fork of the grammar (below) fixes it: `'...'` and backtick
+    literals end at their line with a doubled quote as the escape, and a
+    `|...|` template is one `string_template` token whose `{ ... }` parts are
+    not parsed. With that fixed, abapGit still has 37305 error nodes (from
+    39314): the rest is statements the grammar has no rule for. Some files
+    have more error nodes than before, because code that a runaway literal
+    used to hide is now parsed. The fallback of fact 10 still matters: the
+    grammar still loses whole implementations and stretches methods on other
+    statements, for example a `*` mid-line, which `bol_comment` (`"*"` then
+    the rest of the line, not anchored to column 1) reads as a comment that
+    eats the statement's period.
+
+12. Upstream's `class_declaration` took its additions in one fixed order
+    and had no `FOR TESTING`, `RISK LEVEL` or `DURATION`, so every test
+    class definition was an `ERROR`. The fork takes them in any order, and
+    `METHODS x FOR TESTING.` too. Not the chained `METHODS: a, b FOR
+    TESTING.`, 263 statements in abapGit: the grammar has no chained
+    `METHODS` at all, nor chained `INTERFACES:`, and either one still puts a
+    class definition in an `ERROR`. Error recovery around such an `ERROR`
+    moves with every grammar change, so a fix can lose a few entities in one
+    file while it gains them in others (after this fix,
+    `zcl_abapgit_gui_page_repo_view` lost its 15 `DATA` attributes and the
+    ajson test classes gained 17 `TYPES`); the totals are in the table below.
+
+## Grammar fork
+
+sem builds against its own copy of mkoval1/tree-sitter-abap, in
+`crates/tree-sitter-abap/` (a workspace member, path dependency of
+`sem-core`'s `lang-abap`, `publish = false`). It was taken at upstream commit
+`c7604df9e25d56ae879fa25694fd9f2ddbab05d8` (2024-06-29, MIT), cloned from
+GitHub, the same commit the `tree-sitter-abap-sqry` 32.0.1 crate vendored.
+The crate's `README.md` is the authoritative list of what the fork changes.
+
+- Edit `grammar.js`, never `src/`. Regenerate with tree-sitter CLI 0.26.8, the
+  version of the `tree-sitter` crate in `crates/Cargo.lock`
+  (`npm install -g tree-sitter-cli@0.26.8`):
+  `cd crates/tree-sitter-abap && tree-sitter generate`. It warns that there is
+  no `tree-sitter.json` and generates ABI 14, as upstream did; that is
+  intended. Commit `grammar.js` and `src/` together.
+- Grammar tests: `tree-sitter test` in the same directory runs the corpus in
+  `test/corpus/` (upstream's files plus the fork's, such as `literals.txt`).
+  Then `cargo test -p tree-sitter-abap` and `cargo test -p sem-core`.
+- The census measures a grammar change on real code:
+  `sem find --in src --parse-report --file-exts .abap` on abapGit with a
+  scratch `SEM_CACHE_DIR` (`census-baseline.md`). Regenerating the unchanged
+  upstream grammar gave the same tree on all 752 abapGit files and the same
+  census (39314 error nodes, 9703 entities, 2917 from the fallback).
+- Tests that exercise `abap_fallback.rs` need a statement the grammar still
+  loses methods on. Once a grammar fix removes a test's trigger, give the test
+  a new one (cut down from abapGit) rather than dropping it, and add a test
+  that the old trigger now parses.
+
+Fixes so far, with the abapGit census after each (`*.abap` under `src/` at
+`b2b4e25`; method nodes are the grammar's own `method_implementation` nodes,
+for 7577 `METHOD` blocks):
+
+| Grammar | Error nodes | Files with error nodes | Entities | From the grammar | From the fallback | Method nodes |
+|---|---:|---:|---:|---:|---:|---:|
+| upstream `c7604df` | 39314 | 731 | 9703 | 6786 | 2917 | 5705 |
+| 1. literals end at their line | 37305 | 731 | 9808 | 7966 | 1842 | 6818 |
+| 2. `FOR TESTING`, `RISK LEVEL`, `DURATION` | 37198 | 727 | 9719 | 7963 | 1756 | 6912 |
+
+Through both fixes every `METHOD` block stays a method entity (7582 method
+entities each time, the grammar's plus the fallback's), so the entity totals
+move only with class-level `DATA` and `TYPES`. Fix 1 also let 90 local `DATA`
+in test method bodies through as class variables (the ajson test classes);
+fix 2 removed them again.

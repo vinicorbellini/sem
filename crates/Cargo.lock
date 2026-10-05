@@ -2342,7 +2342,7 @@ dependencies = [
  "thiserror",
  "toml",
  "tree-sitter",
- "tree-sitter-abap-sqry",
+ "tree-sitter-abap",
  "tree-sitter-bash",
  "tree-sitter-bsl",
  "tree-sitter-c",
@@ -2621,16 +2621,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c3e17e880bafaeb362a7b751ec46bdc5b61445a188f80e0606e68167cd540fa3"
 dependencies = [
  "smallvec",
-]
-
-[[package]]
-name = "sqry-tree-sitter-support"
-version = "32.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6539262b76d760b51ad4259df34b0537702921b10529d660903ed0db4c46f2d0"
-dependencies = [
- "thiserror",
- "tree-sitter",
 ]
 
 [[package]]
@@ -2968,14 +2958,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "tree-sitter-abap-sqry"
-version = "32.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e384a20b6113e894047cd3798714fc3cdf99701efba452befb06f745ad472c14"
+name = "tree-sitter-abap"
+version = "0.1.0"
 dependencies = [
  "cc",
- "sqry-tree-sitter-support",
  "tree-sitter",
+ "tree-sitter-language",
 ]
 
 [[package]]
