@@ -11,9 +11,9 @@ name: Lockfile
 
 on:
   push:
-    branches: [main]
+    branches: [main, abap]
   pull_request:
-    branches: [main]
+    branches: [main, abap]
 
 jobs:
   lockfile:

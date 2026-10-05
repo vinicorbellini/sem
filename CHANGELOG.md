@@ -10,6 +10,8 @@ All notable changes to sem are documented in this file.
 
 ### Changed
 
+- **Telemetry is off by default in this fork.** A fresh install used to count command names locally (mode `local`, never uploaded); it now records nothing until `sem config telemetry local` or `on` is run. A mode already stored in `~/.sem/telemetry.json` is respected.
+
 - **Windows CI runs the test suite against release builds and reports every failure.** The wall-time and scale tests are calibrated for optimized binaries, so the debug build on the Windows runner overran them and failed main on four pushes in a row, each time on a different test because `cargo test` stopped at the first failing binary. Tests now build in release on the same target as the build step, and `--no-fail-fast` shows all failures at once.
 
 - TS/JS import edits preserve exact UTF-8 byte ranges and surrounding same-line code. Duplicate detection uses parsed declarations, and unavailable/invalid parsing refuses edits without changing the file rather than falling back to text matching.
