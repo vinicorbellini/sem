@@ -1,0 +1,20 @@
+{
+  "class": "B1",
+  "name": "where-used",
+  "abapgit_commit": "b2b4e250747ecb4f8e2b1d79e332d2cf897d5fa0",
+  "ground_truth": "ground_truth/whereused.json",
+  "prompt_template": "The current directory is a checkout of the abapGit repository (ABAP sources in abapGit file format under src/). List every method that calls {target}, defined in {defined_in}. Include callers in local classes and in unit test classes. For each call give the calling method, the file path relative to the repository root, and the 1-based line number of the call.\n\nEnd your reply with a single JSON object and nothing after it:\n{{\"callers\": [{{\"method\": \"<class>-><method>\", \"file\": \"src/...\", \"line\": 123}}]}}",
+  "selection": "Methods declared in exactly one class or interface, name at least 8 characters, with 3 to 30 distinct calling methods found by grep for '->name(', '=>name(' and 'CALL METHOD' at the pinned commit, spread over 3 or more files. grep_* fields are that baseline, not the ground truth.",
+  "tasks": [
+    {"id": "b1_01", "target": "zcl_abapgit_git_branch_utils=>get_display_name", "defined_in": "src/git/zcl_abapgit_git_branch_utils.clas.abap", "kind": "static", "grep_call_sites": 16, "grep_caller_methods": 11, "grep_files": 8},
+    {"id": "b1_02", "target": "zcl_abapgit_objects_files->read_string", "defined_in": "src/objects/core/zcl_abapgit_objects_files.clas.abap", "kind": "instance", "grep_call_sites": 18, "grep_caller_methods": 16, "grep_files": 15},
+    {"id": "b1_03", "target": "zcl_abapgit_objects_activation=>add_item", "defined_in": "src/objects/core/zcl_abapgit_objects_activation.clas.abap", "kind": "static", "grep_call_sites": 27, "grep_caller_methods": 26, "grep_files": 26},
+    {"id": "b1_04", "target": "zif_abapgit_sap_package~list_subpackages", "defined_in": "src/objects/sap/zif_abapgit_sap_package.intf.abap", "kind": "interface", "grep_call_sites": 16, "grep_caller_methods": 16, "grep_files": 13},
+    {"id": "b1_05", "target": "zcl_abapgit_i18n_params->is_lxe_applicable", "defined_in": "src/objects/texts/zcl_abapgit_i18n_params.clas.abap", "kind": "instance", "grep_call_sites": 21, "grep_caller_methods": 21, "grep_files": 11},
+    {"id": "b1_06", "target": "zif_abapgit_repo~get_files_local", "defined_in": "src/repo/zif_abapgit_repo.intf.abap", "kind": "interface", "grep_call_sites": 10, "grep_caller_methods": 10, "grep_files": 10},
+    {"id": "b1_07", "target": "zcl_abapgit_gui_chunk_lib=>render_repo_top", "defined_in": "src/ui/lib/zcl_abapgit_gui_chunk_lib.clas.abap", "kind": "static", "grep_call_sites": 17, "grep_caller_methods": 16, "grep_files": 16},
+    {"id": "b1_08", "target": "zcl_abapgit_html_form->textarea", "defined_in": "src/ui/lib/zcl_abapgit_html_form.clas.abap", "kind": "instance", "grep_call_sites": 10, "grep_caller_methods": 9, "grep_files": 8},
+    {"id": "b1_09", "target": "zcl_abapgit_convert=>language_sap1_to_sap2", "defined_in": "src/utils/zcl_abapgit_convert.clas.abap", "kind": "static", "grep_call_sites": 5, "grep_caller_methods": 5, "grep_files": 4},
+    {"id": "b1_10", "target": "zcl_abapgit_settings->get_proxy_url", "defined_in": "src/env/zcl_abapgit_settings.clas.abap", "kind": "instance", "grep_call_sites": 4, "grep_caller_methods": 4, "grep_files": 4}
+  ]
+}

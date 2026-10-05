@@ -1,0 +1,15 @@
+{
+  "class": "B3",
+  "name": "review",
+  "abapgit_commit": "b2b4e250747ecb4f8e2b1d79e332d2cf897d5fa0",
+  "history_depth": 300,
+  "rubric": "ground_truth/b3_rubric.json",
+  "prompt_template": "The current directory is a checkout of the abapGit repository (ABAP sources in abapGit file format under src/), at commit {head}. Merged pull request #{pr} is the squash commit {commit} (\"{title}\"). Review it: summarise what it changed, and say what it could break, naming callers of the changed code that the pull request did not update but whose behaviour it affects.\n\nEnd your reply with a single JSON object and nothing after it:\n{{\"summary\": \"...\", \"changed_entities\": [\"<class or interface>-><method or type>\"], \"callers_left_behind\": [{{\"caller\": \"<class>-><method>\", \"file\": \"src/...\", \"reason\": \"...\"}}]}}",
+  "selection": "Squash-merged pull requests from the 300 commits before the pinned commit, chosen for a signature or type change (#7837, #7878), a behaviour change of a widely called method (#7924) and an exception replacing an ASSERT (#7926).",
+  "tasks": [
+    {"id": "b3_01", "pr": 7837, "commit": "d01dc3e80dc9f04bb5cf26322ff0a14f97ecc8d6", "title": "feat(git): allow an explicit commit timestamp"},
+    {"id": "b3_02", "pr": 7924, "commit": "50f6497c136d38e39d7db968fe3ecd273ad46747", "title": "Git protocol: pkt-line length in UTF-8 bytes"},
+    {"id": "b3_03", "pr": 7926, "commit": "263f5f612a04748f1957da197b89af80b4c4b1b5", "title": "create_branch: raise instead of ASSERT for a name without refs/heads/"},
+    {"id": "b3_04", "pr": 7878, "commit": "07c9ce9397e4d82d8949495b3ea35e3c71d453ce", "title": "Fix detecting diffs in non-ABAP files when pulling"}
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "_comment": "USD per million tokens. Fill in from the current price list before a real run; run.py refuses to make a model call while any value for the chosen model is null. cache_write is the 5-minute cache write rate.",
+  "models": {
+    "claude-sonnet-5-5": {
+      "input": null,
+      "output": null,
+      "cache_read": null,
+      "cache_write": null
+    },
+    "claude-opus-4-8": {
+      "input": null,
+      "output": null,
+      "cache_read": null,
+      "cache_write": null
+    }
+  }
+}
