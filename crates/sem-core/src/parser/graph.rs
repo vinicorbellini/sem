@@ -5002,6 +5002,27 @@ pub fn is_test_entity(
         || content.contains("it(")
         || content.contains("test(");
 
+    if entity.file_path.to_ascii_lowercase().ends_with(".abap") {
+        // abapGit's `*.testclasses.abap` holds only unit-test code, so every
+        // entity in it counts (its methods carry no marker of their own).
+        if entity.file_path.to_ascii_lowercase().ends_with(".testclasses.abap") {
+            return true;
+        }
+        // `FOR TESTING` is unambiguous, so it needs no test-path gate: local
+        // test classes live in `*.clas.locals_imp.abap` and the like. ABAP is
+        // case-insensitive. A comment mentioning it is a false positive until
+        // comment stripping (story 1.2) is used here.
+        let lower = content.to_ascii_lowercase();
+        let mut words = lower.split_whitespace();
+        let mut prev = words.next();
+        for word in words {
+            if prev == Some("for") && word.trim_end_matches(['.', ',', ':']) == "testing" {
+                return true;
+            }
+            prev = Some(word);
+        }
+    }
+
     in_test_file && has_test_marker
 }
 
@@ -12474,6 +12495,42 @@ export function caller() {
             "def solve(): test('input')",
         );
         assert!(!is_test_entity(&entity, &[]));
+    }
+
+    #[test]
+    fn test_abap_test_detect_for_testing_class_any_file() {
+        let class = make_entity(
+            "ltc_order",
+            "src/zcl_foo.clas.locals_imp.abap",
+            "CLASS ltc_order DEFINITION FINAL\n  for   Testing\n  RISK LEVEL HARMLESS.\nENDCLASS.",
+        );
+        assert!(is_test_entity(&class, &[]));
+        let plain = make_entity(
+            "lcl_helper",
+            "src/zcl_foo.clas.locals_imp.abap",
+            "CLASS lcl_helper DEFINITION.\n  PUBLIC SECTION.\n    METHODS run.\nENDCLASS.",
+        );
+        assert!(!is_test_entity(&plain, &[]));
+    }
+
+    #[test]
+    fn test_abap_test_detect_testclasses_file_methods() {
+        let method = make_entity(
+            "setup",
+            "src/zcl_foo.clas.testclasses.abap",
+            "METHOD setup.\n  mo_cut = NEW #( ).\nENDMETHOD.",
+        );
+        assert!(is_test_entity(&method, &[]));
+    }
+
+    #[test]
+    fn test_abap_test_detect_plain_method_not_test() {
+        let method = make_entity(
+            "run",
+            "src/zcl_foo.clas.abap",
+            "METHOD run.\n  rv_ok = abap_true.\nENDMETHOD.",
+        );
+        assert!(!is_test_entity(&method, &[]));
     }
 
     #[test]
