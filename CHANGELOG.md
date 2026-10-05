@@ -30,6 +30,10 @@ All notable changes to sem are documented in this file.
 
 - **`sem.addImport` now locates imports with the tree-sitter parser instead of scanning lines.** A new internal `sem imports` command returns a file's real top-level import statements by position, and `addImport` uses it for TypeScript/JavaScript files to supersede and place imports. Strings, comments and nested declarations are not import targets. Multi-line and non-leading imports are supported. With no imports, insertion appends a top-level declaration to preserve directive prologues and shebangs. Other languages retain their existing behavior.
 
+### Fixed
+
+- **An ABAP interface is named after itself, not a later token.** When the statement after `INTERFACE zif_foo PUBLIC.` did not parse (a `##NO_TEXT` pragma, a `TYPES` the grammar misreads), the grammar put the interface's name in an error node and the entity took the name of a later token instead: 48 of abapGit's 113 global interfaces were called `NO_TEXT`, `abap_bool`, `ty_get` and the like, so a diff could show an edit as a delete and an add. The name is now the first name token after `INTERFACE`.
+
 ## [0.27.0] - 2026-10-04
 
 ### Changed
