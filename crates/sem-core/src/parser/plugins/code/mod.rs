@@ -1931,6 +1931,235 @@ return M
         assert_eq!(entities.len(), 4, "four entities, got: {pairs:?}");
     }
 
+    // ---- ABAP fixture repository: tests/fixtures/abap/ ----
+    //
+    // One test per `.abap` fixture file, each asserting the exact entity list
+    // (type, name, parent name) the spec expects. A test that the current
+    // extractor cannot satisfy yet is `#[ignore]`d with the spec row it waits
+    // on, so each ignored test is a named slot:
+    //   1.1 case folding, 1.2 stripper, 1.3 full entity set, 1.4 class collapse
+    //   (definition + implementation become one `class` entity), 1.5 abapGit
+    //   layout, 1.7 test detection.
+
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_dir() -> std::path::PathBuf {
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/abap")
+    }
+
+    /// Extract a fixture file as (type, name, parent name) triples, in source order.
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_entities(file: &str) -> Vec<(String, String, Option<String>)> {
+        let code = std::fs::read_to_string(abap_fixture_dir().join(file))
+            .unwrap_or_else(|e| panic!("fixture {file}: {e}"));
+        let entities = CodeParserPlugin.extract_entities(&code, file);
+        eprintln!(
+            "ABAP fixture {file}: {:?}",
+            entities.iter().map(|e| (&e.entity_type, &e.name, &e.parent_id)).collect::<Vec<_>>()
+        );
+        entities
+            .iter()
+            .map(|e| {
+                let parent = e.parent_id.as_ref().map(|pid| {
+                    entities
+                        .iter()
+                        .find(|p| &p.id == pid)
+                        .map(|p| p.name.clone())
+                        .unwrap_or_else(|| pid.clone())
+                });
+                (e.entity_type.clone(), e.name.clone(), parent)
+            })
+            .collect()
+    }
+
+    #[cfg(feature = "lang-abap")]
+    fn abap_expect(rows: &[(&str, &str, Option<&str>)]) -> Vec<(String, String, Option<String>)> {
+        rows.iter()
+            .map(|(t, n, p)| (t.to_string(), n.to_string(), p.map(|s| s.to_string())))
+            .collect()
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn test_abap_fixture_intf() {
+        assert_eq!(
+            abap_fixture_entities("zif_fx_order.intf.abap"),
+            abap_expect(&[("interface", "zif_fx_order", None)])
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    #[ignore = "spec 1.4: class collapse (definition + implementation -> one class entity); also interface-prefixed method names `zif_fx_order~get_total`"]
+    fn test_abap_fixture_clas() {
+        assert_eq!(
+            abap_fixture_entities("zcl_fx_order.clas.abap"),
+            abap_expect(&[
+                ("class", "zcl_fx_order", None),
+                ("method", "constructor", Some("zcl_fx_order")),
+                ("method", "create", Some("zcl_fx_order")),
+                ("method", "describe", Some("zcl_fx_order")),
+                ("method", "zif_fx_order~add_item", Some("zcl_fx_order")),
+                ("method", "zif_fx_order~get_total", Some("zcl_fx_order")),
+            ])
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn test_abap_fixture_clas_locals_def() {
+        assert_eq!(
+            abap_fixture_entities("zcl_fx_order.clas.locals_def.abap"),
+            abap_expect(&[("class", "lcl_helper", None)])
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    #[ignore = "spec 1.4: class collapse (an implementation-only file yields one class entity)"]
+    fn test_abap_fixture_clas_locals_imp() {
+        assert_eq!(
+            abap_fixture_entities("zcl_fx_order.clas.locals_imp.abap"),
+            abap_expect(&[
+                ("class", "lcl_helper", None),
+                ("method", "tag", Some("lcl_helper")),
+            ])
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    #[ignore = "spec 1.4: class collapse (local test class definition + implementation -> one class entity)"]
+    fn test_abap_fixture_clas_testclasses() {
+        assert_eq!(
+            abap_fixture_entities("zcl_fx_order.clas.testclasses.abap"),
+            abap_expect(&[
+                ("class", "ltc_order", None),
+                ("method", "setup", Some("ltc_order")),
+                ("method", "total_starts_at_zero", Some("ltc_order")),
+                ("method", "describe_mentions_id", Some("ltc_order")),
+            ])
+        );
+    }
+
+    // Assumed schema, to be confirmed with the spec: FOR TESTING methods are
+    // reported as entity type `test_method`; `setup` stays a plain `method`.
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    #[ignore = "spec 1.7: test detection (FOR TESTING methods flagged as test_method)"]
+    fn test_abap_fixture_clas_testclasses_detection() {
+        let rows = abap_fixture_entities("zcl_fx_order.clas.testclasses.abap");
+        let tests: Vec<&str> = rows
+            .iter()
+            .filter(|(t, _, _)| t == "test_method")
+            .map(|(_, n, _)| n.as_str())
+            .collect();
+        assert_eq!(tests, vec!["total_starts_at_zero", "describe_mentions_id"]);
+        assert!(rows.iter().any(|(t, n, _)| t == "method" && n == "setup"));
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    #[ignore = "spec 1.4: class collapse (definition + implementation -> one class entity)"]
+    fn test_abap_fixture_clas_sub() {
+        assert_eq!(
+            abap_fixture_entities("zcl_fx_order_sub.clas.abap"),
+            abap_expect(&[
+                ("class", "zcl_fx_order_sub", None),
+                ("method", "describe", Some("zcl_fx_order_sub")),
+            ])
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    #[ignore = "spec 1.3: forms and macros not yet extracted"]
+    fn test_abap_fixture_prog() {
+        assert_eq!(
+            abap_fixture_entities("zfx_report.prog.abap"),
+            abap_expect(&[("macro", "_log", None), ("form", "show_order", None)])
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    #[ignore = "spec 1.3: forms and function modules not yet extracted"]
+    fn test_abap_fixture_prog_include() {
+        assert_eq!(
+            abap_fixture_entities("zfx_report_f01.prog.abap"),
+            abap_expect(&[("form", "format_total", None)])
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn test_abap_fixture_fugr_function_module() {
+        assert_eq!(
+            abap_fixture_entities("zfx_fg.fugr.zfx_fm.abap"),
+            abap_expect(&[("function", "zfx_fm", None)])
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn test_abap_fixture_fugr_main_program() {
+        // Only INCLUDE statements: nothing to extract.
+        assert_eq!(abap_fixture_entities("zfx_fg.fugr.saplzfx_fg.abap"), abap_expect(&[]));
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn test_abap_fixture_fugr_top_include() {
+        // FUNCTION-POOL and a global DATA: no entities.
+        assert_eq!(abap_fixture_entities("zfx_fg.fugr.lzfx_fgtop.abap"), abap_expect(&[]));
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    #[ignore = "spec 1.3: forms and function modules not yet extracted"]
+    fn test_abap_fixture_fugr_form_include() {
+        assert_eq!(
+            abap_fixture_entities("zfx_fg.fugr.lzfx_fgf01.abap"),
+            abap_expect(&[("form", "calc_extra", None)])
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    #[ignore = "spec 1.3: dynpro MODULE not yet extracted"]
+    fn test_abap_fixture_fugr_pbo_include() {
+        assert_eq!(
+            abap_fixture_entities("zfx_fg.fugr.lzfx_fgo01.abap"),
+            abap_expect(&[("module", "status_0100", None)])
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn test_abap_fixture_layout() {
+        // abapGit layout (spec 1.5): every `<name>.<type>.abap` of a clas/intf/prog
+        // object has its `.xml` envelope next to it, every file stays under 60
+        // lines, and every fixture file follows `<name>.<type>[.<part>].<ext>`.
+        let dir = abap_fixture_dir();
+        for entry in std::fs::read_dir(&dir).unwrap() {
+            let entry = entry.unwrap();
+            let name = entry.file_name().into_string().unwrap();
+            if entry.path().is_dir() {
+                continue;
+            }
+            let text = std::fs::read_to_string(entry.path()).unwrap();
+            assert!(text.lines().count() < 60, "{name} has 60+ lines");
+            let parts: Vec<&str> = name.split('.').collect();
+            assert!(parts.len() >= 3, "{name}: not <name>.<type>.<ext>");
+            if name.ends_with(".abap") && matches!(parts[1], "clas" | "intf" | "prog") && parts.len() == 3 {
+                let xml = dir.join(format!("{}.{}.xml", parts[0], parts[1]));
+                assert!(xml.exists(), "{name}: missing abapGit .xml envelope");
+            }
+            if name.ends_with(".xml") {
+                assert!(text.contains("<abapGit version=\"v1.0.0\""), "{name}: no abapGit envelope");
+            }
+        }
+    }
+
     #[test]
     #[cfg(feature = "lang-fish")]
     fn test_fish_entity_extraction() {
