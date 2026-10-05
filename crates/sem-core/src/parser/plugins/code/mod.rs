@@ -2372,6 +2372,27 @@ return M
 
     #[test]
     #[cfg(feature = "lang-abap")]
+    fn abap_1_8_interface_name_is_not_a_later_token() {
+        // Found by the Gate 1 census (PR #4432, `zif_abapgit_popups`): a pragma
+        // after the first statement put the interface name in an ERROR and the
+        // grammar's `name` field on `NO_TEXT`. 48 of abapGit's 113 global
+        // interfaces were named after a later token this way.
+        let code = "INTERFACE zif_demo\n  PUBLIC .\n\n  CONSTANTS c_label TYPE string VALUE 'x' ##NO_TEXT.\n\n  METHODS run.\nENDINTERFACE.\n";
+        assert_eq!(
+            abap_rows(code, "zif_demo.intf.abap"),
+            vec![abap_row("interface", "zif_demo", 1, 7)]
+        );
+
+        // The same without the pragma parses cleanly and keeps its name.
+        let code = "INTERFACE zif_demo\n  PUBLIC .\n\n  CONSTANTS c_label TYPE string VALUE 'x'.\n\n  METHODS run.\nENDINTERFACE.\n";
+        assert_eq!(
+            abap_rows(code, "zif_demo.intf.abap"),
+            vec![abap_row("interface", "zif_demo", 1, 7)]
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
     fn abap_fixture_1_3_types_data() {
         // TYPES has no node (an ERROR, or the tail of the METHODS or DATA before
         // it); DATA is a variable_declaration, and an entity only in a section.

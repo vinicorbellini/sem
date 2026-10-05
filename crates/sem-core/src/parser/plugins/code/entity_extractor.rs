@@ -1452,6 +1452,20 @@ fn sibling_function_body(node: Node) -> Option<Node> {
     }
 }
 
+/// The first `name` token under an ABAP node, in document order.
+fn first_abap_name_token(node: Node) -> Option<Node> {
+    let mut cursor = node.walk();
+    let mut stack = vec![node];
+    while let Some(n) = stack.pop() {
+        if n.kind() == "name" && n.id() != node.id() {
+            return Some(n);
+        }
+        let children: Vec<Node> = n.children(&mut cursor).collect();
+        stack.extend(children.into_iter().rev());
+    }
+    None
+}
+
 /// ABAP `DATA` outside a class's sections declares a program global or a
 /// local variable of a FORM or METHOD body, not a member. The grammar gives
 /// both the same `variable_declaration`, so only the sections' are entities,
@@ -2081,6 +2095,16 @@ fn extract_name(node: Node, source: &[u8]) -> Option<String> {
                 })
                 .flatten()
         });
+        // `INTERFACE zif_x PUBLIC.` followed by a statement the grammar cannot
+        // parse (a pragma such as `##NO_TEXT`, a `TYPES`) puts the real name in
+        // an ERROR right after the keyword and gives the `name` field to a later
+        // token, so the interface was called `NO_TEXT`. The name is the first
+        // `name` token after the keyword.
+        let name_node = if node_type == "interface_declaration" {
+            first_abap_name_token(node).or(name_node)
+        } else {
+            name_node
+        };
         if let Some(name_node) = name_node {
             if name_node.kind() == "name" {
                 // `METHOD zif_x~m.` stops the name at the `~` and leaves `~m`
