@@ -43,7 +43,7 @@ impl<'a> Query<'a> {
 
 const ID_KIND_WORDS: &[&str] = &[
     "class", "function", "method", "struct", "enum", "trait", "impl", "interface", "module",
-    "variable", "constant", "property", "type", "field", "orphan",
+    "variable", "constant", "property", "type", "field", "orphan", "form", "macro", "report",
 ];
 
 pub fn parse(raw: &str) -> Query<'_> {

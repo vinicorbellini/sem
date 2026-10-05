@@ -53,3 +53,11 @@ These differ from the first-draft implementation notes. Each story applies them.
 8. The abapGit clone at `/tmp/claude-0/abapGit` is shallow, with one commit.
    Story 1.8 needs `git fetch --unshallow` first. Its history uses squash merges
    with `(#NNNN)` in the subject, not merge commits.
+9. Story 1.3 found that the grammar's error recovery does not keep `ENDFORM`
+   as a sibling `macro_include`: in `zfx_report.prog.abap` it lands inside the
+   `ERROR` that swallowed the form body, and one `ERROR` can swallow a later
+   `FORM` and `MODULE` whole. `TYPES` can likewise be folded into the
+   `METHODS` or `DATA` statement before it. So the fallback in
+   `abap_fallback.rs` reads `PROGRAM`, `FORM`, `MODULE`, `DEFINE` and class
+   `TYPES` off the token stream (the tree's leaves, cut at each `.`), not off
+   sibling nodes. It goes once mkoval1/tree-sitter-abap has nodes for them.

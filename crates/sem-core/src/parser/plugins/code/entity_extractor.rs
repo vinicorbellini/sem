@@ -1,5 +1,7 @@
 use tree_sitter::{Node, Tree};
 
+use super::abap_fallback::extract_abap_fallback_entities;
+use super::abap_name::parse_abapgit_name;
 use super::languages::LanguageConfig;
 use crate::model::entity::{build_entity_id, disambiguate_colliding_entity_ids, SemanticEntity};
 use crate::utils::hash::{content_hash, structural_and_semantic_hash};
@@ -21,6 +23,19 @@ pub fn extract_entities(
         source_code.as_bytes(),
         None,
     );
+
+    // ABAP FORM, MODULE, DEFINE, PROGRAM and class-level TYPES have no node in
+    // the grammar; read them off the token stream instead.
+    if config.id == "abap" {
+        extract_abap_fallback_entities(
+            tree.root_node(),
+            file_path,
+            source_code.as_bytes(),
+            &mut entities,
+        );
+        // Local and test classes belong to the global class of their file name.
+        attach_abap_local_classes(file_path, &mut entities);
+    }
 
     recover_swift_conditional_compilation_containers(
         tree.root_node(),
@@ -565,7 +580,7 @@ fn visit_node(
             continue;
         }
 
-        if config.entity_node_types.contains(&node_type) {
+        if config.entity_node_types.contains(&node_type) && !is_abap_local_data(node, config) {
             if let Some(name) = extract_name(node, source) {
                 let name = qualify_hcl_name(&name, node_type, parent_id, suppression_context);
                 let entity_type = map_entity_type(node, config);
@@ -594,6 +609,19 @@ fn visit_node(
                     let end_line =
                         body.map_or(node.end_position().row + 1, |b| b.end_position().row + 1);
 
+                    // ABAP error recovery can fold the statements after a DATA into
+                    // its node (`DATA a TYPE i. TYPES t TYPE i.` is one
+                    // variable_declaration), so the entity ends at its own period.
+                    let abap_period = if config.id == "abap" && node_type == "variable_declaration"
+                    {
+                        abap_period_before_end(node)
+                    } else {
+                        None
+                    };
+                    let (end_byte, end_line) = abap_period.map_or((end_byte, end_line), |p| {
+                        (p.end_byte(), p.end_position().row + 1)
+                    });
+
                     // Extend start backward to include outer attributes (e.g. Rust
                     // #[derive(...)], #[cfg(...)], #[test]) so attribute changes
                     // are captured as part of the entity diff.
@@ -613,6 +641,11 @@ fn visit_node(
                                 content_hash(&format!("{}{}", sig, bod)),
                                 content_hash(&format!("{}{}", sig_kappa, bod_kappa)),
                             )
+                        }
+                        // The node runs past the entity, so its hashes would see the
+                        // folded statements: hash the entity's own text instead.
+                        None if abap_period.is_some() => {
+                            (content_hash(&content), content_hash(&content))
                         }
                         None => compute_structural_hash_and_kappa(node, source),
                     };
@@ -1323,7 +1356,7 @@ fn swift_string_closing_at(
     true
 }
 
-fn line_number_for_byte(source: &[u8], byte: usize) -> usize {
+pub(super) fn line_number_for_byte(source: &[u8], byte: usize) -> usize {
     source[..byte.min(source.len())]
         .iter()
         .filter(|&&b| b == b'\n')
@@ -1414,6 +1447,69 @@ fn sibling_function_body(node: Node) -> Option<Node> {
             (sibling.kind() == "function_body").then_some(sibling)
         }
         _ => None,
+    }
+}
+
+/// ABAP `DATA` outside a class's sections declares a program global or a
+/// local variable of a FORM or METHOD body, not a member. The grammar gives
+/// both the same `variable_declaration`, so only the sections' are entities,
+/// the way other languages keep locals out (`scope_boundary_types`).
+fn is_abap_local_data(node: Node, config: &LanguageConfig) -> bool {
+    config.id == "abap"
+        && node.kind() == "variable_declaration"
+        && !node
+            .parent()
+            .is_some_and(|parent| config.container_node_types.contains(&parent.kind()))
+}
+
+/// The period that ends an ABAP statement node, when the node runs on past it.
+fn abap_period_before_end(node: Node) -> Option<Node> {
+    let mut stack = vec![node];
+    while let Some(current) = stack.pop() {
+        if current.kind() == "." && !current.is_missing() {
+            return (current.end_byte() < node.end_byte()).then_some(current);
+        }
+        let mut cursor = current.walk();
+        let children: Vec<_> = current.children(&mut cursor).collect();
+        stack.extend(children.into_iter().rev());
+    }
+    None
+}
+
+/// abapGit splits a global class over several files. Its local classes
+/// (`zcl_foo.clas.locals_imp.abap`, `.locals_def.abap`) and test classes
+/// (`.testclasses.abap`) belong to `zcl_foo`, whose entity is in
+/// `zcl_foo.clas.abap` next to them. Give the file's top-level entities that
+/// entity's id as parent, built from the file name alone without reading the
+/// other file. Their own ids stay as they are: a parent in the id would give
+/// a local class's definition and implementation the same id.
+fn attach_abap_local_classes(file_path: &str, entities: &mut [SemanticEntity]) {
+    let Some(object) = parse_abapgit_name(file_path) else {
+        return;
+    };
+    if object.object_type != "clas"
+        || !matches!(
+            object.part.as_deref(),
+            Some("locals_imp" | "locals_def" | "testclasses")
+        )
+    {
+        return;
+    }
+    let (dir, file_name) = match file_path.rfind(['/', '\\']) {
+        Some(i) => file_path.split_at(i + 1),
+        None => ("", file_path),
+    };
+    let Some(stem) = file_name.split('.').next() else {
+        return;
+    };
+    let global_class_id = build_entity_id(
+        &format!("{dir}{stem}.clas.abap"),
+        "class",
+        &object.name,
+        None,
+    );
+    for entity in entities.iter_mut().filter(|e| e.parent_id.is_none()) {
+        entity.parent_id = Some(global_class_id.clone());
     }
 }
 
@@ -1812,15 +1908,34 @@ fn extract_name(node: Node, source: &[u8]) -> Option<String> {
     // Must be before the generic 'name' field lookup, which keeps the space.
     if matches!(
         node_type,
-        "class_declaration"
+        "report_statement"
+            | "class_declaration"
             | "class_implementation"
             | "interface_declaration"
             | "method_implementation"
             | "function_implementation"
+            | "variable_declaration"
     ) {
-        if let Some(name_node) = node.child_by_field_name("name") {
+        // `REPORT zfoo.` has its name as a plain child, not a field.
+        let name_node = node.child_by_field_name("name").or_else(|| {
+            let mut cursor = node.walk();
+            (node_type == "report_statement")
+                .then(|| {
+                    node.named_children(&mut cursor)
+                        .find(|c| c.kind() == "name")
+                })
+                .flatten()
+        });
+        if let Some(name_node) = name_node {
             if name_node.kind() == "name" {
-                return Some(node_text(name_node, source).trim().to_string());
+                // `METHOD zif_x~m.` stops the name at the `~` and leaves `~m`
+                // in an ERROR right after it; the name is both.
+                let end = name_node
+                    .next_sibling()
+                    .filter(|n| n.kind() == "ERROR" && node_text(*n, source).starts_with('~'))
+                    .map_or(name_node.end_byte(), |n| n.end_byte());
+                let name = std::str::from_utf8(&source[name_node.start_byte()..end]).ok()?;
+                return Some(name.trim().to_string());
             }
         }
     }
@@ -2496,6 +2611,7 @@ fn map_node_type(tree_sitter_type: &str) -> &str {
         "given_definition" => "given",
         "extension_definition" => "extension",
         "package_statement" => "package",
+        "report_statement" => "report",
         "export_statement" => "export",
         "lexical_declaration" | "variable_declaration" | "var_declaration" | "declaration" => {
             "variable"

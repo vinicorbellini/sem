@@ -557,7 +557,7 @@ If your team runs code review through sem cloud, `sem cloud review listen <diff-
 | D | `.d` `.di` | modules, functions, classes, structs, interfaces, unions, enums, templates, aliases, unittests |
 | Zig | `.zig` | functions, tests, variables |
 | SQL | `.sql` `.psql` `.pgsql` `.ddl` | tables, views, functions, indexes, types, schemas, triggers, sequences |
-| ABAP | `.abap` | classes, class implementations, interfaces, methods, function modules |
+| ABAP | `.abap` | reports, classes, class implementations, interfaces, methods, function modules, forms, dynpro modules, macros, class-level types and data |
 
 Plus structured data formats:
 

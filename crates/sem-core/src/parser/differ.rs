@@ -269,6 +269,7 @@ fn suppress_redundant_parents(
         "impl",
         "trait",
         "module",
+        "form",
         "class",
         "interface",
         "protocol",
