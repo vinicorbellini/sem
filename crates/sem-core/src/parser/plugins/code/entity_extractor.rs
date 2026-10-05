@@ -647,6 +647,15 @@ fn visit_node(
                     } else {
                         node
                     };
+                    // ABAP `CLASS x IMPLEMENTATION` holds its METHOD blocks directly,
+                    // with no body node in between.
+                    if config.id == "abap" && node_type == "class_implementation" {
+                        let mut cursor = node.walk();
+                        let nested: Vec<_> = node.named_children(&mut cursor).collect();
+                        for n in nested.into_iter().rev() {
+                            worklist.push((n, Some(entity_id.clone()), next_suppression.clone()));
+                        }
+                    }
                     let mut cursor = body_owner.walk();
                     for child in body_owner.named_children(&mut cursor) {
                         if config.container_node_types.contains(&child.kind()) {
@@ -1708,6 +1717,26 @@ fn find_declarator_name_range(mut node: Node) -> Option<(usize, usize)> {
 fn extract_name(node: Node, source: &[u8]) -> Option<String> {
     let node_type = node.kind();
 
+    // ABAP `name` nodes start after the keyword and include its leading space.
+    if matches!(
+        node_type,
+        "class_declaration"
+            | "class_implementation"
+            | "interface_declaration"
+            | "method_implementation"
+            | "function_implementation"
+    ) {
+        let mut cursor = node.walk();
+        let found = node
+            .named_children(&mut cursor)
+            .find(|c| c.kind() == "name")
+            .map(|c| node_text(c, source).trim().to_string())
+            .filter(|n| !n.is_empty());
+        if found.is_some() {
+            return found;
+        }
+    }
+
     if node_type == "subscript_declaration" {
         return Some("subscript".to_string());
     }
@@ -2436,6 +2465,9 @@ fn map_node_type(tree_sitter_type: &str) -> &str {
         "struct_item" | "struct_specifier" | "struct_declaration" => "struct",
         "union_specifier" => "union",
         "impl_item" => "impl",
+        "class_implementation" => "implementation",
+        "method_implementation" => "method",
+        "function_implementation" => "function",
         "trait_item" => "trait",
         "mod_item"
         | "module"

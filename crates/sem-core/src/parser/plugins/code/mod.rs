@@ -1901,6 +1901,37 @@ return M
     }
 
     #[test]
+    #[cfg(feature = "lang-abap")]
+    fn test_abap_entity_extraction() {
+        // abapGit class file: the definition and the implementation are separate
+        // top-level blocks, and methods sit directly under the implementation.
+        let code = "CLASS zcl_demo DEFINITION PUBLIC CREATE PUBLIC.\n  PUBLIC SECTION.\n    METHODS run.\n    METHODS helper IMPORTING iv_x TYPE i.\nENDCLASS.\n\nCLASS zcl_demo IMPLEMENTATION.\n  METHOD run.\n    helper( 1 ).\n  ENDMETHOD.\n  METHOD helper.\n    \" a comment with helper( ) in it\n  ENDMETHOD.\nENDCLASS.\n";
+        let plugin = CodeParserPlugin;
+        let entities = plugin.extract_entities(code, "src/zcl_demo.clas.abap");
+        let pairs: Vec<(&str, &str)> = entities
+            .iter()
+            .map(|e| (e.entity_type.as_str(), e.name.as_str()))
+            .collect();
+        assert!(pairs.contains(&("class", "zcl_demo")), "definition, got: {pairs:?}");
+        assert!(
+            pairs.contains(&("implementation", "zcl_demo")),
+            "implementation, got: {pairs:?}"
+        );
+        assert!(pairs.contains(&("method", "run")), "method run, got: {pairs:?}");
+        assert!(pairs.contains(&("method", "helper")), "method helper, got: {pairs:?}");
+        let helper = entities
+            .iter()
+            .find(|e| e.name == "helper" && e.entity_type == "method")
+            .unwrap();
+        assert!(
+            helper.parent_id.as_deref().is_some_and(|p| p.contains("implementation")),
+            "methods nest under the implementation, got parent {:?}",
+            helper.parent_id
+        );
+        assert_eq!(entities.len(), 4, "four entities, got: {pairs:?}");
+    }
+
+    #[test]
     #[cfg(feature = "lang-fish")]
     fn test_fish_entity_extraction() {
         let code = r#"function greet

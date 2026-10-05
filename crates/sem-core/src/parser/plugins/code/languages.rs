@@ -371,6 +371,11 @@ fn get_lua() -> Option<Language> {
     Some(tree_sitter_lua::LANGUAGE.into())
 }
 
+#[cfg(feature = "lang-abap")]
+fn get_abap() -> Option<Language> {
+    Some(tree_sitter_abap_sqry::language())
+}
+
 #[cfg(feature = "lang-bsl")]
 fn get_bsl() -> Option<Language> {
     Some(tree_sitter_bsl::LANGUAGE.into())
@@ -1259,6 +1264,28 @@ static LUA_CONFIG: LanguageConfig = LanguageConfig {
     suppressed_nested_entities: &[],
     scope_boundary_types: &[],
     get_language: get_lua,
+    scope_resolve: None,
+};
+
+#[cfg(feature = "lang-abap")]
+static ABAP_CONFIG: LanguageConfig = LanguageConfig {
+    id: "abap",
+    // abapGit serializes objects as `<name>.<type>.abap` (`zcl_foo.clas.abap`,
+    // `zfoo.prog.abap`, `zfoo.fugr.zfoo_f01.abap`), so the final extension is `.abap`.
+    extensions: &[".abap"],
+    entity_node_types: &[
+        "class_declaration",
+        "class_implementation",
+        "interface_declaration",
+        "method_implementation",
+        "function_implementation",
+    ],
+    // Methods live inside `CLASS ... IMPLEMENTATION`.
+    container_node_types: &[],
+    call_entity_identifiers: &[],
+    suppressed_nested_entities: &[],
+    scope_boundary_types: &[],
+    get_language: get_abap,
     scope_resolve: None,
 };
 
@@ -2351,6 +2378,8 @@ macro_rules! all_configs {
             &FISH_CONFIG,
             #[cfg(feature = "lang-bsl")]
             &BSL_CONFIG,
+            #[cfg(feature = "lang-abap")]
+            &ABAP_CONFIG,
         ]
     }};
 }
