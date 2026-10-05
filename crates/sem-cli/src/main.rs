@@ -954,7 +954,7 @@ enum Commands {
         #[command(subcommand)]
         action: ReviewAction,
     },
-    /// Control anonymous usage telemetry (local by default — nothing uploaded)
+    /// Control anonymous usage telemetry (off by default)
     #[command(hide = true)]
     Telemetry {
         #[command(subcommand)]
@@ -1057,7 +1057,7 @@ enum ConfigCmd {
     Setup,
     /// Restore default `git diff`. Example: sem config unsetup
     Unsetup,
-    /// Anonymous usage telemetry: on, local (default, nothing uploaded), off, preview.
+    /// Anonymous usage telemetry: on, local (nothing uploaded), off (default), preview.
     /// Example: sem config telemetry off
     Telemetry {
         #[command(subcommand)]
@@ -1115,9 +1115,9 @@ enum ReviewAction {
 enum TelemetryAction {
     /// Record usage locally and upload it to help improve sem
     On,
-    /// Record usage locally only; never upload (the default)
+    /// Record usage locally only; never upload
     Local,
-    /// Record nothing
+    /// Record nothing (the default)
     Off,
     /// Show the current mode and what would be sent
     Preview,

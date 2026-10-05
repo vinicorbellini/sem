@@ -719,12 +719,13 @@ Used by [weave](https://github.com/Ataraxy-Labs/weave) (semantic merge driver) a
 
 ## Telemetry
 
-Local by default: sem counts command names (e.g. `diff`, `impact`) on your own machine only, and in that mode nothing is ever uploaded. No code, file paths, repo names, or user identity is recorded, and no network call is made.
+Off by default in this fork: sem records nothing until you opt in. In `local` mode it counts command names (e.g. `diff`, `impact`) on your own machine only, and nothing is ever uploaded. No code, file paths, repo names, or user identity is recorded, and no network call is made.
 
 ```bash
 sem config telemetry preview   # see current mode and exactly what would be sent
 sem config telemetry on        # opt in: also upload counts to help improve sem
-sem config telemetry off       # record nothing at all
+sem config telemetry local     # count command names on this machine only
+sem config telemetry off       # record nothing at all (the default)
 ```
 
 `SEM_NO_TELEMETRY=1` or `DO_NOT_TRACK=1` force the record-nothing behavior regardless of mode. Development builds (anything run out of a `cargo build` `target/` directory) never record, so working on sem itself doesn't pollute the numbers.

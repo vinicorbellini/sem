@@ -1,10 +1,10 @@
-//! Anonymous command-usage telemetry — three modes, local by default.
+//! Anonymous command-usage telemetry — three modes, off by default in this fork.
 //!
 //! Modes (Go-toolchain model):
-//!   • `local` (default) — command names are counted on this machine only and
+//!   • `off` (default in this fork) — nothing is recorded.
+//!   • `local` — command names are counted on this machine only and
 //!     **never uploaded**. No network, ever.
 //!   • `on` — counts are also uploaded to help improve sem.
-//!   • `off` — nothing is recorded.
 //!
 //! Records only the command name, CLI version, and OS — never repo names,
 //! paths, or file contents. Uploads carry an install id that is rederived every
@@ -20,6 +20,9 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
+/// The mode when nothing is stored and no env override is set. Upstream sem
+/// defaults to `Local`; this fork records nothing until someone opts in.
+const DEFAULT_MODE: Mode = Mode::Off;
 const DEFAULT_ENDPOINT: &str = "https://sem-cloud.fly.dev";
 /// In `on` mode, flush when the spool reaches this many events, or on the
 /// first event after this many seconds since the last flush.
@@ -83,7 +86,7 @@ fn force_off() -> bool {
     set("SEM_NO_TELEMETRY") || set("DO_NOT_TRACK") || is_development_build()
 }
 
-/// The effective mode: env override > stored mode > default (`local`).
+/// The effective mode: env override > stored mode > default (`off`).
 fn effective_mode(state: &TelemetryState) -> Mode {
     if force_off() {
         return Mode::Off;
@@ -97,7 +100,7 @@ fn effective_mode(state: &TelemetryState) -> Mode {
         .mode
         .as_deref()
         .and_then(Mode::parse)
-        .unwrap_or(Mode::Local)
+        .unwrap_or(DEFAULT_MODE)
 }
 
 /// True when this binary is a development build rather than a real install, so
@@ -218,7 +221,7 @@ fn spool_event_count() -> usize {
 }
 
 /// Record one command invocation. Cheap (small file ops); never blocks on the
-/// network. In `local` mode (the default) nothing is ever uploaded. Call once
+/// network. With the default `off` nothing is recorded, and in `local` mode nothing is ever uploaded. Call once
 /// per CLI run before dispatch.
 pub fn record(command: &str) {
     let mut state = load_state();
