@@ -10,6 +10,8 @@ All notable changes to sem are documented in this file.
 
 - **abapGit file names are read, and abapGit metadata is skipped by default.** `parse_abapgit_name` turns `zcl_foo.clas.testclasses.abap` into object `zcl_foo`, type `clas`, part `testclasses` (`#ns#` becomes `/ns/`), for attaching local and test classes to their global class. Repo-wide scans now skip `.abapgit.xml`, `package.devc.xml` and `<name>.<type>.xml` for the four-letter abapGit object types, so `pom.xml` and other XML are still scanned. `--no-default-excludes` brings them back.
 
+- **ABAP comments and strings no longer count as references.** A name in a `*` column-1 comment, a `"` trailing comment, a `'...'` or backtick literal, or the literal part of a `|...|` template is not a call; names inside a template's `{ ... }` expressions still are. Line numbers and byte offsets are preserved, and no other language's scan changes.
+
 ### Changed
 
 - **Telemetry is off by default in this fork.** A fresh install used to count command names locally (mode `local`, never uploaded); it now records nothing until `sem config telemetry local` or `on` is run. A mode already stored in `~/.sem/telemetry.json` is respected.
