@@ -257,9 +257,31 @@ def load_rubric(path: Path, task_id: str):
     return json.loads(path.read_text()).get("tasks", {}).get(task_id)
 
 
+IDENTIFIER = re.compile(r"[a-z0-9_]+")
+ABAPGIT_PREFIX = re.compile(r"^z(?:cl|if|cx)_abapgit_")
+TEST_CLASS_ITEM = re.compile(r"^\s*ltc\w*\s*(?:->|=>)", re.I)
+
+
+def _identifiers(item: str) -> set[str]:
+    """Whole identifiers in an answer item, each also without its zcl_abapgit_ / zif_abapgit_ prefix."""
+    tokens = set(IDENTIFIER.findall(item.lower()))
+    return tokens | {ABAPGIT_PREFIX.sub("", t) for t in tokens}
+
+
 def _matches(item: str, rubric_entry: dict) -> bool:
-    item = item.lower()
-    return any(alias.lower() in item for alias in rubric_entry["aliases"])
+    """An alias matches a whole identifier of the item, not any substring of it.
+
+    Substring matching let 'warning_overwrite_files' count for the 'overwrite_files' alias of
+    another entity, 'ty_deserialize_checks' for 'deserialize_checks', 'receive_pack_push' for
+    'receive_pack', and the test method 'ltcl_git_utils->pkt_string_utf8' for 'pkt_string'.
+    """
+    words = _identifiers(item)
+    return any(alias.lower() in words for alias in rubric_entry["aliases"])
+
+
+def _is_test_class_item(item: str) -> bool:
+    """'ltcl_foo->bar': the rubric does not list test classes, so such an item is neither hit nor miss."""
+    return bool(TEST_CLASS_ITEM.match(item))
 
 
 def score_b3(answer: str, rubric) -> dict:
@@ -268,7 +290,8 @@ def score_b3(answer: str, rubric) -> dict:
     if rubric is None:
         result["error"] = "no rubric (ground_truth/b3_rubric.json)"
         return result
-    entities = [str(e) for e in (parsed or {}).get("changed_entities", [])]
+    listed = [str(e) for e in (parsed or {}).get("changed_entities", [])]
+    entities = [e for e in listed if not _is_test_class_item(e)]
     callers = [c for c in (parsed or {}).get("callers_left_behind", []) if isinstance(c, dict)]
     caller_text = [f"{c.get('caller', '')} {c.get('file', '')}" for c in callers]
 
@@ -282,8 +305,12 @@ def score_b3(answer: str, rubric) -> dict:
     left = rubric["callers_left_behind"]
     callers_found = [c for c in left if any(_matches(item, c) for item in caller_text)]
     caller_recall = len(callers_found) / len(left) if left else None
+    # Reported, not scored: the rubric is a draft, and a caller it does not list may still be a fair find.
+    callers_relevant = [item for item in caller_text if any(_matches(item, c) for c in left)]
 
     result.update({
+        "test_class_items_ignored": [e for e in listed if e not in entities],
+        "caller_precision": round(len(callers_relevant) / len(caller_text), 4) if caller_text else None,
         "entity_precision": round(precision, 4), "entity_recall": round(recall, 4), "entity_f1": round(f1, 4),
         "entities_missed": [e["id"] for e in want if e not in found],
         "caller_recall": None if caller_recall is None else round(caller_recall, 4),
