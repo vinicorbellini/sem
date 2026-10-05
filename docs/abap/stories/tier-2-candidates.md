@@ -21,3 +21,6 @@ found. Promoting one to a story is a decision, not a default.
   #4432). A chained `DATA: a ..., b ... .` is one variable entity named after
   one member, so adding or renaming a member reads as a delete and an add, or
   as a different variable changing.
+
+Promoted to Tier 2 stories: T2-B is part of [story 2.3](2-3-inheritance-interfaces.md)
+and T2-C is part of [story 2.7](2-7-precision-study.md).
