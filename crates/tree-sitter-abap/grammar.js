@@ -3,6 +3,10 @@ module.exports = grammar({
 
   word: $ => $.name,
 
+  // `bol_comment` is a `*` in column 1 only; the column takes a scanner
+  // (src/scanner.c).
+  externals: $ => [$.bol_comment],
+
   extras: $ => [/\s+/, $.eol_comment, $.bol_comment],
 
   rules: {
@@ -959,8 +963,6 @@ module.exports = grammar({
     string_template: $ => /\|([^|{}\\\r\n]|\\[^\r\n]|\{[^}]*\})*\|/,
 
     eol_comment: $ => seq('"', /[^\n]*/),
-
-    bol_comment: $ => seq("*", /[^\n]*/),
 
     name: $ => /[a-zA-Z_][a-zA-Z0-9_]{0,29}/i,
 

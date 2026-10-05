@@ -6063,19 +6063,6 @@
         }
       ]
     },
-    "bol_comment": {
-      "type": "SEQ",
-      "members": [
-        {
-          "type": "STRING",
-          "value": "*"
-        },
-        {
-          "type": "PATTERN",
-          "value": "[^\\n]*"
-        }
-      ]
-    },
     "name": {
       "type": "PATTERN",
       "value": "[a-zA-Z_][a-zA-Z0-9_]{0,29}",
@@ -6103,7 +6090,12 @@
   ],
   "conflicts": [],
   "precedences": [],
-  "externals": [],
+  "externals": [
+    {
+      "type": "SYMBOL",
+      "name": "bol_comment"
+    }
+  ],
   "inline": [],
   "supertypes": [],
   "reserved": {}

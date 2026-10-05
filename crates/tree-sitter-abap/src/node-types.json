@@ -166,12 +166,6 @@
     }
   },
   {
-    "type": "bol_comment",
-    "named": true,
-    "extra": true,
-    "fields": {}
-  },
-  {
     "type": "call_function",
     "named": true,
     "fields": {
@@ -3481,6 +3475,11 @@
   {
     "type": "binary",
     "named": false
+  },
+  {
+    "type": "bol_comment",
+    "named": true,
+    "extra": true
   },
   {
     "type": "call",

@@ -98,7 +98,7 @@ These differ from the first-draft implementation notes. Each story applies them.
     grammar still loses whole implementations and stretches methods on other
     statements, for example a `*` mid-line, which `bol_comment` (`"*"` then
     the rest of the line, not anchored to column 1) reads as a comment that
-    eats the statement's period.
+    eats the statement's period (fixed in the fork, fact 13).
 
 12. Upstream's `class_declaration` took its additions in one fixed order
     and had no `FOR TESTING`, `RISK LEVEL` or `DURATION`, so every test
@@ -111,6 +111,20 @@ These differ from the first-draft implementation notes. Each story applies them.
     file while it gains them in others (after this fix,
     `zcl_abapgit_gui_page_repo_view` lost its 15 `DATA` attributes and the
     ajson test classes gained 17 `TYPES`); the totals are in the table below.
+
+13. A `*` starts a comment only in column 1. Upstream's `bol_comment` took
+    any `*` and the rest of its line, so `lv = lines( lt ) * 2.` lost its
+    period. A tree-sitter token cannot see the column, so the fork reads
+    `bol_comment` with an external scanner (`src/scanner.c` in the grammar
+    crate). On its own the fix does not reduce the methods the fallback adds:
+    the scanner also stops tokens taking a leading space with them, which
+    moves error recovery around the statements the grammar still cannot read.
+    Three class files lost most of their grammar methods to it:
+    `zcl_abapgit_object_clas` and `zcl_abapgit_object_intf`, whose
+    definitions hold a `CONSTANTS: BEGIN OF` with a component named `methods`
+    that recovery now reads as the `METHODS` keyword, and
+    `zcl_abapgit_gui_page_repo_view`, which became one `ERROR`, as did
+    `zif_abapgit_git_definitions`, which lost its interface entity.
 
 ## Grammar fork
 
@@ -149,9 +163,14 @@ for 7577 `METHOD` blocks):
 | upstream `c7604df` | 39314 | 731 | 9703 | 6786 | 2917 | 5705 |
 | 1. literals end at their line | 37305 | 731 | 9808 | 7966 | 1842 | 6818 |
 | 2. `FOR TESTING`, `RISK LEVEL`, `DURATION` | 37198 | 727 | 9719 | 7963 | 1756 | 6912 |
+| 3. `*` comments in column 1 only | 36558 | 727 | 9731 | 7874 | 1857 | 6801 |
 
-Through both fixes every `METHOD` block stays a method entity (7582 method
+Through every fix every `METHOD` block stays a method entity (7582 method
 entities each time, the grammar's plus the fallback's), so the entity totals
-move only with class-level `DATA` and `TYPES`. Fix 1 also let 90 local `DATA`
-in test method bodies through as class variables (the ajson test classes);
-fix 2 removed them again.
+move only with class-level `DATA` and `TYPES` and the odd class or interface.
+Fix 1 also let 90 local `DATA` in test method bodies through as class
+variables (the ajson test classes); fix 2 removed them again. Fix 3 moved
+error recovery (fact 13): 94 files have more error nodes and 79 fewer, the
+fallback adds methods in 15 files and fewer in 11, and the entities gain 10
+`DATA` and 3 `TYPES` and lose `zif_abapgit_git_definitions`. No file that had
+no error node has one now.

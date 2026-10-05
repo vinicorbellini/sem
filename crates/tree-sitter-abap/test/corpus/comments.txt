@@ -73,3 +73,64 @@ data: a type b, " This is a comment
       (name)
       (typing
         (type)))))
+
+==================
+asterisk in column 1 is a comment, anywhere else an operator
+==================
+
+*"* use this source file for your ABAP unit test classes
+lv_a = lv_b * 2.
+* a comment between statements
+lv_a = lv_b
+       * 2.
+*lv_a = lv_b * 2.
+
+---
+
+(program
+  (bol_comment)
+  (assignment
+    (name)
+    (arithmetic_expression
+      (name)
+      (numeric_literal)))
+  (bol_comment)
+  (assignment
+    (name)
+    (arithmetic_expression
+      (name)
+      (numeric_literal)))
+  (bol_comment))
+
+==================
+asterisk mid-line does not end the statement early
+==================
+
+class lcl implementation.
+  method one.
+    lv = a * 2.
+  endmethod.
+  method two.
+    lv = b.
+  endmethod.
+endclass.
+
+---
+
+(program
+  (class_implementation
+    (name)
+    (method_implementation
+      (name)
+      (method_body
+        (assignment
+          (name)
+          (arithmetic_expression
+            (name)
+            (numeric_literal)))))
+    (method_implementation
+      (name)
+      (method_body
+        (assignment
+          (name)
+          (name))))))

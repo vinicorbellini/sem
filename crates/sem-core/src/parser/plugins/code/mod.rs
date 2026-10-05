@@ -2896,23 +2896,28 @@ DATA gv_global TYPE i.
         // Found by the Gate 1 census (#3185, #3891, #7644): a statement the
         // grammar misreads runs `one`'s node over `two`, which is lost. In the
         // census it was mostly a template like `|{ a }*|`, which the fork's
-        // grammar now reads as one token; here it is a `*` the grammar takes for
-        // a comment to the end of the line, period included. `one` is cut back
-        // to its own ENDMETHOD and stays the grammar's; `two` is its own entity
-        // again.
-        let code = "CLASS zcl_demo DEFINITION PUBLIC.\n  PUBLIC SECTION.\n    METHODS one.\nENDCLASS.\n\nCLASS zcl_demo IMPLEMENTATION.\n  METHOD one.\n    lv = lines( lt ) * 2.\n  ENDMETHOD.\n\n  METHOD two.\n    WRITE 'y'.\n  ENDMETHOD.\n\n  METHOD three.\n    WRITE 'z'.\n  ENDMETHOD.\nENDCLASS.\n";
+        // grammar now reads as one token, and then a `*` mid-line, which it read
+        // as a comment to the end of the line until it took `*` as a comment in
+        // column 1 only (see `abap_grammar_reads_asterisk_comments_in_column_1`).
+        // Here it is an offset/length access after a READ TABLE, cut down from
+        // abapGit's zcl_abapgit_git_branch_list. `one` is cut back to its own
+        // ENDMETHOD and stays the grammar's; `two` is its own entity again.
+        let code = "CLASS zcl_demo DEFINITION PUBLIC.\n  PUBLIC SECTION.\n    METHODS one.\nENDCLASS.\n\nCLASS zcl_demo IMPLEMENTATION.\n  METHOD one.\n    READ TABLE lt INTO ls INDEX 1.\n    lv = iv+ls-offset(ls-length).\n  ENDMETHOD.\n\n  METHOD two.\n    WRITE 'y'.\n  ENDMETHOD.\n\n  METHOD three.\n    WRITE 'z'.\n  ENDMETHOD.\nENDCLASS.\n";
         assert_eq!(
             abap_rows(code, "zcl_demo.clas.abap"),
             vec![
-                abap_row("class", "zcl_demo", 1, 18),
-                abap_row("method", "one", 7, 9),
-                abap_row("method", "two", 11, 13),
-                abap_row("method", "three", 15, 17),
+                abap_row("class", "zcl_demo", 1, 19),
+                abap_row("method", "one", 7, 10),
+                abap_row("method", "two", 12, 14),
+                abap_row("method", "three", 16, 18),
             ]
         );
         let entities = CodeParserPlugin.extract_entities(code, "zcl_demo.clas.abap");
         let one = entities.iter().find(|e| e.name == "one").expect("one");
-        assert_eq!(one.content, "  METHOD one.\n    lv = lines( lt ) * 2.\n  ENDMETHOD.");
+        assert_eq!(
+            one.content,
+            "  METHOD one.\n    READ TABLE lt INTO ls INDEX 1.\n    lv = iv+ls-offset(ls-length).\n  ENDMETHOD."
+        );
         assert_eq!(one.end_byte, Some(code.find("ENDMETHOD.").unwrap() + "ENDMETHOD.".len()));
         assert!(one.metadata.is_none(), "trimmed, still the grammar's: {:?}", one.metadata);
         assert_eq!(
@@ -2922,8 +2927,9 @@ DATA gv_global TYPE i.
 
         // Trimmed or recovered, the method's content is what a clean parse gives,
         // so a diff across the two reads it as unchanged.
-        let clean = code.replace("lv = lines( lt ) * 2.", "lv = a.");
-        let stretched = code.replace("    WRITE 'y'.", "    lv = lines( lt ) * 2.");
+        let trigger = "    READ TABLE lt INTO ls INDEX 1.\n    lv = iv+ls-offset(ls-length).";
+        let clean = code.replace(trigger, "    lv = a.");
+        let stretched = code.replace("    WRITE 'y'.", trigger);
         let content = |code: &str, name: &str| {
             CodeParserPlugin
                 .extract_entities(code, "zcl_demo.clas.abap")
@@ -2970,21 +2976,26 @@ DATA gv_global TYPE i.
     #[test]
     #[cfg(feature = "lang-abap")]
     fn abap_fixture_1_10_interface_method_names() {
-        // `zif_x~m` is one name: the grammar's `zif_x~m` is cut back to its
-        // ENDMETHOD, and the recovered `ZIF_X~N` keeps its spelling.
-        let code = "CLASS lcl_demo IMPLEMENTATION.\n  METHOD zif_x~m.\n    lv = lines( lt ) * 2.\n  ENDMETHOD.\n  METHOD ZIF_X~N.\n    WRITE 'y'.\n  ENDMETHOD.\nENDCLASS.\n";
+        // `zif_x~m` is one name, and a recovered method keeps its spelling.
+        // The trigger is the one in
+        // `abap_fixture_1_10_stretched_method_ends_at_its_endmethod`; the old
+        // one, a `*` mid-line, left the grammar's `zif_x~m` its name, and it was
+        // cut back to its ENDMETHOD. This one puts the `~m` and the body in one
+        // ERROR, so the grammar's method has no name to match and the fallback
+        // gives both.
+        let code = "CLASS lcl_demo IMPLEMENTATION.\n  METHOD zif_x~m.\n    READ TABLE lt INTO ls INDEX 1.\n    lv = iv+ls-offset(ls-length).\n  ENDMETHOD.\n  METHOD ZIF_X~N.\n    WRITE 'y'.\n  ENDMETHOD.\nENDCLASS.\n";
         assert_eq!(
             abap_rows(code, "zcl_demo.clas.locals_imp.abap"),
             vec![
-                abap_row("class", "lcl_demo", 1, 8),
-                abap_row("method", "zif_x~m", 2, 4),
-                abap_row("method", "ZIF_X~N", 5, 7),
+                abap_row("class", "lcl_demo", 1, 9),
+                abap_row("method", "zif_x~m", 2, 5),
+                abap_row("method", "ZIF_X~N", 6, 8),
             ]
         );
         assert_eq!(
             abap_method_sources(code, "zcl_demo.clas.locals_imp.abap"),
             vec![
-                ("zif_x~m".to_string(), None),
+                ("zif_x~m".to_string(), Some("abap-fallback".to_string())),
                 ("ZIF_X~N".to_string(), Some("abap-fallback".to_string())),
             ]
         );
@@ -3276,6 +3287,28 @@ DATA gv_global TYPE i.
         assert_eq!(
             abap_method_sources(code, "zcl_demo.clas.abap"),
             vec![("one".to_string(), None), ("two".to_string(), None), ("three".to_string(), None)]
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_grammar_reads_asterisk_comments_in_column_1() {
+        // A `*` is a comment only in column 1. The grammar used to take any `*`
+        // for one, to the end of the line, so `lv = lines( lt ) * 2.` lost its
+        // period and ran `one` on over `two`. Now both methods are the grammar's,
+        // and the column-1 comment between them is still a comment.
+        let code = "CLASS zcl_demo DEFINITION PUBLIC.\n  PUBLIC SECTION.\n    METHODS one.\nENDCLASS.\n\nCLASS zcl_demo IMPLEMENTATION.\n  METHOD one.\n    lv = lines( lt ) * 2.\n  ENDMETHOD.\n* METHOD fake.\n  METHOD two.\n    lv = a * b.\n  ENDMETHOD.\nENDCLASS.\n";
+        assert_eq!(
+            abap_rows(code, "zcl_demo.clas.abap"),
+            vec![
+                abap_row("class", "zcl_demo", 1, 14),
+                abap_row("method", "one", 7, 9),
+                abap_row("method", "two", 11, 13),
+            ]
+        );
+        assert_eq!(
+            abap_method_sources(code, "zcl_demo.clas.abap"),
+            vec![("one".to_string(), None), ("two".to_string(), None)]
         );
     }
 
