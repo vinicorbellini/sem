@@ -1,0 +1,29 @@
+[package]
+name = "tree-sitter-abap"
+version = "0.1.0"
+edition = "2021"
+description = "sem's fork of the mkoval1/tree-sitter-abap grammar for SAP ABAP"
+license = "MIT"
+readme = "README.md"
+# Upstream grammar: https://github.com/mkoval1/tree-sitter-abap, commit
+# c7604df9e25d56ae879fa25694fd9f2ddbab05d8 (2024-06-29), MIT, by Michael Koval.
+# This fork's changes are listed in README.md.
+repository = "https://github.com/mkoval1/tree-sitter-abap"
+keywords = ["tree-sitter", "parsing", "abap"]
+categories = ["parsing"]
+build = "bindings/rust/build.rs"
+include = ["bindings/rust/*", "grammar.js", "src/*", "src/tree_sitter/*", "README.md"]
+# The name is not ours on crates.io; this crate is only a path dependency of sem-core.
+publish = false
+
+[lib]
+path = "bindings/rust/lib.rs"
+
+[dependencies]
+tree-sitter-language = "0.1"
+
+[dev-dependencies]
+tree-sitter = "0.26"
+
+[build-dependencies]
+cc = "1"

@@ -381,7 +381,7 @@ fn get_lua() -> Option<Language> {
 
 #[cfg(feature = "lang-abap")]
 fn get_abap() -> Option<Language> {
-    Some(tree_sitter_abap_sqry::language())
+    Some(tree_sitter_abap::LANGUAGE.into())
 }
 
 #[cfg(feature = "lang-bsl")]
