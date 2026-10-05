@@ -262,13 +262,16 @@ pub(crate) fn caller_verdict(
     // Without an index (`SEM_NO_INDEX=1`, a cold path): the same scan over
     // every supported file, entities re-extracted per file on demand.
     let all_files: std::cell::OnceCell<Vec<String>> = std::cell::OnceCell::new();
-    let files_containing = |needle: &str| -> Vec<String> {
+    // ABAP names fold case (`'ZFX_FM'` names `zfx_fm`), so its text search does too
+    let fold = c::is_abap(&def.file_path);
+    let files_matching = |pattern: &str, fold: bool| -> Vec<String> {
+        let re = regex::RegexBuilder::new(pattern).case_insensitive(fold).build().ok();
         let mut files: Vec<String> = match idx {
             Some(idx) => index::grep::search(
                 idx,
                 root,
-                &regex::escape(needle),
-                &index::grep::GrepOptions { case_insensitive: false },
+                pattern,
+                &index::grep::GrepOptions { case_insensitive: fold },
                 |dir: &Path| super::files::find_supported_files_in_path(root, dir, &registry, &[], false),
             )
             .map(|r| r.hits.into_iter().map(|h| h.file).collect())
@@ -276,7 +279,7 @@ pub(crate) fn caller_verdict(
             None => all_files
                 .get_or_init(|| super::graph::find_supported_files_with_options(root, &registry, &[], false))
                 .iter()
-                .filter(|f| read(f).contains(needle))
+                .filter(|f| re.as_ref().is_some_and(|re| re.is_match(&read(f))))
                 .cloned()
                 .collect(),
         };
@@ -284,6 +287,7 @@ pub(crate) fn caller_verdict(
         files.dedup();
         files
     };
+    let files_containing = |needle: &str| files_matching(&regex::escape(needle), fold);
     let extracted: std::cell::RefCell<std::collections::HashMap<String, Vec<EntityInfo>>> = Default::default();
     let enclosing = |file: &str, line: usize| -> Option<c::Enclosing> {
         if let Some(idx) = idx {
@@ -309,6 +313,7 @@ pub(crate) fn caller_verdict(
     };
     let target = c::Target {
         name: &def.name,
+        entity_type: &def.entity_type,
         file: &def.file_path,
         span: (def.start_line, def.end_line),
         decorators,
@@ -343,7 +348,17 @@ pub(crate) fn caller_verdict(
         .iter()
         .flat_map(|f| c::dynamic_prefixes(f, &read(f)).into_iter().map(move |(p, l)| (p, f.clone(), l)))
         .collect();
-    c::assess(&target, &mentions, &alias_mentions, &resolved_spans, &dynamic, files_scanned, not_checked, enclosing)
+    // ABAP computed calls name nothing, so they are found by shape over every file that has one
+    let abap_dyn: Vec<c::DynamicSite> = if fold {
+        files_matching(c::ABAP_DYNAMIC_PREFILTER, true)
+            .iter()
+            .filter(|f| c::is_abap(f))
+            .flat_map(|f| c::dynamic_sites(f, &read(f)))
+            .collect()
+    } else {
+        Vec::new()
+    };
+    c::assess(&target, &mentions, &alias_mentions, &resolved_spans, &dynamic, &abap_dyn, files_scanned, not_checked, enclosing)
 }
 
 /// The callers-verb refusal: every candidate definition listed, exit 1.

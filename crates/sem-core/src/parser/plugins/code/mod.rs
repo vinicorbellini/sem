@@ -24,6 +24,10 @@ use languages::{get_all_code_extensions, get_language_config};
 /// `extract_entities`.
 pub use entity_extractor::extract_entities as extract_entities_from_tree;
 
+/// The ABAP comment-and-literal stripper, shared with the CLI's completeness scan so
+/// there is one stripping rule. Blanks with spaces and keeps byte length and newlines.
+pub use crate::parser::graph::strip_abap_content;
+
 pub struct CodeParserPlugin;
 
 // Thread-local parser cache: one Parser per language per thread.
