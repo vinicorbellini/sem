@@ -7,6 +7,8 @@ module.exports = grammar({
   // (src/scanner.c).
   externals: $ => [$.bol_comment],
 
+  inline: $ => [$._method_name],
+
   extras: $ => [/\s+/, $.eol_comment, $.bol_comment],
 
   rules: {
@@ -269,7 +271,15 @@ module.exports = grammar({
       seq(kw("methods"), $._method_redefinition_body, "."),
 
     _method_redefinition_body: $ =>
-      seq($.name, optional(kw("final")), kw("redefinition")),
+      seq($._method_name, optional(kw("final")), kw("redefinition")),
+
+    // A method's name, or an interface method's, `zif_x~m`, which is one
+    // `name` token (the name rule itself stops at the `~`).
+    _method_name: $ =>
+      choice(
+        $.name,
+        alias(/[a-zA-Z_][a-zA-Z0-9_]*~[a-zA-Z_][a-zA-Z0-9_]*/, $.name)
+      ),
 
     class_method_declaration_class: $ =>
       seq(kw("class-methods"), $._class_method_declaration_class_body, "."),
@@ -346,7 +356,7 @@ module.exports = grammar({
     method_implementation: $ =>
       seq(
         kw("method"),
-        field("name", $.name),
+        field("name", $._method_name),
         ".",
         optional($.method_body),
         kw("endmethod"),

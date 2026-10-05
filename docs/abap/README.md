@@ -148,6 +148,23 @@ These differ from the first-draft implementation notes. Each story applies them.
     (`zcl_abapgit_object_iaxu`: its definition used to run to the end of the
     file).
 
+15. The grammar's `name` stops at a `~`, so `METHOD zif_x~m.` was the method
+    `zif_x` and an `ERROR`, and sem joined the name back from the `ERROR`
+    (`entity_extractor.rs`) only when it held just `~m`; when it held more (a
+    long name, part of the body), the method had no name and came from the
+    fallback. 3290 of abapGit's 7591 `METHOD` statements name an interface
+    method, and after fact 14's fix about 700 of the 1685 fallback entities
+    were such methods, with 387 `TYPES` and 591 other lost methods the rest.
+    The fork reads `zif_x~m` as one `name` token in `METHOD` and in
+    `METHODS ... REDEFINITION`. That halves the fallback (1685 to 843) and
+    changes no entity: the same 9934, each method named as before, now from
+    the grammar. What the fallback still adds is 387 `TYPES` (the grammar
+    reads them since fact 14, but `ABAP_CONFIG` does not list
+    `types_declaration` yet), about 440 methods the grammar still loses in 66
+    files (`zcl_abapgit_ajson.clas.locals_imp`, `_object_tabl_ddl`,
+    `_html_form`, `_gui_page_diff_base` lose more than 20 each), 6 forms and
+    a few classes. No single statement accounts for those methods.
+
 ## Grammar fork
 
 sem builds against its own copy of mkoval1/tree-sitter-abap, in
@@ -187,6 +204,7 @@ for 7577 `METHOD` blocks):
 | 2. `FOR TESTING`, `RISK LEVEL`, `DURATION` | 37198 | 727 | 9719 | 7963 | 1756 | 6912 |
 | 3. `*` comments in column 1 only | 36558 | 727 | 9731 | 7874 | 1857 | 6801 |
 | 4. chained declarations, `INTERFACES`, `CLASS-DATA`, `CONSTANTS`, `TYPES` | 30435 | 632 | 9934 | 8249 | 1685 | 6991 |
+| 5. `zif_x~m` method names | 27637 | 626 | 9934 | 9091 | 843 | 7144 |
 
 Through every fix every `METHOD` block stays a method entity (7582 method
 entities each time, the grammar's plus the fallback's), so the entity totals
@@ -201,5 +219,10 @@ no error node, and adds 203 `variable` entities (239 class attributes written
 as chained `DATA:` or `CLASS-DATA`, less 36 that recovery had made of local
 `DATA` in method bodies and of `CONSTANTS` and `TYPES`); error nodes fall in
 655 files and rise in 30, where a definition no longer runs on over the
-implementation after it. No file that had no error node has one after any
-fix.
+implementation after it. Fix 5 leaves the entity set as it was, moves 842
+of them from the fallback to the grammar, cleans 6 more files, and lowers
+error nodes in 330 files; 13 have more (`zcl_abapgit_object_tran` +54,
+`_object_wdca` +39, `zcl_abapgit_gui_page_flowcons` +37), where methods that
+error recovery used to fold into one are now separate and their bodies'
+unread statements count on their own. No file that had no error node has one
+after any fix.

@@ -150,4 +150,14 @@ newer CLI writes (`$schema`, `reserved`, `extra`, `root`).
      `STANDARD TABLE`, and `DEFAULT` with a literal.
 
    Corpus: `test/corpus/chained_declarations.txt`.
+6. **An interface method's name is one token.** `name` stops at a `~`, so
+   upstream read `METHOD zif_x~m.` as the method `zif_x` followed by an
+   `ERROR`, and when that `ERROR` took more than `~m` the method had no name
+   at all; 3290 of abapGit's 7591 `METHOD` statements name an interface
+   method. The name of a `method_implementation` and of a
+   `method_redefinition` (`METHODS zif_x~m REDEFINITION.`) is now either a
+   `name` or `zif_x~m`, an aliased `name` token, through the inlined
+   `_method_name`. A `~` anywhere else (`ALIASES`, a call
+   `lo->zif_x~m( )`, `tadir~object` in SQL) is still not read. Corpus:
+   `test/corpus/interface_method_names.txt`.
 

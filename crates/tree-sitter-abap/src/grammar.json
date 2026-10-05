@@ -1643,7 +1643,7 @@
       "members": [
         {
           "type": "SYMBOL",
-          "name": "name"
+          "name": "_method_name"
         },
         {
           "type": "CHOICE",
@@ -1672,6 +1672,24 @@
           },
           "named": false,
           "value": "redefinition"
+        }
+      ]
+    },
+    "_method_name": {
+      "type": "CHOICE",
+      "members": [
+        {
+          "type": "SYMBOL",
+          "name": "name"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "PATTERN",
+            "value": "[a-zA-Z_][a-zA-Z0-9_]*~[a-zA-Z_][a-zA-Z0-9_]*"
+          },
+          "named": true,
+          "value": "name"
         }
       ]
     },
@@ -2125,7 +2143,7 @@
           "name": "name",
           "content": {
             "type": "SYMBOL",
-            "name": "name"
+            "name": "_method_name"
           }
         },
         {
@@ -8392,7 +8410,9 @@
       "name": "bol_comment"
     }
   ],
-  "inline": [],
+  "inline": [
+    "_method_name"
+  ],
   "supertypes": [],
   "reserved": {}
 }

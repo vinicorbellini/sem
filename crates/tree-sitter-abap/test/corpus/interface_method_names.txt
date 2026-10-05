@@ -1,0 +1,55 @@
+==================
+interface method implementation
+==================
+
+class zcl_x implementation.
+  method zif_x~run.
+    lv = a.
+  endmethod.
+  method ZIF_ABAPGIT_EXIT~ADJUST_DISPLAY_COMMIT_URL.
+  endmethod.
+  method plain.
+  endmethod.
+endclass.
+
+---
+
+(program
+  (class_implementation
+    name: (name)
+    (method_implementation
+      name: (name)
+      (method_body
+        (assignment
+          (name)
+          (name))))
+    (method_implementation
+      name: (name))
+    (method_implementation
+      name: (name))))
+
+==================
+interface method redefinition
+==================
+
+class zcl_x definition public inheriting from zcl_super.
+  protected section.
+    methods zif_x~run redefinition.
+    methods: zif_x~stop redefinition,
+      plain redefinition.
+endclass.
+
+---
+
+(program
+  (class_declaration
+    name: (name)
+    superclass: (name)
+    (protected_section
+      (method_redefinition
+        (name))
+      (chained_method_declaration
+        (method_redefinition
+          (name))
+        (method_redefinition
+          (name))))))
