@@ -64,6 +64,7 @@ python3 bench/abap-agent/run.py --checkpoint gate1 --class B1 --task b1_03 --rep
 | `--class B1\|B2\|B3\|all` | Which task classes (default all); `--task b2_04` (repeatable) narrows to single tasks. |
 | `--model` | Passed to `claude --model` (default `claude-sonnet-5-5`). |
 | `--reps` | Repetitions per task per arm (default 3). |
+| `--brief` | Add one paragraph to the **sem arm's** prompt naming `sem_find`, `sem_impact` and `sem_certify` and telling the agent to prefer them over grep (`BRIEF` in `run.py`; see "Briefing"). The grep arm's prompt is unchanged. Default off. Recorded in the `brief` column. |
 | `--dry-run` | Everything except calling `claude`. It prepares the checkouts, writes each sem run's MCP config, and prints each run's working directory, exact command line and prompt. For the sem arm it starts `sem mcp` once, lists its tools and calls `sem_find` (B1, B2) or `sem_certify` (B3). It scores the untouched checkout. B2 scoring runs the unit suite, so expect about 30 s per B2 run. |
 | `--cap-usd` | Stop once the cumulative `total_cost_usd` reaches the cap (default 30; see below). |
 | `--abapgit` | abapGit clone to copy from (default `/tmp/claude-0/abapGit`). It is cloned, never modified. |
@@ -77,8 +78,9 @@ The first run prepares `<work-dir>/base`:
 2. Fetch 300 commits of history from GitHub when the B3 commits are missing (a shallow clone).
 3. Check out the pinned commit.
 4. `npm ci --ignore-scripts` with `abapgit-package-lock.json` (see Known issues).
+5. Clone the transpiler's libraries at the commits in `abapgit-transpile-libs.json` into `<work-dir>/libs/<name>` (see Known issues).
 
-Each run clones `base` and symlinks its `node_modules`.
+Each run clones `base`, symlinks its `node_modules` and points its `test/abap_transpile.json` at `<work-dir>/libs`. That file is marked `skip-worktree`, so it is not in the agent's `git status` or in the patch the scorer replays.
 
 ### The command per run
 
@@ -154,6 +156,7 @@ commit results with `git add -f bench/abap-agent/results.csv bench/abap-agent/re
 | `sem_version` | `sem --version` of the binary that served MCP. |
 | `abapgit_commit` | Pinned abapGit commit. |
 | `model`, `arm`, `task_class`, `task_id`, `rep` | Which run. |
+| `brief` | 1 when the run's prompt carried the sem briefing (`--brief`, sem arm only), else 0. Baseline rows are 0. Compare only rows with the same `brief`. |
 | `dry_run` | 1 for `--dry-run` rows. |
 | `input_tokens` | Uncached input tokens, summed over the run's requests (`usage.input_tokens`). |
 | `output_tokens` | Output tokens, thinking included (`usage.output_tokens`). |
@@ -181,6 +184,19 @@ aliases equals a whole identifier in the item. The identifier may carry a `zcl_a
 `zif_abapgit_` / `zcx_abapgit_` prefix. Items naming a local test class (`ltcl_...->...`) are
 neither hits nor misses. `caller_precision` is reported in `results.jsonl` but not scored, because
 the rubric is a draft.
+
+## Briefing
+
+The baseline's sem arm never called a sem tool and still paid about 4,200 extra context tokens per
+request for the tool schemas. `--brief` tests whether telling the agent about the tools changes
+that. It adds this paragraph after the shared instructions, to the sem arm only:
+
+> Besides the usual tools you have three sem tools for this code base: sem_find, sem_impact and sem_certify. Prefer them over grep for questions of where something is defined, who calls it, and what a change to it affects: sem_find looks entities up by name and lists their callers, sem_impact lists what depends on an entity and which tests to run, and sem_certify summarises what a commit or range changed.
+
+This is the same lever sem's own benchmark calls a briefing. Briefed and unbriefed sem runs answer
+different questions (does sem help when the agent is told to use it, vs. when it is left to find
+the tools), so each gets its own rows (`brief` column) and its own run id; apply the adoption rule
+to one `brief` value at a time, against the grep arm of the same checkpoint.
 
 ## Adoption rule
 
@@ -227,16 +243,8 @@ above the grep arm, against the adoption rule's 15% ceiling, before sem contribu
 
 ## Known issues
 
-- **`npm run unit` fails as of 2026-10-05 evening, so B2 cannot be scored.** The suite passed earlier the same day (below). It now exits 1 before any test runs:
-
-  ```
-  Error: Void type: DISVARIANT
-      at file:///.../output/cl_alv_variant.clas.mjs:2423:26
-  ```
-
-  `abap_transpile` clones its libraries (`test/abap_transpile.json`: `open-abap-core`, `open-abap-gui`, `open-abap-seo`, `express-icf-shim`, `abapGit-web-classic`) from their default branches on every build, unpinned. `open-abap-gui` alone got six commits on 2026-10-05 (#188 to #195). With the libraries at that day's HEAD, `cl_alv_variant` no longer transpiles against the pinned abapGit commit. Every B2 run, both the agent's own test runs and the scorer, would fail for this reason alone, so the baseline did not spend money on B2.
-
-  Fixing it means pinning those libraries, which the owner has to decide. `libs[].folder` in the transpiler config takes a local directory in place of a URL. The libraries could be checked out at their last commit before the pinned abapGit commit's date (2026-10-04T17:55Z). That is not done here.
+- **abapGit's libraries are pinned here, not by abapGit.** `abap_transpile` clones the libraries named in `test/abap_transpile.json` (`open-abap-core`, `open-abap-gui`, `open-abap-seo`, `express-icf-shim`, `abapGit-web-classic`) from their default branches on every build. On 2026-10-05 `open-abap-gui` changed (#188 to #195) and `npm run unit` started failing before any test ran (`Error: Void type: DISVARIANT` in `cl_alv_variant`), which made B2 unscorable. `abapgit-transpile-libs.json` now maps each library to its repository and its last commit before the pinned abapGit commit (2026-10-04T17:55Z). The harness clones each at that commit into `<work-dir>/libs/<name>` and rewrites `libs[]` in each checkout's `test/abap_transpile.json` from `url` to `folder`. The transpiler resolves `folder` as `path.join(cwd, folder)`, so an absolute path does not work; the harness writes it relative to the checkout. The libraries sit outside every checkout so agents' `grep` and sem's index never see them. The harness fails if the config names a library the pin file lacks, or the reverse. Re-pin on purpose only, and say so in the commit.
+  With the pinned libraries `npm run unit` exits 0 on the pinned commit, 959 test methods in 169 local test classes, as on the morning of 2026-10-05.
 - **abapGit has no `package-lock.json`.** abapGit gitignores it, so `npm ci` on the checkout as is fails with `EUSAGE`, and `npm run unit` then fails with `sh: 1: abap_transpile: not found` (exit 127). Fix used:
   1. `npm install --ignore-scripts` once in a scratch copy (12 s, 210 packages, every one resolved from registry.npmjs.org).
   2. That lockfile is pinned as `abapgit-package-lock.json`.
@@ -244,7 +252,7 @@ above the grep arm, against the adoption rule's 15% ceiling, before sem contribu
 
   Regenerate the lockfile only on purpose, and read its diff.
 - **Earlier on 2026-10-05, `npm run unit` passed** at the pinned commit with that lockfile: exit 0, 35 s cold and 33 s warm, on Node v22.22.0 / npm 10.9.4. 959 test methods ran, in 169 local test classes of 111 objects; 74 were skipped by configuration or CRITICAL risk level. With a correct b2_01 solution plus its hidden tests, the suite ran 961 methods in 170 classes in 22 s and scored 1.0.
-- **`npm run unit` needs network on every build.** It clones the libraries above from GitHub. Without GitHub access, B2 scoring and the agents' own test runs fail.
+- **`npm run unit` no longer needs network once the checkout is prepared.** The libraries are cloned once, when `<work-dir>/base` is prepared. B2's prompt used to say the build needs network access; it now says how long the suite takes (B2 had not run, so no row is affected).
 - **The transpiler only checks files in its `input_filter`.** That is 1038 of 1526 files. A caller in an excluded file that misses the new parameter does not break the build, so `callers_missed` is counted by grep over all of `src/` separately.
 - **The usual abapGit clone is shallow** (1 commit). B3 needs history, so the base checkout fetches 300 commits from GitHub once when they are missing.
 - **sem's ABAP support answers few B1 questions** in sem 0.27.0. This is a property of the build under test, not of the harness; it is what a baseline run measures. The dry run's tool check shows it. Probed through `sem mcp`:

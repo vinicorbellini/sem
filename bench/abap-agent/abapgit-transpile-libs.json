@@ -1,0 +1,27 @@
+{
+  "note": "Libraries that abapGit's test/abap_transpile.json clones unpinned at build time, pinned to each repository's last commit before abapGit's pinned commit b2b4e250747e (committed 2026-10-04T17:55:04Z). The harness clones each at its commit into <base>/.bench-libs/<name> and points the checkout's abap_transpile.json at those folders. Regenerate on purpose only.",
+  "abapgit_commit": "b2b4e250747ecb4f8e2b1d79e332d2cf897d5fa0",
+  "cutoff": "2026-10-04T17:55:04Z",
+  "libs": {
+    "open-abap-core": {
+      "repository": "https://github.com/open-abap/open-abap-core",
+      "commit": "d327d0cdc91c8fa3ac4954d2dbaff99de0622ab7"
+    },
+    "open-abap-gui": {
+      "repository": "https://github.com/open-abap/open-abap-gui",
+      "commit": "42517810b12c84da0d67b6c7ee7c33ae1c4b854e"
+    },
+    "open-abap-seo": {
+      "repository": "https://github.com/open-abap/open-abap-seo",
+      "commit": "d83f551517eb6f9c2de9ecf249681400a1b61d45"
+    },
+    "express-icf-shim": {
+      "repository": "https://github.com/open-abap/express-icf-shim",
+      "commit": "996eb798ff8aa0a302c6672e95b1fde7b95bcbe3"
+    },
+    "abapGit-web-classic": {
+      "repository": "https://github.com/abapGit/abapGit-web-classic",
+      "commit": "7c1fd8ab07e0d4257c4bdf237de3cf187156b050"
+    }
+  }
+}

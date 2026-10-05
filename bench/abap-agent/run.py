@@ -68,8 +68,18 @@ INSTRUCTIONS = (
     "Work until the task is complete, then give your final answer in the format the task asks for."
 )
 
+# --brief: one paragraph added to the sem arm's prompt only (the grep arm's prompt never changes).
+# Without it the baseline's sem arm never called a sem tool and still paid for the tool schemas.
+BRIEF = (
+    "Besides the usual tools you have three sem tools for this code base: sem_find, sem_impact and "
+    "sem_certify. Prefer them over grep for questions of where something is defined, who calls it, "
+    "and what a change to it affects: sem_find looks entities up by name and lists their callers, "
+    "sem_impact lists what depends on an entity and which tests to run, and sem_certify summarises "
+    "what a commit or range changed."
+)
+
 CSV_COLUMNS = [
-    "timestamp", "checkpoint", "build", "sem_version", "abapgit_commit", "model", "arm",
+    "timestamp", "checkpoint", "build", "sem_version", "abapgit_commit", "model", "arm", "brief",
     "task_class", "task_id", "rep", "dry_run",
     "input_tokens", "output_tokens", "cache_read_tokens", "cache_write_tokens", "cost_usd",
     "wall_time_s", "api_time_s", "turns", "tool_calls", "files_read", "bytes_read", "test_classes_executed",
@@ -162,6 +172,7 @@ def prepare_base(work_dir: Path, source: str, commit: str, needed: list[str], de
             print(f"ERROR: abapGit commits not found after fetching: {still}")
             sys.exit(1)
     run(["git", "-C", str(base), "checkout", "-q", "--detach", commit])
+    tools.clone_pinned_libs(work_dir / tools.LIBS_SUBDIR)
     if not (base / "node_modules").exists():
         print("  Installing abapGit's npm dependencies from the pinned lockfile")
         shutil.copy(LOCKFILE, base / "package-lock.json")
@@ -177,6 +188,7 @@ def make_workspace(base: Path, work_dir: Path, run_id: str, commit: str) -> Path
     run(["git", "clone", "-q", "--no-hardlinks", str(base), str(workspace)])
     run(["git", "-C", str(workspace), "checkout", "-q", "--detach", commit])
     (workspace / "node_modules").symlink_to(base / "node_modules")
+    tools.pin_transpile_libs(workspace, work_dir / tools.LIBS_SUBDIR)
     # abapGit's .gitignore has "node_modules/", which does not match a symlink.
     with open(workspace / ".git" / "info" / "exclude", "a") as f:
         f.write("node_modules\n")
@@ -186,11 +198,13 @@ def make_workspace(base: Path, work_dir: Path, run_id: str, commit: str) -> Path
 # ── Prompts ──────────────────────────────────────────────────────────────────
 
 
-def build_prompt(spec: dict, task: dict) -> str:
+def build_prompt(spec: dict, task: dict, brief: bool = False) -> str:
+    """Both arms get the same text; `brief` (the sem arm only, see BRIEF) adds the sem briefing paragraph."""
     fields = dict(task)
     if spec["class"] == "B3":
         fields["head"] = spec["abapgit_commit"][:12]
-    return INSTRUCTIONS + "\n\n" + spec["prompt_template"].format(**fields)
+    head = INSTRUCTIONS + "\n\n" + (BRIEF + "\n\n" if brief else "")
+    return head + spec["prompt_template"].format(**fields)
 
 
 # ── Agent run ────────────────────────────────────────────────────────────────
@@ -312,6 +326,10 @@ def check_sem_mcp(sem_binary: Path, workspace: Path, log_path: Path, spec: dict,
         if spec["class"] == "B3":
             output = mcp.call("sem_certify", {"range": f"{task['commit']}~1..{task['commit']}"})
             lines.append(f"sem_certify: {len(output.encode())} bytes")
+    except RuntimeError as e:
+        # tools.SemMcp.call raises RuntimeError for a tool result with isError: the server answered,
+        # e.g. "matches 2 definitions" or "no entity named ..." (what an agent would see too).
+        lines.append(f"sem_find/sem_certify answered with a tool error: {str(e).splitlines()[0][:160]}")
     except Exception as e:
         lines.append(f"sem mcp: ERROR {str(e)[:200]}")
     finally:
@@ -330,6 +348,9 @@ def main():
     parser.add_argument("--model", default=MODEL)
     parser.add_argument("--reps", type=int, default=REPS)
     parser.add_argument("--task", action="append", help="Only this task id (repeatable), e.g. b1_03.")
+    parser.add_argument("--brief", action="store_true",
+                        help="Add the sem briefing paragraph (BRIEF) to the sem arm's prompt; the grep arm is unchanged. "
+                             "Recorded in the `brief` column: never mix briefed and unbriefed rows.")
     parser.add_argument("--dry-run", action="store_true",
                         help="Do everything except calling claude; print each run's command line and prompt.")
     parser.add_argument("--cap-usd", type=float, default=30.0,
@@ -385,7 +406,8 @@ def main():
         for arm in order:
             if not args.dry_run and not budget.allows_run():
                 break
-            run_id = f"{checkpoint}-{args.model}-{arm}-{task['id']}-r{rep}"
+            briefed = args.brief and arm == "sem"
+            run_id = f"{checkpoint}-{args.model}-{arm}{'-brief' if briefed else ''}-{task['id']}-r{rep}"
             print(f"── {task['id']} [{arm}] rep {rep} ──")
             workspace = make_workspace(base, work_dir, run_id, commit)
             mcp_path = None
@@ -393,7 +415,7 @@ def main():
             if arm == "sem":
                 mcp_path = work_dir / "mcp" / f"{run_id}.json"
                 mcp_path.write_text(json.dumps(tools.mcp_config(str(sem_binary), workspace, sem_log), indent=2))
-            prompt = build_prompt(spec, task)
+            prompt = build_prompt(spec, task, brief=briefed)
             session_id = str(uuid.uuid4())
             cmd = tools.claude_command(prompt, args.model, EFFORT, MAX_TURNS, arm, writes=(task_class == "B2"),
                                        session_id=session_id, mcp_config_path=mcp_path,
@@ -438,6 +460,7 @@ def main():
                 "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                 "checkpoint": checkpoint, "build": build, "sem_version": sem_version,
                 "abapgit_commit": commit[:12], "model": args.model, "arm": arm,
+                "brief": int(briefed),
                 "task_class": task_class, "task_id": task["id"], "rep": rep, "dry_run": int(args.dry_run),
                 **usage,
                 "cost_usd": cost,

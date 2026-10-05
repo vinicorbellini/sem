@@ -15,6 +15,8 @@ import subprocess
 import time
 from pathlib import Path
 
+import tools
+
 # ── Config ──────────────────────────────────────────────────────────────────
 
 LINE_TOLERANCE = 2        # B1: a reported line within this many lines of the true call matches
@@ -229,6 +231,8 @@ def score_b2(task: dict, workspace: Path, base: Path, hidden_dir: Path, scratch:
         if applied.returncode != 0:
             return {"success_score": 0.0, "tests_passed": False, "patch_bytes": len(patch),
                     "error": "patch did not apply: " + applied.stderr.decode(errors="replace")[:300]}
+
+    tools.pin_transpile_libs(scratch, base.parent / tools.LIBS_SUBDIR)
 
     result = {"patch_bytes": len(patch)}
     result.update(signature_check(scratch, task))

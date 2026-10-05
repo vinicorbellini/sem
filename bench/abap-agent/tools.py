@@ -15,6 +15,7 @@ import os
 import queue
 import re
 import shlex
+import shutil
 import subprocess
 import threading
 import time
@@ -53,6 +54,65 @@ PARENT_SESSION_ENV = [
 # One line per unit test method printed by abapGit's output/index.mjs, e.g.
 # "ZCL_ABAPGIT_PATH: running ltcl_path->split_file_location" (", skipped ..." when not run)
 TEST_LINE = re.compile(r"^(\w+): running (\w+)->(\w+)(, skipped.*)?$", re.M)
+
+
+# ── abapGit build setup: pinned transpiler libraries ────────────────────────
+
+LIBS_FILE = Path(__file__).resolve().parent / "abapgit-transpile-libs.json"
+TRANSPILE_CONFIG = "test/abap_transpile.json"
+LIBS_SUBDIR = "libs"             # <work-dir>/libs/<name>, outside every checkout so agents and sem never see them
+
+
+def _git(args: list[str], cwd: Path | None = None) -> str:
+    r = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True)
+    if r.returncode != 0:
+        raise RuntimeError(f"git {' '.join(args)} failed: {r.stderr[:300]}")
+    return r.stdout.strip()
+
+
+def clone_pinned_libs(libs_dir: Path, libs_file: Path = LIBS_FILE) -> None:
+    """Each library of `libs_file` checked out at its pinned commit in `libs_dir/<name>`. Idempotent."""
+    libs_dir.mkdir(parents=True, exist_ok=True)
+    for name, lib in json.loads(libs_file.read_text())["libs"].items():
+        dest, commit = libs_dir / name, lib["commit"]
+        if not (dest / ".git").exists():
+            print(f"  Cloning {lib['repository']} at {commit[:12]}")
+            shutil.rmtree(dest, ignore_errors=True)
+            _git(["clone", "-q", "--no-checkout", "--filter=blob:none", lib["repository"], str(dest)])
+        if subprocess.run(["git", "-C", str(dest), "cat-file", "-e", f"{commit}^{{commit}}"],
+                          capture_output=True).returncode != 0:
+            _git(["fetch", "-q", "origin", commit], dest)
+        if _git(["rev-parse", "HEAD"], dest) != commit or _git(["status", "--porcelain"], dest):
+            _git(["checkout", "-q", "--force", "--detach", commit], dest)
+
+
+def pin_transpile_libs(root: Path, libs_dir: Path, libs_file: Path = LIBS_FILE) -> None:
+    """Point `root`'s test/abap_transpile.json at the pinned library folders, in place of cloning their URLs.
+
+    The transpiler resolves `libs[].folder` as path.join(cwd, folder), so an absolute path does not
+    work; the folder is written relative to `root`. The file is marked skip-worktree so it never
+    shows up in `git status`, nor in the agent's patch (scorers.workspace_patch).
+    """
+    pins = {lib["repository"].lower().rstrip("/"): name
+            for name, lib in json.loads(libs_file.read_text())["libs"].items()}
+    path = root / TRANSPILE_CONFIG
+    config = json.loads(path.read_text())
+    seen = set()
+    for lib in config.get("libs", []):
+        name = pins.get(lib.get("url", "").lower().rstrip("/"))
+        if name is None:
+            raise RuntimeError(f"{TRANSPILE_CONFIG} names a library not in {libs_file.name}: {lib}")
+        folder = libs_dir / name
+        if not folder.is_dir():
+            raise RuntimeError(f"pinned library {name} is not checked out in {libs_dir}")
+        del lib["url"]
+        lib["folder"] = os.path.relpath(folder, root)
+        seen.add(name)
+    if seen != set(pins.values()):
+        raise RuntimeError(f"{libs_file.name} pins libraries {sorted(set(pins.values()) - seen)} that "
+                           f"{TRANSPILE_CONFIG} no longer uses; update the pin file")
+    path.write_text(json.dumps(config, indent=2) + "\n")
+    _git(["update-index", "--skip-worktree", TRANSPILE_CONFIG], root)
 
 
 # ── Command line ────────────────────────────────────────────────────────────
