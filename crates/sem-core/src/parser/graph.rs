@@ -224,6 +224,7 @@ use crate::parser::mem_profile;
 use crate::parser::registry::{resolve_go_method_parent_ids, GoParentsResolved, ParserRegistry};
 use crate::parser::resolve_profile;
 use crate::parser::scope_resolve;
+use crate::parser::plugins::code::abap_include::{self, IncludeGraph as AbapIncludeGraph};
 
 #[cfg(not(test))]
 pub(crate) const PARSED_FILE_REUSE_LIMIT: usize = 20_000;
@@ -1382,6 +1383,25 @@ fn build_symbol_table_by_file<'a>(
         .collect()
 }
 
+/// The include graph of the ABAP files of `all_file_paths`, which joins a
+/// program and its includes into one compiled unit (`abap_include`). Empty
+/// unless one of `resolving_file_paths` is a `repo_wide_names` file, like
+/// `build_abap_global_table`. Reads only prog and fugr files, and only those
+/// that exist on disk under `root`.
+fn build_abap_includes(
+    root: &Path,
+    all_file_paths: &[String],
+    resolving_file_paths: &[String],
+) -> AbapIncludeGraph {
+    if !resolving_file_paths
+        .iter()
+        .any(|file_path| repo_wide_names_for_file(file_path))
+    {
+        return AbapIncludeGraph::default();
+    }
+    AbapIncludeGraph::build(root, all_file_paths)
+}
+
 /// One folded name's ABAP candidates outside the resolving entity's own file,
 /// split by how far each reaches (see `abap_name::abap_global_scope`).
 #[derive(Default)]
@@ -1418,6 +1438,7 @@ fn build_abap_global_table<'a>(
     symbol_table: &'a SymbolTable,
     entity_map: &'a EntityInfoMap,
     resolving_file_paths: &[String],
+    includes: &AbapIncludeGraph,
 ) -> AbapGlobalTable<'a> {
     use crate::parser::plugins::code::abap_name::{abap_global_scope, parse_abapgit_name, Scope};
     if !resolving_file_paths
@@ -1445,7 +1466,7 @@ fn build_abap_global_table<'a>(
                 if let Some(object) = parse_abapgit_name(&info.file_path) {
                     candidates
                         .by_object
-                        .entry(object.name.to_ascii_lowercase())
+                        .entry(includes.unit(&object.name))
                         .or_default()
                         .push(id.as_str());
                 }
@@ -1497,6 +1518,9 @@ struct ReferenceResolutionContext<'a> {
     // The ABAP candidates past the entity's own file (see
     // `build_abap_global_table`); empty when no ABAP file is resolved.
     abap_global: &'a AbapGlobalTable<'a>,
+    // The compiled unit of each ABAP object (`abap_include`): the scope a form
+    // is visible in is the unit, not the object.
+    abap_includes: &'a AbapIncludeGraph,
     imports_by_file: &'a ImportsByFile<'a>,
     scope_consumed_words: &'a ConsumedWords,
     child_ranges_by_parent: &'a ChildRangeIndex,
@@ -1924,12 +1948,19 @@ fn resolve_entity_references(
     // object, then repo-wide (`abap_scoped_target`). `None` for every other
     // language, which never reaches `abap_global`.
     let repo_wide = language_config.repo_wide_names();
-    let own_object = repo_wide
+    let own_object_name = repo_wide
         .then(|| {
             crate::parser::plugins::code::abap_name::parse_abapgit_name(&entity.file_path)
                 .map(|object| object.name.to_ascii_lowercase())
         })
         .flatten();
+    // The scope of a form is its compiled unit: the object and everything an
+    // `INCLUDE` joins it to. The read is recorded by object, so an include
+    // added elsewhere re-resolves the readers it now reaches.
+    let own_object = own_object_name.as_deref().map(|object| {
+        rec.one(Table::AbapUnit, object);
+        context.abap_includes.unit(object)
+    });
     let fallback_stripped = if reference_index.is_none() {
         Some(strip_for_language(
             language_config.strip_strategy(),
@@ -3377,11 +3408,14 @@ impl EntityGraph {
         let __symbol_table_by_file_t0 = std::time::Instant::now();
         let symbol_table_by_file = build_symbol_table_by_file(symbol_table.as_ref(), &entity_map);
         resolve_profile::add_symbol_table_by_file_ns(__symbol_table_by_file_t0.elapsed());
-        let abap_global = build_abap_global_table(symbol_table.as_ref(), &entity_map, file_paths);
+        let abap_includes = build_abap_includes(root, file_paths, file_paths);
+        let abap_global =
+            build_abap_global_table(symbol_table.as_ref(), &entity_map, file_paths, &abap_includes);
         let reference_context = ReferenceResolutionContext {
             entity_map: &entity_map,
             symbol_table_by_file: &symbol_table_by_file,
             abap_global: &abap_global,
+            abap_includes: &abap_includes,
             imports_by_file: &imports_by_file,
             scope_consumed_words: &scope_consumed_words,
             child_ranges_by_parent: &child_ranges_by_parent,
@@ -3402,6 +3436,7 @@ impl EntityGraph {
                 &parent_child_pairs,
                 &mut state.cur_fp,
             );
+            fingerprint_abap_units(&abap_includes, &mut state.cur_fp);
             resolve_profile::add_fingerprint_bow_tables_ns(__fingerprint_bow_t0.elapsed());
         }
         let resolved_refs = resolve_references_with_file_indexes(
@@ -3807,12 +3842,18 @@ impl EntityGraph {
 
         let imports_by_file = build_imports_by_file(&import_table);
         let symbol_table_by_file = build_symbol_table_by_file(symbol_table.as_ref(), &entity_map);
-        let abap_global =
-            build_abap_global_table(symbol_table.as_ref(), &entity_map, &resolve_file_paths);
+        let abap_includes = build_abap_includes(root, file_paths, &resolve_file_paths);
+        let abap_global = build_abap_global_table(
+            symbol_table.as_ref(),
+            &entity_map,
+            &resolve_file_paths,
+            &abap_includes,
+        );
         let reference_context = ReferenceResolutionContext {
             entity_map: &entity_map,
             symbol_table_by_file: &symbol_table_by_file,
             abap_global: &abap_global,
+            abap_includes: &abap_includes,
             imports_by_file: &imports_by_file,
             scope_consumed_words: &scope_consumed_words,
             child_ranges_by_parent: &child_ranges_by_parent,
@@ -4141,6 +4182,23 @@ impl EntityGraph {
                     affected_clean_ids.insert(entity.id.clone());
                     affected_clean_file_paths.insert(entity.file_path.as_str());
                 }
+            }
+        }
+
+        // An `INCLUDE` added or dropped in a stale program or function group
+        // file changes which forms every unit member sees, with no entity
+        // changed to name. So every clean program and function group entity is
+        // re-resolved (`AbapUnit`, which the session path fingerprints).
+        if stale_files
+            .iter()
+            .any(|file_path| abap_include::reads_includes(file_path))
+        {
+            for entity in all_entities.iter().filter(|entity| {
+                abap_include::reads_includes(&entity.file_path)
+                    && !stale_set.contains(entity.file_path.as_str())
+            }) {
+                affected_clean_ids.insert(entity.id.clone());
+                affected_clean_file_paths.insert(entity.file_path.as_str());
             }
         }
 
@@ -4592,12 +4650,18 @@ impl EntityGraph {
 
         let imports_by_file = build_imports_by_file(&import_table);
         let symbol_table_by_file = build_symbol_table_by_file(symbol_table.as_ref(), &entity_map);
-        let abap_global =
-            build_abap_global_table(symbol_table.as_ref(), &entity_map, &resolve_file_paths);
+        let abap_includes = build_abap_includes(root, all_file_paths, &resolve_file_paths);
+        let abap_global = build_abap_global_table(
+            symbol_table.as_ref(),
+            &entity_map,
+            &resolve_file_paths,
+            &abap_includes,
+        );
         let reference_context = ReferenceResolutionContext {
             entity_map: &entity_map,
             symbol_table_by_file: &symbol_table_by_file,
             abap_global: &abap_global,
+            abap_includes: &abap_includes,
             imports_by_file: &imports_by_file,
             scope_consumed_words: &scope_consumed_words,
             child_ranges_by_parent: &child_ranges_by_parent,
@@ -5286,6 +5350,18 @@ fn fingerprint_import_table(
             h.s(name).s(target);
         }
         sink.one(Table::ImportsForFile, file_path, h.finish());
+    }
+}
+
+/// Fingerprint the compiled unit of every ABAP object an `INCLUDE` joins to
+/// another. An object no include touches has no entry, and a reader of it
+/// recorded a miss, so gaining or losing an entry is a change.
+fn fingerprint_abap_units(includes: &AbapIncludeGraph, fp: &mut TableFingerprints) {
+    let mut sink = crate::parser::incremental::FingerprintSink::new(fp, 0);
+    for (object, digest) in includes.joined_objects() {
+        let mut h = ValueHasher::new();
+        h.s(&digest);
+        sink.one(Table::AbapUnit, object, h.finish());
     }
 }
 
