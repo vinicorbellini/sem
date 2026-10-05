@@ -1,0 +1,32 @@
+name: Linux
+
+on:
+  push:
+    branches: [abap]
+  pull_request:
+    branches: [abap]
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: crates
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates
+
+      - name: Build
+        run: cargo build --release -p sem-cli
+
+      # Release for the same reason as the Windows job: the wall-time and scale
+      # tests are calibrated for optimized binaries.
+      - name: Run tests
+        run: cargo test --release --no-fail-fast -p sem-core -p sem-cli
