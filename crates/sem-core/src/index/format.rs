@@ -226,7 +226,8 @@ pub fn i64_at(bytes: &[u8], at: usize) -> Option<i64> {
 ///
 /// `flags` was `_pad` until and is still written as zero by every
 /// build that cannot classify test entities; bit 0 ([`entity::FLAG_IS_TEST`])
-/// is trustworthy only when the header carries [`FLAG_ENTITY_TESTS`].
+/// is trustworthy only when the header carries [`FLAG_ENTITY_TESTS`]. Bit 1
+/// ([`entity::FLAG_FOLDED_NAME`]) is per-record and always trustworthy.
 ///
 /// `start_byte`/`end_byte` (`FORMAT_VERSION` 3) are `NONE_U32` when
 /// the writer had no byte span to record — `SemanticEntity.start_byte`/
@@ -248,6 +249,35 @@ pub mod entity {
     /// therefore this image) does not carry, which is exactly why the answer
     /// is precomputed here instead of derived on the read side.
     pub const FLAG_IS_TEST: u16 = 1 << 0;
+
+    /// This entity's language compares names case-insensitively
+    /// (`parser::graph::case_insensitive_for_file`, ABAP today), so `NAMES`
+    /// files it under its ASCII-lowercased name and `QueryIndex::lookup` finds
+    /// it under any spelling. The record's own name stays as written.
+    ///
+    /// No `FORMAT_VERSION` bump rides with this bit, for the reason
+    /// [`FLAG_ENTITY_TESTS`] gives: the record layout is unchanged, and an
+    /// image written before the bit existed has it clear on every entity,
+    /// which is exactly how that image ordered `NAMES` (by the name as
+    /// written). Such an image reads correctly and answers exact spellings
+    /// only, as it always did; no reader misreads it. An image with no
+    /// case-insensitive entity is byte-identical to one written before.
+    pub const FLAG_FOLDED_NAME: u16 = 1 << 1;
+
+    /// `NAMES` order between two names: a [`FLAG_FOLDED_NAME`] name compares
+    /// as its ASCII-lowercased bytes, any other as written. Equal to plain
+    /// byte order when neither side is folded.
+    pub fn cmp_name_keys(a: &[u8], a_folded: bool, b: &[u8], b_folded: bool) -> std::cmp::Ordering {
+        fn key(bytes: &[u8], folded: bool) -> impl Iterator<Item = u8> + '_ {
+            bytes
+                .iter()
+                .map(move |&c| if folded { c.to_ascii_lowercase() } else { c })
+        }
+        if !a_folded && !b_folded {
+            return a.cmp(b);
+        }
+        key(a, a_folded).cmp(key(b, b_folded))
+    }
 
     // A wire-format record writer is positional by nature; grouping these into
     // a struct would add a type whose only job is to be destructured here.

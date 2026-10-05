@@ -7,6 +7,7 @@ All notable changes to sem are documented in this file.
 ### Added
 
 - **ABAP language support.** Classes, class implementations, interfaces, methods and function modules are extracted as entities from `.abap` files (the files abapGit writes) via the mkoval1/tree-sitter-abap grammar, behind a `lang-abap` feature included in `grammar-all`. Methods nest under their `CLASS ... IMPLEMENTATION` block, which is an `impl` entity, the same type as a Rust `impl`.
+- **ABAP names are case-insensitive.** `sem find ZCL_FOO`, `sem find zcl_foo` and `sem find Zcl_Foo` return the same entities, named as written in source, and a reference written in one case resolves to a definition written in another. Only ABAP folds names, and only ASCII; every other language's output is unchanged. The index files ABAP names under their lowercased form, so an index written before this change keeps answering exact spellings until it is rebuilt.
 
 ### Changed
 

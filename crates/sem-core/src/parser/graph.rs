@@ -1595,7 +1595,11 @@ fn build_file_reference_index(
         Cow::Owned(content)
     };
     let __tok_t0 = std::time::Instant::now();
-    let stripped = strip_for_language(config.strip_strategy(), &content);
+    let mut stripped = strip_for_language(config.strip_strategy(), &content);
+    if config.case_insensitive() {
+        // Tokens meet folded symbol-table keys (see `symbol_key`).
+        stripped.make_ascii_lowercase();
+    }
     let index = FileReferenceIndex::from_stripped(&stripped, extra_ident_chars_for_file(file_path));
     resolve_profile::add_bow_index_tokenize_ns(__tok_t0.elapsed());
     Some(index)
@@ -1799,10 +1803,22 @@ fn resolve_entity_references(
         } else {
             reference_index
         };
+    // A case-insensitive file is read folded, like its reference index
+    // (`build_file_reference_index`), so its tokens meet folded symbol-table keys.
+    let folded = language_config.case_insensitive().then(|| {
+        (
+            entity.name.to_ascii_lowercase(),
+            entity.content.to_ascii_lowercase(),
+        )
+    });
+    let (own_name, content) = folded.as_ref().map_or(
+        (entity.name.as_str(), entity.content.as_str()),
+        |(name, content)| (name.as_str(), content.as_str()),
+    );
     let fallback_stripped = if reference_index.is_none() {
         Some(strip_for_language(
             language_config.strip_strategy(),
-            &entity.content,
+            content,
         ))
     } else {
         None
@@ -1921,12 +1937,12 @@ fn resolve_entity_references(
 
     let __ref_extract_t0 = bow_acc.is_some().then(std::time::Instant::now);
     let refs: Vec<(&str, RefType)> = match reference_index {
-        Some(index) => index.refs_with_types_in_ranges(&fallback_ranges, &entity.name),
+        Some(index) => index.refs_with_types_in_ranges(&fallback_ranges, own_name),
         None => {
             let stripped = fallback_stripped.as_ref().unwrap();
             extract_references_with_stripped_filtered(
-                &entity.content,
-                &entity.name,
+                content,
+                own_name,
                 stripped,
                 extra_ident_chars_for_file(&entity.file_path),
                 |local_line, local_start_byte, local_end_byte| {
@@ -1941,7 +1957,7 @@ fn resolve_entity_references(
                 },
             )
             .into_iter()
-            .map(|ref_name| (ref_name, infer_ref_type(&entity.content, ref_name)))
+            .map(|ref_name| (ref_name, infer_ref_type(content, ref_name)))
             .collect()
         }
     };
@@ -2728,10 +2744,11 @@ impl EntityGraph {
                 // every hit — `file_path` once per entity in the file. Same
                 // get_mut/insert idiom `child_line_ranges` above already uses.
                 let interned_id = EntityId::from(entity.id.as_str());
-                match symbol_table_owned.get_mut(entity.name.as_str()) {
+                let key = symbol_key(&entity.name, &entity.file_path);
+                match symbol_table_owned.get_mut(key.as_ref()) {
                     Some(bucket) => bucket.push(interned_id.clone()),
                     None => {
-                        symbol_table_owned.insert(entity.name.clone(), vec![interned_id.clone()]);
+                        symbol_table_owned.insert(key.into_owned(), vec![interned_id.clone()]);
                     }
                 }
                 owned_entity_map.insert(
@@ -3383,7 +3400,7 @@ impl EntityGraph {
         for entity in &all_entities {
             let interned_id = EntityId::from(entity.id.as_str());
             symbol_table
-                .entry(entity.name.clone())
+                .entry(symbol_key(&entity.name, &entity.file_path).into_owned())
                 .or_default()
                 .push(interned_id.clone());
 
@@ -3812,7 +3829,7 @@ impl EntityGraph {
         for entity in &all_entities {
             let interned_id = EntityId::from(entity.id.as_str());
             symbol_table
-                .entry(entity.name.clone())
+                .entry(symbol_key(&entity.name, &entity.file_path).into_owned())
                 .or_default()
                 .push(interned_id.clone());
             entity_map.insert(
@@ -3873,19 +3890,19 @@ impl EntityGraph {
             }
         }
 
-        let mut affected_target_names: HashSet<&str> = all_entities
+        let mut affected_target_names: HashSet<Cow<'_, str>> = all_entities
             .iter()
             .filter(|entity| {
                 truly_changed_ids.contains(&entity.id)
                     || parent_repaired_ids.contains(entity.id.as_str())
             })
-            .map(|entity| entity.name.as_str())
+            .map(|entity| symbol_key(&entity.name, &entity.file_path))
             .collect();
         affected_target_names.extend(
             stale_file_cached_entities
                 .iter()
                 .filter(|entity| deleted_ids.contains(entity.id.as_str()))
-                .map(|entity| entity.name.as_str()),
+                .map(|entity| symbol_key(&entity.name, &entity.file_path)),
         );
 
         // Clean entities can gain edges to names introduced by stale files even when
@@ -3893,7 +3910,7 @@ impl EntityGraph {
         if !affected_target_names.is_empty() {
             let affected_target_candidate_files: HashSet<&str> = affected_target_names
                 .iter()
-                .filter_map(|name| symbol_table.get(*name))
+                .filter_map(|name| symbol_table.get(name.as_ref()))
                 .flatten()
                 .filter_map(|entity_id| entity_file_paths.get(entity_id.as_str()).copied())
                 .filter(|file_path| !stale_set.contains(*file_path))
@@ -3918,13 +3935,14 @@ impl EntityGraph {
                 }
 
                 let extra = extra_ident_chars_for_file(&entity.file_path);
-                if !text_mentions_any_name(&entity.content, &affected_target_names, extra) {
+                let fold = case_insensitive_for_file(&entity.file_path);
+                if !text_mentions_any_name(&entity.content, &affected_target_names, extra, fold) {
                     continue;
                 }
 
                 let stripped =
                     strip_for_language(strip_strategy_for_file(&entity.file_path), &entity.content);
-                if text_mentions_any_name(&stripped, &affected_target_names, extra) {
+                if text_mentions_any_name(&stripped, &affected_target_names, extra, fold) {
                     affected_clean_ids.insert(entity.id.clone());
                     affected_clean_file_paths.insert(entity.file_path.as_str());
                 }
@@ -3944,13 +3962,13 @@ impl EntityGraph {
         };
 
         let mut new_stale_entity_ids: HashSet<&str> = HashSet::default();
-        let mut new_stale_names: HashSet<&str> = HashSet::default();
+        let mut new_stale_names: HashSet<Cow<'_, str>> = HashSet::default();
         for entity in &all_entities {
             if stale_set.contains(entity.file_path.as_str())
                 && !cached_hashes.contains_key(entity.id.as_str())
             {
                 new_stale_entity_ids.insert(entity.id.as_str());
-                new_stale_names.insert(entity.name.as_str());
+                new_stale_names.insert(symbol_key(&entity.name, &entity.file_path));
             }
         }
         if !new_stale_names.is_empty() {
@@ -3976,16 +3994,17 @@ impl EntityGraph {
                 .filter(|entity| !stale_set.contains(entity.file_path.as_str()))
             {
                 let extra = extra_ident_chars_for_file(&entity.file_path);
+                let fold = case_insensitive_for_file(&entity.file_path);
                 if !new_stale_names
                     .iter()
-                    .any(|name| content_contains_identifier(&entity.content, name, extra))
+                    .any(|name| content_contains_identifier(&entity.content, name, extra, fold))
                 {
                     continue;
                 }
 
                 let stripped =
                     strip_for_language(strip_strategy_for_file(&entity.file_path), &entity.content);
-                if text_mentions_any_name(&stripped, &new_stale_names, extra) {
+                if text_mentions_any_name(&stripped, &new_stale_names, extra, fold) {
                     clean_entities_mentioning_new_stale_names.insert(entity.id.as_str());
                     clean_import_candidate_files.insert(entity.file_path.as_str());
                 }
@@ -4038,16 +4057,17 @@ impl EntityGraph {
                 let mentions_new_stale_name = entity_mentions_new_stale_name;
                 let extra = extra_ident_chars_for_file(&entity.file_path);
                 let strip_strategy = strip_strategy_for_file(&entity.file_path);
+                let fold = case_insensitive_for_file(&entity.file_path);
                 let mentions_new_stale_import_token = import_tokens.map_or(false, |tokens| {
-                    tokens
-                        .iter()
-                        .any(|token| content_contains_identifier(&entity.content, token, extra))
+                    tokens.iter().any(|token| {
+                        content_contains_identifier(&entity.content, token, extra, fold)
+                    })
                 });
                 let imported_new_stale_ref = new_stale_import_refs_by_file
                     .get(entity.file_path.as_str())
                     .map_or(false, |local_names| {
                         local_names.iter().any(|local_name| {
-                            content_contains_identifier(&entity.content, local_name, extra)
+                            content_contains_identifier(&entity.content, local_name, extra, fold)
                         })
                     });
                 let refs = extract_references_from_content(
@@ -4120,9 +4140,10 @@ impl EntityGraph {
                     continue;
                 };
                 let extra = extra_ident_chars_for_file(&entity.file_path);
+                let fold = case_insensitive_for_file(&entity.file_path);
                 if tokens
                     .iter()
-                    .any(|token| content_contains_identifier(&entity.content, token, extra))
+                    .any(|token| content_contains_identifier(&entity.content, token, extra, fold))
                 {
                     affected_clean_ids.insert(entity.id.clone());
                     affected_clean_file_paths.insert(entity.file_path.as_str());
@@ -4873,7 +4894,7 @@ impl EntityGraph {
         });
         for entity in entities {
             symbol_table
-                .entry(entity.name.clone())
+                .entry(symbol_key(&entity.name, &entity.file_path).into_owned())
                 .or_default()
                 .push(entity.id.clone());
         }
@@ -4887,10 +4908,14 @@ impl EntityGraph {
         symbol_table: &SymbolTable,
         child_ranges_by_parent: &ChildRangeIndex,
     ) {
-        let stripped = strip_comments_and_strings(&entity.content);
+        let own_name = symbol_key(&entity.name, &entity.file_path);
+        let folded_content = case_insensitive_for_file(&entity.file_path)
+            .then(|| entity.content.to_ascii_lowercase());
+        let content = folded_content.as_deref().unwrap_or(&entity.content);
+        let stripped = strip_comments_and_strings(content);
         let refs = extract_references_with_stripped_filtered(
-            &entity.content,
-            &entity.name,
+            content,
+            &own_name,
             &stripped,
             extra_ident_chars_for_file(&entity.file_path),
             |local_line, local_start_byte, local_end_byte| {
@@ -4919,7 +4944,7 @@ impl EntityGraph {
                     .or_else(|| target_ids.iter().find(|id| *id != &entity.id));
 
                 if let Some(target_id) = target {
-                    let ref_type = infer_ref_type(&entity.content, &ref_name);
+                    let ref_type = infer_ref_type(content, &ref_name);
                     self.edges.push(EntityRef {
                         from_entity: (&entity.id).into(),
                         to_entity: target_id.clone(),
@@ -6332,13 +6357,14 @@ fn maintain_entity_lookups_incremental(
             wildcard_guard_delta ^=
                 scope_resolve::wildcard_guard_contribution(&entity.name, &entity.file_path);
             entity_map.remove(&entity.id);
-            if let Some(bucket) = symbol_table.get_mut(&entity.name) {
+            let key = symbol_key(&entity.name, &entity.file_path);
+            if let Some(bucket) = symbol_table.get_mut(key.as_ref()) {
                 bucket.retain(|id| id != &entity.id);
                 if bucket.is_empty() {
-                    symbol_table.remove(&entity.name);
+                    symbol_table.remove(key.as_ref());
                 }
             }
-            touched_names.insert(entity.name.clone());
+            touched_names.insert(key.into_owned());
 
             if let Some(pid) = entity.parent_id.as_deref() {
                 touched_parent_ids.insert(pid.to_string());
@@ -6400,11 +6426,12 @@ fn maintain_entity_lookups_incremental(
             touched_entity_ids.insert(entity.id.clone());
             wildcard_guard_delta ^=
                 scope_resolve::wildcard_guard_contribution(&entity.name, &entity.file_path);
+            let key = symbol_key(&entity.name, &entity.file_path).into_owned();
             symbol_table
-                .entry(entity.name.clone())
+                .entry(key.clone())
                 .or_default()
                 .push(interned_id.clone());
-            touched_names.insert(entity.name.clone());
+            touched_names.insert(key);
 
             entity_map.insert(
                 interned_id.clone(),
@@ -7580,6 +7607,26 @@ fn strip_strategy_for_file(
     )
 }
 
+/// Whether names in a given file compare case-insensitively.
+/// ABAP folds (`ZCL_FOO` and `zcl_foo` are one class); all other languages do not.
+pub fn case_insensitive_for_file(file_path: &str) -> bool {
+    let ext = file_path.rfind('.').map(|i| &file_path[i..]).unwrap_or("");
+    crate::parser::plugins::code::languages::get_language_config(ext)
+        .is_some_and(|c| c.case_insensitive())
+}
+
+/// The symbol-table key for an entity name: ASCII-lowercased when its file is
+/// case-insensitive, the name as written otherwise. Tokens from such a file are
+/// folded the same way before they probe the table; `EntityInfo.name` keeps the
+/// name as written, so display is never rewritten.
+fn symbol_key<'a>(name: &'a str, file_path: &str) -> Cow<'a, str> {
+    if case_insensitive_for_file(file_path) {
+        Cow::Owned(name.to_ascii_lowercase())
+    } else {
+        Cow::Borrowed(name)
+    }
+}
+
 /// Extract identifier references from entity content using simple token analysis.
 /// Strips comments and strings first to avoid false positives from docstrings.
 /// Returns borrowed slices from the stripped content.
@@ -7615,20 +7662,32 @@ fn token_iter<'a>(text: &'a str, extra: &'static [char]) -> impl Iterator<Item =
     })
 }
 
+/// `names` holds symbol-table keys (see `symbol_key`), so a case-insensitive
+/// `text` folds each token before the probe.
 fn text_mentions_any_name(
     text: &str,
-    names: &HashSet<&str>,
+    names: &HashSet<Cow<'_, str>>,
     extra_ident_chars: &'static [char],
+    case_insensitive: bool,
 ) -> bool {
-    token_iter(text, extra_ident_chars).any(|t| names.contains(t))
+    if case_insensitive {
+        token_iter(text, extra_ident_chars).any(|t| names.contains(t.to_ascii_lowercase().as_str()))
+    } else {
+        token_iter(text, extra_ident_chars).any(|t| names.contains(t))
+    }
 }
 
 fn content_contains_identifier(
     content: &str,
     identifier: &str,
     extra_ident_chars: &'static [char],
+    case_insensitive: bool,
 ) -> bool {
-    token_iter(content, extra_ident_chars).any(|t| t == identifier)
+    if case_insensitive {
+        token_iter(content, extra_ident_chars).any(|t| t.eq_ignore_ascii_case(identifier))
+    } else {
+        token_iter(content, extra_ident_chars).any(|t| t == identifier)
+    }
 }
 
 const IMPORT_SCAN_PREFIX_LINES: usize = 80;

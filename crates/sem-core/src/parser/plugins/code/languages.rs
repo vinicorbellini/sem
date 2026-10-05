@@ -57,6 +57,10 @@ impl LanguageConfig {
         self.id == "clojure"
     }
 
+    pub(crate) fn case_insensitive(&self) -> bool {
+        self.id == "abap"
+    }
+
     pub(crate) fn extract_map_entries(&self) -> bool {
         self.id == "edn"
     }
