@@ -58,6 +58,15 @@ pub struct Layout {
     pub pooled_uses: Vec<bool>,
     /// Importable name (import path) -> directory module index.
     pub dir_crates: HashMap<String, usize>,
+    /// For each pooled file, the directory module that holds its scope 1's
+    /// items, if not the file itself: names local to a unit of several files
+    /// (an ABAP object's parts), while its top level pools into a wider
+    /// directory. The file's scope 0 falls back to this directory first.
+    pub local_home: Vec<Option<usize>>,
+    /// Directory modules are lookup blocks that fall back to their parent,
+    /// not named modules: a name a directory does not define is looked up in
+    /// the one above it, and no directory is a member of its parent.
+    pub dirs_fall_back: bool,
 }
 
 impl Layout {
@@ -152,6 +161,28 @@ pub trait Lang: Sync {
     /// (Go embedding) any such base may be the shallower one.
     fn ordered_bases(&self) -> bool {
         false
+    }
+    /// Names are case-insensitive (ABAP): the lowering folds them to lower
+    /// case, and sem's entity names are folded the same way to match them.
+    fn case_insensitive(&self) -> bool {
+        false
+    }
+    /// A bare call `m()` inside a method may name a method of the enclosing
+    /// type, with no receiver written (ABAP): a single-segment path that is
+    /// not a local is looked up as a member of `self` first.
+    fn implicit_self(&self) -> bool {
+        false
+    }
+    /// This pipeline's edges replace the bag-of-words resolver's for the
+    /// language's files: that resolver skips them, and its call edges into
+    /// their functions are dropped. Otherwise both run and both keep their
+    /// edges, the pipeline's kind winning where both find one pair.
+    fn replaces_bow(&self) -> bool {
+        true
+    }
+    /// The sem entity types a function declaration maps to.
+    fn fn_entity_types(&self) -> &'static [&'static str] {
+        &["function", "method"]
     }
     /// The receiver name inside methods (`self`, `this`).
     fn self_value(&self) -> &'static str;

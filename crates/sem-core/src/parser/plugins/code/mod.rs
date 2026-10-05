@@ -1,4 +1,4 @@
-mod abap_fallback;
+pub(crate) mod abap_fallback;
 pub mod abap_name;
 pub mod abap_include;
 mod entity_extractor;
@@ -3025,10 +3025,16 @@ DATA gv_global TYPE i.
     #[cfg(feature = "lang-abap")]
     fn abap_label(graph: &crate::parser::graph::EntityGraph, id: &str) -> String {
         let entity = &graph.entities[id];
-        let object = abap_name::parse_abapgit_name(&entity.file_path)
+        abap_object_label(&entity.file_path, &entity.name)
+    }
+
+    /// The `abap_label` of an entity named `name` in `file_path`.
+    #[cfg(feature = "lang-abap")]
+    fn abap_object_label(file_path: &str, name: &str) -> String {
+        let object = abap_name::parse_abapgit_name(file_path)
             .map(|o| o.name.to_ascii_lowercase())
             .unwrap_or_default();
-        let name = entity.name.to_ascii_lowercase();
+        let name = name.to_ascii_lowercase();
         if name == object {
             object
         } else {
@@ -3600,6 +3606,404 @@ DATA gv_global TYPE i.
             assert_eq!(reaches(&fresh), expected, "fresh, `{includes}`");
             assert_eq!(abap_edges(&incremental), abap_edges(&fresh), "build_incremental, `{includes}`");
             assert_eq!(abap_edges(session.graph()), abap_edges(&fresh), "session, `{includes}`");
+            graph = incremental;
+            entities = next;
+        }
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_1_keyword_is_not_a_unique_name() {
+        // `CREATE PUBLIC` in a class definition is a keyword, not a call of
+        // `zcl_fx_order.create`, the repo's one `create`: no class reaches it.
+        // `run`'s `ZCL_FX_ORDER=>CREATE( 1 )` writes it as a call and still does.
+        let edges = abap_fixture_2_0_edges();
+        for class in ["zcl_fx_user", "zcl_fx_other", "zcl_fx_order_sub"] {
+            assert!(!edges.contains(&abap_edge(class, "zcl_fx_order.create")), "{class}: {edges:?}");
+        }
+        assert!(edges.contains(&abap_edge("zcl_fx_user.run", "zcl_fx_order.create")), "got: {edges:?}");
+
+        // A keyword written as a call through an untyped receiver still binds
+        // by the unique name, in any case; one written only as a keyword, in
+        // the method's own lines, does not.
+        let class = |name: &str, body: &str| {
+            format!(
+                "CLASS {name} DEFINITION PUBLIC CREATE PUBLIC.\n  PUBLIC SECTION.\n    METHODS create.\nENDCLASS.\n\n\nCLASS {name} IMPLEMENTATION.\n\n  METHOD create.\n    {body}\n  ENDMETHOD.\n\nENDCLASS.\n"
+            )
+        };
+        let user = |name: &str, body: &str| {
+            format!(
+                "CLASS {name} DEFINITION PUBLIC CREATE PUBLIC.\n  PUBLIC SECTION.\n    METHODS go.\nENDCLASS.\n\n\nCLASS {name} IMPLEMENTATION.\n\n  METHOD go.\n    {body}\n  ENDMETHOD.\n\nENDCLASS.\n"
+            )
+        };
+        let graph = abap_graph(&[
+            ("zcl_a.clas.abap", class("zcl_a", "WRITE 'a'.")),
+            ("zcl_b.clas.abap", user("zcl_b", "lo_a->CREATE( ).")),
+            ("zcl_c.clas.abap", user("zcl_c", "CREATE OBJECT lo_a.")),
+        ]);
+        let edges = abap_edges(&graph);
+        assert!(edges.contains(&abap_edge("zcl_b.go", "zcl_a.create")), "got: {edges:?}");
+        assert!(
+            !edges.iter().any(|(from, to)| from.starts_with("zcl_c") && to == "zcl_a.create"),
+            "got: {edges:?}"
+        );
+    }
+
+    // Spec 2.1: a call written in a static form resolves exactly, through the
+    // calls pipeline, beside the bag-of-words resolver until receivers are typed.
+
+    /// The story 2.1 fixture objects: 2.0's, `zcl_fx_calls`, and the report and
+    /// function group that call by `PERFORM` and `CALL FUNCTION`.
+    #[cfg(feature = "lang-abap")]
+    const ABAP_FIXTURE_2_1_FILES: &[&str] = &[
+        "zif_fx_order.intf.abap",
+        "zcl_fx_order.clas.abap",
+        "zcl_fx_order.clas.locals_def.abap",
+        "zcl_fx_order.clas.locals_imp.abap",
+        "zcl_fx_order.clas.testclasses.abap",
+        "zcl_fx_order_sub.clas.abap",
+        "zcl_fx_user.clas.abap",
+        "zcl_fx_other.clas.abap",
+        "zcl_fx_other.clas.locals_imp.abap",
+        "zcl_fx_other.clas.testclasses.abap",
+        "zcl_fx_calls.clas.abap",
+        "zfx_report.prog.abap",
+        "zfx_fg.fugr.zfx_fm.abap",
+        "zfx_fg.fugr.lzfx_fgf01.abap",
+    ];
+
+    /// One call site of the calls pipeline: its file, its 1-based line, and its
+    /// answer, the callees' `abap_label`s, `external` or `unknown: <reason>`.
+    #[cfg(feature = "lang-abap")]
+    type AbapSite = (String, usize, String);
+
+    /// Every call site of the story 2.1 fixture as the calls pipeline answers
+    /// it alone, and the pipeline's counts.
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_1_calls() -> (Vec<AbapSite>, crate::parser::calls::Stats) {
+        use crate::parser::calls::{self, SiteAnswer};
+        let registry = crate::parser::plugins::create_default_registry();
+        let sources: Vec<(&str, String)> = ABAP_FIXTURE_2_1_FILES
+            .iter()
+            .map(|file| (*file, abap_fixture_text(file)))
+            .collect();
+        let entities: Vec<SemanticEntity> = sources
+            .iter()
+            .flat_map(|(file, src)| registry.extract_entities(file, src))
+            .collect();
+        let labels: HashMap<&str, String> = entities
+            .iter()
+            .map(|e| (e.id.as_str(), abap_object_label(&e.file_path, &e.name)))
+            .collect();
+        let facts: Vec<(&str, calls::ir::FileFacts)> = sources
+            .iter()
+            .map(|(file, src)| (*file, calls::lower_source(file, src).expect("an ABAP file")))
+            .collect();
+        let files: Vec<(&str, &calls::ir::FileFacts)> =
+            facts.iter().map(|(file, f)| (*file, f)).collect();
+        let lang = calls::language_for("zcl_fx_calls.clas.abap").expect("ABAP is in LANGUAGES");
+        let root = std::path::Path::new("/nonexistent");
+        let mut sites = Vec::new();
+        for ((file, src), answers) in sources.iter().zip(calls::site_answers(root, lang, &files, &entities)) {
+            for (at, call, answer) in answers {
+                if !call {
+                    continue;
+                }
+                let answer = match answer {
+                    SiteAnswer::Defs(ids) => {
+                        ids.iter().map(|id| labels[id.as_str()].as_str()).collect::<Vec<_>>().join(" ")
+                    }
+                    SiteAnswer::Value(..) => "value".to_string(),
+                    SiteAnswer::External(_) => "external".to_string(),
+                    SiteAnswer::Unknown(why) => format!("unknown: {why}"),
+                };
+                let line = src[..at as usize].matches('\n').count() + 1;
+                sites.push((file.to_string(), line, answer));
+            }
+        }
+        let (_, stats) = calls::resolve(root, lang, &files, &entities);
+        (sites, stats)
+    }
+
+    /// The answers of the call sites on `line` of `file`, in source order.
+    #[cfg(feature = "lang-abap")]
+    fn abap_answers<'s>(sites: &'s [AbapSite], file: &str, line: usize) -> Vec<&'s str> {
+        sites
+            .iter()
+            .filter(|(f, l, _)| f == file && *l == line)
+            .map(|(_, _, answer)| answer.as_str())
+            .collect()
+    }
+
+    /// Every edge of the story 2.1 fixture's graph as (from, to, kind), by
+    /// `abap_label`.
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_1_edges() -> Vec<(String, String, &'static str)> {
+        let files: Vec<(&str, String)> = ABAP_FIXTURE_2_1_FILES
+            .iter()
+            .map(|file| (*file, abap_fixture_text(file)))
+            .collect();
+        let graph = abap_graph(&files);
+        let mut edges: Vec<(String, String, &'static str)> = graph
+            .edges
+            .iter()
+            .map(|edge| {
+                (
+                    abap_label(&graph, edge.from_entity.as_str()),
+                    abap_label(&graph, edge.to_entity.as_str()),
+                    edge.ref_type.as_str(),
+                )
+            })
+            .collect();
+        edges.sort();
+        edges
+    }
+
+    #[cfg(feature = "lang-abap")]
+    fn abap_typed_edge(from: &str, to: &str, kind: &'static str) -> (String, String, &'static str) {
+        (from.to_string(), to.to_string(), kind)
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_1_me_call() {
+        // `me->static_call( )`, `STATIC_CALL( )` with no receiver, and
+        // `CALL METHOD me->static_call` reach the class's own method.
+        let (sites, _) = abap_fixture_2_1_calls();
+        for line in [26, 27, 28] {
+            assert_eq!(
+                abap_answers(&sites, "zcl_fx_calls.clas.abap", line),
+                vec!["zcl_fx_calls.static_call"],
+                "line {line}"
+            );
+        }
+        let edges = abap_fixture_2_1_edges();
+        assert!(
+            edges.contains(&abap_typed_edge("zcl_fx_calls.me_call", "zcl_fx_calls.static_call", "calls")),
+            "got: {edges:?}"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_1_static_call() {
+        // `zcl_fx_order=>create( )` in any case, here and in another object.
+        let (sites, _) = abap_fixture_2_1_calls();
+        for (file, line) in [
+            ("zcl_fx_calls.clas.abap", 32),
+            ("zcl_fx_calls.clas.abap", 33),
+            ("zcl_fx_user.clas.abap", 13),
+            ("zcl_fx_order.clas.testclasses.abap", 15),
+            ("zfx_fg.fugr.zfx_fm.abap", 10),
+        ] {
+            assert_eq!(abap_answers(&sites, file, line), vec!["zcl_fx_order.create"], "{file}:{line}");
+        }
+        let edges = abap_fixture_2_1_edges();
+        assert!(
+            edges.contains(&abap_typed_edge("zcl_fx_user.run", "zcl_fx_order.create", "calls")),
+            "got: {edges:?}"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_1_super_call() {
+        // `super->describe( )` in a redefinition reaches the base class's.
+        let (sites, _) = abap_fixture_2_1_calls();
+        for (file, line) in [
+            ("zcl_fx_order_sub.clas.abap", 12),
+            ("zcl_fx_calls.clas.abap", 21),
+        ] {
+            assert_eq!(abap_answers(&sites, file, line), vec!["zcl_fx_order.describe"], "{file}:{line}");
+        }
+        let edges = abap_fixture_2_1_edges();
+        assert!(
+            edges.contains(&abap_typed_edge("zcl_fx_order_sub.describe", "zcl_fx_order.describe", "calls")),
+            "got: {edges:?}"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_1_interface_prefixed_call() {
+        // `zif_fx_order~get_total( )` with no receiver is the class's own
+        // implementing method, or the one it inherits. Beside it on line 30,
+        // `lo_helper->tag( )` has no receiver type yet.
+        let (sites, _) = abap_fixture_2_1_calls();
+        assert_eq!(
+            abap_answers(&sites, "zcl_fx_order.clas.abap", 30),
+            vec!["zcl_fx_order.zif_fx_order~get_total", "unknown: unknown receiver type"]
+        );
+        for line in [38, 39] {
+            assert_eq!(
+                abap_answers(&sites, "zcl_fx_calls.clas.abap", line),
+                vec!["zcl_fx_order.zif_fx_order~get_total"],
+                "line {line}"
+            );
+        }
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_1_call_method() {
+        // `CALL METHOD x->m` answers as `x->m( )` does, for `super`, `me`, a
+        // class and a receiver with no type.
+        let (sites, _) = abap_fixture_2_1_calls();
+        let file = "zcl_fx_calls.clas.abap";
+        for (classic, functional) in [(22, 21), (28, 26), (34, 32), (55, 54)] {
+            assert_eq!(
+                abap_answers(&sites, file, classic),
+                abap_answers(&sites, file, functional),
+                "line {classic} against {functional}"
+            );
+            assert_eq!(abap_answers(&sites, file, classic).len(), 1, "line {classic}");
+        }
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_1_call_function() {
+        // `CALL FUNCTION 'ZFX_FM'` names the function module in a literal,
+        // which the stripper blanks; in any case.
+        let (sites, _) = abap_fixture_2_1_calls();
+        for (file, line) in [
+            ("zfx_report.prog.abap", 15),
+            ("zcl_fx_calls.clas.abap", 43),
+            ("zcl_fx_calls.clas.abap", 44),
+        ] {
+            assert_eq!(abap_answers(&sites, file, line), vec!["zfx_fg.zfx_fm"], "{file}:{line}");
+        }
+        // The report's own statements are its body; the method's call is its own.
+        let edges = abap_fixture_2_1_edges();
+        for from in ["zfx_report", "zcl_fx_calls.call_function"] {
+            assert!(edges.contains(&abap_typed_edge(from, "zfx_fg.zfx_fm", "calls")), "{from}: {edges:?}");
+        }
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_1_perform() {
+        // `PERFORM show_order` reaches the report's form, and `PERFORM
+        // calc_extra` in a function module the form in its function group's
+        // other file.
+        let (sites, _) = abap_fixture_2_1_calls();
+        assert_eq!(abap_answers(&sites, "zfx_report.prog.abap", 14), vec!["zfx_report.show_order"]);
+        assert_eq!(abap_answers(&sites, "zfx_fg.fugr.zfx_fm.abap", 12), vec!["zfx_fg.calc_extra"]);
+        let edges = abap_fixture_2_1_edges();
+        for (from, to) in [("zfx_report", "zfx_report.show_order"), ("zfx_fg.zfx_fm", "zfx_fg.calc_extra")] {
+            assert!(edges.contains(&abap_typed_edge(from, to, "calls")), "{from} -> {to}: {edges:?}");
+        }
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_1_new_gives_class_edge() {
+        // `NEW zcl_x( )` calls the class: an edge to the class entity.
+        let (sites, _) = abap_fixture_2_1_calls();
+        for (file, line, class) in [
+            ("zfx_report.prog.abap", 22, "zcl_fx_order"),
+            ("zcl_fx_calls.clas.abap", 48, "zcl_fx_order"),
+            ("zcl_fx_calls.clas.abap", 49, "zcl_fx_other"),
+        ] {
+            assert_eq!(abap_answers(&sites, file, line), vec![class], "{file}:{line}");
+        }
+        let edges = abap_fixture_2_1_edges();
+        assert!(
+            edges.contains(&abap_typed_edge("zfx_report.show_order", "zcl_fx_order", "calls")),
+            "got: {edges:?}"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_1_attribute_refs_kept() {
+        // The eight `typeref` edges from methods to their own class's
+        // attributes, which the graph had before the pipeline ran for ABAP.
+        let edges = abap_fixture_2_1_edges();
+        for (from, to) in [
+            ("zcl_fx_order.constructor", "zcl_fx_order.mv_id"),
+            ("zcl_fx_order.describe", "zcl_fx_order.mv_id"),
+            ("zcl_fx_order.zif_fx_order~add_item", "zcl_fx_order.mt_names"),
+            ("zcl_fx_order.zif_fx_order~add_item", "zcl_fx_order.mv_total"),
+            ("zcl_fx_order.zif_fx_order~get_total", "zcl_fx_order.mv_total"),
+            ("zcl_fx_order.setup", "zcl_fx_order.mo_cut"),
+            ("zcl_fx_order.total_starts_at_zero", "zcl_fx_order.mo_cut"),
+            ("zcl_fx_order.describe_mentions_id", "zcl_fx_order.mo_cut"),
+        ] {
+            assert!(edges.contains(&abap_typed_edge(from, to, "typeref")), "{from} -> {to}: {edges:?}");
+        }
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_1_unknown_receiver() {
+        // A receiver with no type yet, a local or an attribute, is an unknown
+        // with its reason, in `Stats.unresolved`, never a guessed target.
+        // (The bag-of-words resolver still binds `total` by its unique name
+        // until receivers are typed and the pipeline replaces it.)
+        let (sites, stats) = abap_fixture_2_1_calls();
+        for line in [54, 55, 56] {
+            assert_eq!(
+                abap_answers(&sites, "zcl_fx_calls.clas.abap", line),
+                vec!["unknown: unknown receiver type"],
+                "line {line}"
+            );
+        }
+        let unknown = sites.iter().filter(|(_, _, a)| a == "unknown: unknown receiver type").count();
+        let reasons: Vec<(&str, usize)> = stats.unresolved.iter().map(|(why, n)| (*why, *n)).collect();
+        assert_eq!(reasons, vec![("unknown receiver type", unknown)]);
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_1_incremental_static_call() {
+        // zcl_c calls `zcl_a=>ping( )` and stays clean while zcl_a loses and
+        // regains `ping`: incremental rebuilds give the pipeline's edge as a
+        // fresh build does.
+        let class = |name: &str, method: &str, body: &str| {
+            format!(
+                "CLASS {name} DEFINITION PUBLIC CREATE PUBLIC.\n  PUBLIC SECTION.\n    CLASS-METHODS {method}.\nENDCLASS.\n\n\nCLASS {name} IMPLEMENTATION.\n\n  METHOD {method}.\n    {body}\n  ENDMETHOD.\n\nENDCLASS.\n"
+            )
+        };
+        let dir = tempfile::TempDir::new().unwrap();
+        let write = |file: &str, content: String| std::fs::write(dir.path().join(file), content).unwrap();
+        let files: Vec<String> = ["zcl_a.clas.abap", "zcl_c.clas.abap"].iter().map(|f| f.to_string()).collect();
+        let registry = crate::parser::plugins::create_default_registry();
+        let build = || crate::parser::graph::EntityGraph::build(dir.path(), &files, &registry);
+        let go_calls = |graph: &crate::parser::graph::EntityGraph| -> Vec<String> {
+            graph
+                .edges
+                .iter()
+                .filter(|e| abap_label(graph, e.from_entity.as_str()) == "zcl_c.go")
+                .filter(|e| e.ref_type.as_str() == "calls")
+                .map(|e| abap_label(graph, e.to_entity.as_str()))
+                .collect()
+        };
+
+        write("zcl_a.clas.abap", class("zcl_a", "ping", "WRITE 'a'."));
+        write("zcl_c.clas.abap", class("zcl_c", "go", "zcl_a=>ping( )."));
+        let (mut graph, mut entities) = build();
+        let mut session = crate::parser::session::GraphSession::build(dir.path(), &files, &registry);
+        assert_eq!(go_calls(&graph), vec!["zcl_a.ping"]);
+
+        for (method, expected) in [("pong", vec![]), ("ping", vec!["zcl_a.ping"])] {
+            write("zcl_a.clas.abap", class("zcl_a", method, "WRITE 'a'."));
+            let file = "zcl_a.clas.abap";
+            let (stale, clean): (Vec<_>, Vec<_>) = entities.into_iter().partition(|e| e.file_path == file);
+            let (incremental, next) = crate::parser::graph::EntityGraph::build_incremental(
+                dir.path(),
+                &[file.to_string()],
+                &files,
+                clean,
+                graph.edges,
+                stale,
+                &registry,
+            );
+            session.rebuild(&files, &[file.to_string()], &registry);
+            let fresh = build().0;
+            assert_eq!(go_calls(&fresh), expected, "zcl_a defines {method}");
+            assert_eq!(go_calls(&incremental), expected, "build_incremental, zcl_a defines {method}");
+            assert_eq!(go_calls(session.graph()), expected, "session, zcl_a defines {method}");
             graph = incremental;
             entities = next;
         }

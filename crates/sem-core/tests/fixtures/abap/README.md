@@ -16,6 +16,7 @@ Story 1.1 is case-insensitive names, 1.2 comment and string stripping, 1.3 the
 full entity set, 1.4 one entity per class, 1.5 abapGit layout, 1.6 parse-error
 tolerance, 1.7 test detection, 1.10 METHOD blocks the grammar loses, 2.0 names
 across files, 2.4 includes and function groups.
+across files, 2.1 static calls.
 
 | Fixture file | Tests that read it | Story |
 |--------------|--------------------|-------|
@@ -28,6 +29,7 @@ across files, 2.4 includes and function groups.
 | | `abap_fixture_1_1_find_any_case`, `abap_fixture_1_1_refs_any_case` | 1.1 |
 | | `abap_fixture_1_6_errors_still_yield_entities`, `abap_fixture_1_6_error_count_reported` (broken copies of it) | 1.6, 1.10 |
 | | the `abap_fixture_2_0_*` tests (the class and `create` reached from other objects) | 2.0 |
+| | `abap_fixture_2_1_interface_prefixed_call` (`zif_fx_order~get_total( )` and `lo_helper->tag( )` in `describe`), `abap_fixture_2_1_attribute_refs_kept` | 2.1 |
 | `zcl_fx_order.clas.locals_def.abap` | `test_abap_fixture_clas_locals_def`, `abap_fixture_1_3_local_classes_attach` | 1.3 |
 | | `abap_fixture_2_0_local_class_stays_in_object` | 2.0 |
 | `zcl_fx_order.clas.locals_imp.abap` | `test_abap_fixture_clas_locals_imp` | 1.4 |
@@ -41,13 +43,17 @@ across files, 2.4 includes and function groups.
 | `zcl_fx_order_sub.clas.abap` | `test_abap_fixture_clas_sub` | 1.4 |
 | | `abap_fixture_1_1_find_any_case` | 1.1 |
 | | `abap_fixture_2_0_ambiguous_method_no_edge` (a third `describe`) | 2.0 |
+| | `abap_fixture_2_1_super_call` (`super->describe( )`) | 2.1 |
 | `zcl_fx_user.clas.abap` | `abap_fixture_2_0_global_class_across_files`, `abap_fixture_2_0_unique_method_across_files`, `abap_fixture_2_0_ambiguous_method_no_edge` (its `describe`) | 2.0 |
+| | `abap_fixture_2_1_static_call` (`ZCL_FX_ORDER=>CREATE( 1 )`) | 2.1 |
+| `zcl_fx_calls.clas.abap` | the `abap_fixture_2_1_*` tests: one method per static call form, each in its functional and `CALL METHOD` spelling or in both cases, a `NEW`, and receivers with no type | 2.1 |
 | `zcl_fx_other.clas.abap` | `abap_fixture_2_0_local_class_stays_in_object`, `abap_fixture_2_0_ambiguous_method_no_edge`, `abap_fixture_2_0_unique_method_across_files` (`zif_fx_order~get_total`) | 2.0 |
 | `zcl_fx_other.clas.locals_imp.abap` | `abap_fixture_2_0_local_class_stays_in_object` (a second `lcl_helper`) | 2.0 |
 | `zcl_fx_other.clas.testclasses.abap` | `abap_fixture_2_0_local_friends_does_not_shadow` (`LOCAL FRIENDS`) | 2.0 |
 | `zfx_report.prog.abap` | `test_abap_fixture_prog`, `abap_fixture_1_3_report`, `abap_fixture_1_3_form`, `abap_fixture_1_3_macro` | 1.3 |
 | | `abap_fixture_1_6_errors_still_yield_entities`, `abap_fixture_1_6_error_count_reported` | 1.6 |
 | | `abap_fixture_2_4_forms_do_not_leak` | 2.4 |
+| | `abap_fixture_2_1_perform`, `abap_fixture_2_1_call_function`, `abap_fixture_2_1_new_gives_class_edge` (the report's own statements and `show_order`) | 2.1 |
 | `zfx_report_f01.prog.abap` | `test_abap_fixture_prog_include`, `abap_fixture_1_3_form` | 1.3 |
 | `zfx_dynamic.prog.abap` | `abap_fixture_2_5_*` in `crates/sem-cli/tests/abap_completeness_cli.rs` (the completeness verdict reads its computed calls); the graph-side tests join once story 2.1's lowering lands | 2.5 |
 | | `abap_fixture_2_4_include_joins_forms`, `abap_fixture_2_4_forms_do_not_leak` (the include is shared with `zfx_report2`) | 2.4 |
@@ -55,11 +61,13 @@ across files, 2.4 includes and function groups.
 | `zfx_other.prog.abap` | `abap_fixture_2_4_forms_do_not_leak`, `abap_fixture_2_4_in_program_target` (ignored until story 2.1), the same-name `show_order` | 2.4 |
 | `zfx_fg.fugr.zfx_fm.abap` | `test_abap_fixture_fugr_function_module`, `abap_fixture_1_3_function` | 1.3 |
 | | `abap_fixture_2_4_fugr_perform` | 2.4 |
+| | `abap_fixture_2_1_call_function` (the target), `abap_fixture_2_1_perform` (`PERFORM calc_extra`), `abap_fixture_2_1_static_call` | 2.1 |
 | `zfx_fg.fugr.saplzfx_fg.abap` | `test_abap_fixture_fugr_main_program` (no entities) | 1.3 |
 | | `abap_fixture_2_4_missing_include_recorded` (`lzfx_fguxx` is not in the repo) | 2.4 |
 | `zfx_fg.fugr.lzfx_fgtop.abap` | `test_abap_fixture_fugr_top_include` (the one `variable`, `gv_extra`) | 1.3, 2.4 |
 | | `abap_fixture_2_4_fugr_global_data`, `abap_fixture_2_4_top_include_data_only_in_top` | 2.4 |
 | `zfx_fg.fugr.lzfx_fgf01.abap` | `test_abap_fixture_fugr_form_include`, `abap_fixture_1_3_form` | 1.3 |
+| | `abap_fixture_2_1_perform` (the form, in the same function group) | 2.1 |
 | `zfx_fg.fugr.lzfx_fgo01.abap` | `test_abap_fixture_fugr_pbo_include`, `abap_fixture_1_3_module` | 1.3 |
 | every file in this directory | `test_abap_fixture_layout` (envelopes, line cap, name shape) | 1.5 |
 
@@ -78,3 +86,5 @@ by `test_abap_fixture_layout`.
 | `abap_fixture_1_10_method_without_endmethod_dropped` (and METHOD in a comment or literal) | 1.10 |
 | `abap_fixture_1_10_interface_method_names` | 1.10 |
 | `abap_fixture_2_0_incremental_follows_other_files` (definitions gained and lost in other files) | 2.0 |
+| `abap_fixture_2_1_incremental_static_call` (a static call's target lost and regained in another file) | 2.1 |
+| `abap_fixture_2_1_keyword_is_not_a_unique_name` (`CREATE PUBLIC` against a unique `create`; also reads the 2.0 fixture objects) | 2.0 |

@@ -477,3 +477,91 @@ fn python_package_init_reexports_are_members() {
         "Client() is a class call (no fn edge in this helper); helper twice"
     );
 }
+
+#[test]
+fn abap_static_forms_and_keyword_calls() {
+    // `me->m( )`, a bare `m( )`, `class=>m( )` and `CALL METHOD` in any
+    // case; `CALL FUNCTION` by its literal and `PERFORM` within the function
+    // group. A typeless receiver (`lo_x`) and an outside class bind nothing.
+    let got = edges(&[
+        (
+            "src/zcl_a.clas.abap",
+            "CLASS zcl_a DEFINITION PUBLIC CREATE PUBLIC.\n  PUBLIC SECTION.\n    METHODS run.\n    METHODS helper.\nENDCLASS.\n\nCLASS zcl_a IMPLEMENTATION.\n  METHOD run.\n    me->helper( ).\n    HELPER( ).\n    ZCL_B=>Make( ).\n    CALL METHOD zcl_b=>make EXPORTING iv = 1.\n    lo_x->helper( ).\n    cl_ext=>helper( ).\n  ENDMETHOD.\n  METHOD helper.\n  ENDMETHOD.\nENDCLASS.\n",
+        ),
+        (
+            "src/zcl_b.clas.abap",
+            "CLASS zcl_b DEFINITION PUBLIC.\n  PUBLIC SECTION.\n    CLASS-METHODS make.\nENDCLASS.\n\nCLASS zcl_b IMPLEMENTATION.\n  METHOD make.\n  ENDMETHOD.\nENDCLASS.\n",
+        ),
+        (
+            "src/zr.prog.abap",
+            "REPORT zr.\n\nSTART-OF-SELECTION.\n  CALL FUNCTION 'Z_FM' EXPORTING iv = 1.\n",
+        ),
+        (
+            "src/zfg.fugr.z_fm.abap",
+            "FUNCTION z_fm.\n  PERFORM f1 USING 1.\nENDFUNCTION.\n",
+        ),
+        ("src/zfg.fugr.lzfgf01.abap", "FORM f1 USING iv.\nENDFORM.\n"),
+    ]);
+    assert_eq!(
+        got,
+        set(&[
+            "run -> src/zcl_a.clas.abap:helper",
+            "run -> src/zcl_b.clas.abap:make",
+            "z_fm -> src/zfg.fugr.lzfgf01.abap:f1",
+            "zr -> src/zfg.fugr.z_fm.abap:z_fm",
+        ])
+    );
+}
+
+#[test]
+fn abap_local_names_stay_in_their_object() {
+    // Each object has its own `lcl_h` and form `f`: a use reaches its own
+    // object's, in its other files, and never another object's.
+    let local = |tag: &str| {
+        format!("CLASS lcl_h DEFINITION.\n  PUBLIC SECTION.\n    METHODS go_{tag}.\nENDCLASS.\n\nCLASS lcl_h IMPLEMENTATION.\n  METHOD go_{tag}.\n  ENDMETHOD.\nENDCLASS.\n")
+    };
+    let global = |name: &str, tag: &str| {
+        format!("CLASS {name} DEFINITION PUBLIC.\n  PUBLIC SECTION.\n    METHODS run.\nENDCLASS.\n\nCLASS {name} IMPLEMENTATION.\n  METHOD run.\n    NEW lcl_h( )->go_{tag}( ).\n  ENDMETHOD.\nENDCLASS.\n")
+    };
+    let (a_local, b_local) = (local("a"), local("b"));
+    let (a, b) = (global("zcl_a", "a"), global("zcl_b", "b"));
+    let got = edges(&[
+        ("src/zcl_a.clas.abap", a.as_str()),
+        ("src/zcl_a.clas.locals_imp.abap", a_local.as_str()),
+        ("src/zcl_b.clas.abap", b.as_str()),
+        ("src/zcl_b.clas.locals_imp.abap", b_local.as_str()),
+        ("src/zr1.prog.abap", "REPORT zr1.\nPERFORM f.\nFORM f.\nENDFORM.\n"),
+        ("src/zr2.prog.abap", "REPORT zr2.\nPERFORM f.\n"),
+    ]);
+    assert_eq!(
+        got,
+        set(&[
+            "run -> src/zcl_a.clas.locals_imp.abap:go_a",
+            "run -> src/zcl_b.clas.locals_imp.abap:go_b",
+            "zr1 -> src/zr1.prog.abap:f",
+        ])
+    );
+}
+
+#[test]
+fn abap_super_and_inherited_methods() {
+    // `super->m( )` and an inherited `zif_x~m( )` with no receiver reach the
+    // base class's methods; the redefinition itself is not a target.
+    let got = edges(&[
+        (
+            "src/zcl_base.clas.abap",
+            "CLASS zcl_base DEFINITION PUBLIC.\n  PUBLIC SECTION.\n    INTERFACES zif_x.\n    METHODS describe.\nENDCLASS.\n\nCLASS zcl_base IMPLEMENTATION.\n  METHOD describe.\n  ENDMETHOD.\n  METHOD zif_x~total.\n  ENDMETHOD.\nENDCLASS.\n",
+        ),
+        (
+            "src/zcl_sub.clas.abap",
+            "CLASS zcl_sub DEFINITION PUBLIC INHERITING FROM zcl_base.\n  PUBLIC SECTION.\n    METHODS describe REDEFINITION.\nENDCLASS.\n\nCLASS zcl_sub IMPLEMENTATION.\n  METHOD describe.\n    super->describe( ).\n    zif_x~total( ).\n  ENDMETHOD.\nENDCLASS.\n",
+        ),
+    ]);
+    assert_eq!(
+        got,
+        set(&[
+            "describe -> src/zcl_base.clas.abap:describe",
+            "describe -> src/zcl_base.clas.abap:zif_x~total",
+        ])
+    );
+}

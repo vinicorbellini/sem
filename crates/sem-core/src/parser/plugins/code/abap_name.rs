@@ -118,6 +118,38 @@ pub fn include_file_names(include: &str, from: &AbapObject) -> Vec<String> {
     names
 }
 
+/// ABAP keywords that are also method names somewhere: `CREATE PUBLIC` in a
+/// class definition is not a call of a method `create`. Sorted, folded.
+const KEYWORDS: &[&str] = &[
+    "abap", "abstract", "accepting", "add", "adjacent", "aliases", "all", "and", "any",
+    "append", "appending", "as", "ascending", "assert", "assign", "assigned", "assigning",
+    "at", "authority", "begin", "between", "binary", "bound", "break", "by", "call", "casting",
+    "catch", "changing", "check", "class", "cleanup", "clear", "close", "collect", "commit",
+    "compute", "concatenate", "condense", "constants", "continue", "convert", "corresponding",
+    "create", "data", "default", "deferred", "define", "definition", "delete", "descending",
+    "distinct", "divide", "do", "else", "elseif", "end", "endat", "endcase", "endclass",
+    "enddo", "endform", "endfunction", "endif", "endinterface", "endloop", "endmethod",
+    "endmodule", "endselect", "endtry", "endwhile", "event", "events", "exceptions", "exit",
+    "exiting", "export", "exporting", "fetch", "field", "final", "find", "for", "form", "free",
+    "friends", "from", "function", "generate", "get", "handler", "hashed", "if",
+    "implementation", "import", "importing", "in", "include", "index", "inheriting", "initial",
+    "initialization", "insert", "instance", "interface", "interfaces", "into", "is", "join",
+    "key", "leave", "like", "line", "lines", "load", "local", "loop", "message", "method",
+    "methods", "modify", "module", "move", "multiply", "new", "not", "of", "on", "optional",
+    "or", "others", "overlay", "pack", "parameters", "perform", "private", "program",
+    "protected", "public", "raise", "raising", "ranges", "read", "receiving", "redefinition",
+    "reduce", "ref", "refresh", "replace", "report", "return", "returning", "rollback",
+    "section", "select", "set", "shift", "single", "skip", "sort", "sorted", "split",
+    "standard", "start", "statics", "submit", "subtract", "sum", "table", "tables", "testing",
+    "to", "try", "type", "types", "unassign", "unique", "unpack", "up", "update", "using",
+    "value", "when", "where", "while", "with", "write",
+];
+
+/// Whether `word`, folded, is an ABAP keyword (see [`KEYWORDS`]).
+pub fn is_abap_keyword(word: &str) -> bool {
+    KEYWORDS.binary_search(&word).is_ok()
+}
+
 /// abapGit writes the `/` of a namespaced name as `#`: `#ns#zcl_foo` is `/ns/zcl_foo`.
 fn unescape_namespace(name: &str) -> String {
     if let Some(rest) = name.strip_prefix('#') {
@@ -258,6 +290,14 @@ mod tests {
             include_file_names("/ns/zinc", &prog),
             ["#ns#zinc.prog.abap"]
         );
+    }
+
+    #[test]
+    fn abap_keywords_sorted_and_folded() {
+        assert!(KEYWORDS.windows(2).all(|w| w[0] < w[1]));
+        assert!(KEYWORDS.iter().all(|k| *k == k.to_ascii_lowercase()));
+        assert!(is_abap_keyword("create") && is_abap_keyword("public"));
+        assert!(!is_abap_keyword("describe") && !is_abap_keyword("CREATE"));
     }
 
     #[test]

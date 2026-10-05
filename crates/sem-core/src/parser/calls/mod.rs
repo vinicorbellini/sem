@@ -19,6 +19,7 @@
 //! language-specific; a new language plugs in by implementing that trait.
 
 pub mod abap_dynamic;
+pub mod abap;
 pub mod fit;
 pub mod go;
 pub mod infer;
@@ -31,6 +32,7 @@ pub mod select;
 #[cfg(test)]
 mod tests;
 
+use std::borrow::Cow;
 use std::path::Path as FsPath;
 
 #[cfg(feature = "parallel")]
@@ -105,6 +107,7 @@ static LANGUAGES: &[(&[&str], &dyn Lang)] = &[
     (&[".rs"], &rust::RUST),
     (&[".go"], &go::GO),
     (&[".py"], &python::PYTHON),
+    (&[".abap"], &abap::ABAP),
 ];
 
 /// The language front end for a file path, if the pipeline handles it.
@@ -224,7 +227,8 @@ pub(crate) fn resolve_call_edges(
 /// dropped (they include same-name guesses), as are their `TypeRef` edges
 /// into functions (a function is not a type: those are call guesses by
 /// capitalized name), and `call_edges` are added. Edges of other kinds and
-/// from other languages are untouched.
+/// from other languages are untouched, and so are those of a language whose
+/// edges do not yet replace the other resolvers' ([`Lang::replaces_bow`]).
 pub(crate) fn apply_call_edges(
     entity_map: &EntityInfoMap,
     call_edges: Vec<ResolvedEdge>,
@@ -232,8 +236,10 @@ pub(crate) fn apply_call_edges(
 ) {
     let owned = |id: &str, want_fn: bool| {
         entity_map.get(id).is_some_and(|e| {
-            language_for(&e.file_path).is_some()
-                && (!want_fn || FN_ENTITY_TYPES.contains(&e.entity_type.as_str()))
+            language_for(&e.file_path).is_some_and(|lang| {
+                lang.replaces_bow()
+                    && (!want_fn || lang.fn_entity_types().contains(&e.entity_type.as_str()))
+            })
         })
     };
     edges.retain(|(from, to, rt)| {
@@ -271,7 +277,7 @@ pub fn resolve<'e>(
     let layout = lang.layout(root, files);
     let tables = ScopeTables::build(&facts, &layout);
     let impls = ImplTables::build(&facts, &tables.view(), lang);
-    let ids = EntityIds::build(files, entities);
+    let ids = EntityIds::build(lang, files, entities);
     let fn_ids = &ids.fns;
     let owners = owner_index(entities);
     let dump = std::env::var_os("SEM_CALLS_SITES").is_some();
@@ -584,10 +590,9 @@ fn classify_file<'e>(
     (edges, stats)
 }
 
-const FN_ENTITY_TYPES: &[&str] = &["function", "method"];
-
 /// Sem's entity for each lowered declaration, by kind: same file, same
-/// name, and the entity's line span contains the declaration row.
+/// name (folded, when the language is case-insensitive), and the entity's
+/// line span contains the declaration row.
 ///
 /// A method *signature* in a trait/interface often has no entity of its own
 /// (Go interface methods, Rust required trait methods); it is represented by
@@ -599,21 +604,35 @@ struct EntityIds<'e> {
     values: Vec<Vec<Option<&'e str>>>,
 }
 
+/// One file's entities by name.
+type EntitiesByName<'e> = HashMap<Cow<'e, str>, Vec<&'e SemanticEntity>>;
+
 impl<'e> EntityIds<'e> {
-    fn build(files: &[(&str, &FileFacts)], entities: &'e [SemanticEntity]) -> Self {
-        let mut by_file: HashMap<&str, HashMap<&str, Vec<&SemanticEntity>>> = HashMap::default();
+    fn build(
+        lang: &dyn Lang,
+        files: &[(&str, &FileFacts)],
+        entities: &'e [SemanticEntity],
+    ) -> Self {
+        let fold = lang.case_insensitive();
+        let mut by_file: HashMap<&str, EntitiesByName<'e>> = HashMap::default();
         for e in entities {
+            let name = if fold {
+                Cow::Owned(e.name.to_ascii_lowercase())
+            } else {
+                Cow::Borrowed(e.name.as_str())
+            };
             by_file
                 .entry(e.file_path.as_str())
                 .or_default()
-                .entry(e.name.as_str())
+                .entry(name)
                 .or_default()
                 .push(e);
         }
-        let per_file = |get: &dyn Fn(
-            &HashMap<&str, Vec<&'e SemanticEntity>>,
-            &FileFacts,
-        ) -> Vec<Option<&'e str>>| {
+        let fn_types = lang.fn_entity_types();
+        let lookup = |names: &EntitiesByName<'e>, name: &str, row: u32, fns: bool| {
+            find(names, fn_types, name, row, fns)
+        };
+        let per_file = |get: &dyn Fn(&EntitiesByName<'e>, &FileFacts) -> Vec<Option<&'e str>>| {
             files
                 .iter()
                 .map(|(path, facts)| match by_file.get(path) {
@@ -627,10 +646,10 @@ impl<'e> EntityIds<'e> {
                 f.fns
                     .iter()
                     .map(|d| {
-                        find(names, &d.name, d.row, true).or_else(|| match d.owner {
+                        lookup(names, &d.name, d.row, true).or_else(|| match d.owner {
                             ir::Owner::Trait(t) => {
                                 let tr = &f.traits[t as usize];
-                                find(names, &tr.name, tr.row, false)
+                                lookup(names, &tr.name, tr.row, false)
                             }
                             _ => None,
                         })
@@ -640,19 +659,19 @@ impl<'e> EntityIds<'e> {
             types: per_file(&|names, f| {
                 f.types
                     .iter()
-                    .map(|d| find(names, &d.name, d.row, false))
+                    .map(|d| lookup(names, &d.name, d.row, false))
                     .collect()
             }),
             traits: per_file(&|names, f| {
                 f.traits
                     .iter()
-                    .map(|d| find(names, &d.name, d.row, false))
+                    .map(|d| lookup(names, &d.name, d.row, false))
                     .collect()
             }),
             values: per_file(&|names, f| {
                 f.values
                     .iter()
-                    .map(|d| find(names, &d.name, d.row, false))
+                    .map(|d| lookup(names, &d.name, d.row, false))
                     .collect()
             }),
         }
@@ -672,9 +691,10 @@ impl<'e> EntityIds<'e> {
 }
 
 /// The innermost entity named `name` whose span holds 0-based `row`: a
-/// function entity or (`fns` false) any other.
+/// function entity (one of `fn_types`) or (`fns` false) any other.
 fn find<'e>(
-    names: &HashMap<&str, Vec<&'e SemanticEntity>>,
+    names: &EntitiesByName<'e>,
+    fn_types: &[&str],
     name: &str,
     row: u32,
     fns: bool,
@@ -684,7 +704,7 @@ fn find<'e>(
         .get(name)?
         .iter()
         .filter(|e| e.start_line <= row && row <= e.end_line)
-        .filter(|e| FN_ENTITY_TYPES.contains(&e.entity_type.as_str()) == fns)
+        .filter(|e| fn_types.contains(&e.entity_type.as_str()) == fns)
         .min_by_key(|e| e.end_line - e.start_line)
         .map(|e| e.id.as_str())
 }
@@ -750,7 +770,7 @@ pub fn site_answers(
     let layout = lang.layout(root, files);
     let tables = ScopeTables::build(&facts, &layout);
     let impls = ImplTables::build(&facts, &tables.view(), lang);
-    let ids = EntityIds::build(files, entities);
+    let ids = EntityIds::build(lang, files, entities);
     let hints = if lang.infer_params_from_calls() {
         Some(param_hints(lang, &facts, &tables, &impls))
     } else {
@@ -832,7 +852,7 @@ pub fn dispatch_answers(root: &FsPath, lang: &dyn Lang, files: &[(&str, &FileFac
     let layout = lang.layout(root, files);
     let tables = ScopeTables::build(&facts, &layout);
     let impls = ImplTables::build(&facts, &tables.view(), lang);
-    let ids = EntityIds::build(files, entities);
+    let ids = EntityIds::build(lang, files, entities);
     let mut pairs = dispatch_pairs(lang, &facts, &impls);
     if lang.virtual_methods() {
         pairs.extend(override_pairs(&Resolver::new(lang, &facts, tables.view(), &impls), &facts, &impls));
