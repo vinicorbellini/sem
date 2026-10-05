@@ -4,7 +4,7 @@
 
 Every ABAP node type that sem extracts needs a Rust unit test, and every
 behaviour in stories 1.1 to 1.7 needs a fixture test over a small ABAP
-repository. The fixture repo is `tests/fixtures/abap/`, built in parallel by
+repository. The fixture repo is `crates/sem-core/tests/fixtures/abap/`, built in parallel by
 someone else. This story writes the unit tests and wires the fixture tests, ignored
 until their story lands. It does not create the fixture.
 
@@ -23,7 +23,7 @@ until their story lands. It does not create the fixture.
   The reason string names the story.
 - When a story lands, its commit removes the `#[ignore]` attributes for its own
   tests. After all nine stories, no fixture test is ignored.
-- The fixture tests read `tests/fixtures/abap/` by path relative to the workspace
+- The fixture tests read `crates/sem-core/tests/fixtures/abap/` by path relative to the workspace
   root and scan with the default-exclude bypass: the directory name `fixtures`
   is excluded by default, so the tests call the plugin or graph builder on file
   contents directly, or pass `no_default_excludes`.
@@ -39,10 +39,10 @@ until their story lands. It does not create the fixture.
   Existing language tests, including `test_abap_entity_extraction` and
   `test_fish_entity_extraction`, sit there.
 - `crates/sem-core/tests/abap_fixture.rs` (new): integration tests over
-  `tests/fixtures/abap/`. Existing integration tests such as
+  `crates/sem-core/tests/fixtures/abap/`. Existing integration tests such as
   `crates/sem-core/tests/graph_accuracy.rs` and `dart_graph.rs` show the layout,
   and `crates/sem-core/tests/fixtures/` shows how a fixture directory is read.
-- `tests/fixtures/abap/`: read only. Owned by someone else.
+- `crates/sem-core/tests/fixtures/abap/`: read only. Owned by someone else.
 
 ## Approach
 
@@ -81,7 +81,7 @@ Fixture tests that flip from ignored to passing are those of stories 1.1 to
 
 ## Out of scope
 
-- Creating or editing anything under `tests/fixtures/abap/`.
+- Creating or editing anything under `crates/sem-core/tests/fixtures/abap/`.
 - Benchmarks. Story 1.1 owns the performance check.
 - Hand-checked diff quality. Story 1.8 owns it.
 - Tests for Tier 2 features.

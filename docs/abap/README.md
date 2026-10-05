@@ -31,7 +31,7 @@ These differ from the first-draft implementation notes. Each story applies them.
    `system/scan.rs` file holds boundary-model syntax facts for five languages
    and is unrelated.
 2. `fixtures` is itself a default-excluded directory name. A repo-wide scan skips
-   `tests/fixtures/abap/` unless `--no-default-excludes` is given. Fixture tests
+   `crates/sem-core/tests/fixtures/abap/` unless `--no-default-excludes` is given. Fixture tests
    must use that flag or call the plugin directly.
 3. The grammar has no `form_definition`, `module`, `define` or `types` node.
    `FORM`, `ENDFORM`, `MODULE`, `ENDMODULE`, `DEFINE` and `PERFORM` all parse as

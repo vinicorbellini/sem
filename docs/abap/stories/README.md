@@ -35,17 +35,24 @@ Serial total: 12.5 to 20.5 days.
   change adds a `CHANGELOG.md` entry under `## [Unreleased]`.
 - Run cargo from `crates/`. The default features include `grammar-all`, which
   includes `lang-abap`.
-- Fixture tests live under `tests/fixtures/abap/` and are built by someone else.
-  They are `#[ignore]` until the story that serves them lands. Test names in the
-  stories follow the pattern `abap_fixture_<story>_<topic>`. Reconcile the names
-  with the fixture author before starting.
+- Fixture tests live under `crates/sem-core/tests/fixtures/abap/` and are built by someone else.
+  They are `#[ignore]` until the story that serves them lands. The ignored tests
+  that exist today, in `crates/sem-core/src/parser/plugins/code/mod.rs`, and the
+  story each one waits on:
+  `test_abap_fixture_prog`, `test_abap_fixture_prog_include`,
+  `test_abap_fixture_fugr_form_include`, `test_abap_fixture_fugr_pbo_include` (1.3);
+  `test_abap_fixture_clas`, `test_abap_fixture_clas_locals_imp`,
+  `test_abap_fixture_clas_sub`, `test_abap_fixture_clas_testclasses` (1.4);
+  `test_abap_fixture_clas_testclasses_detection` (1.7).
+  A test named `abap_fixture_<story>_<topic>` in a story's Verification section
+  does not exist yet: the story adds it, in the same file and style.
 
 ## Gate 1
 
 Tier 1 is done when all of these hold:
 
 1. All nine stories are done and merged on the `abap` branch.
-2. Every fixture test under `tests/fixtures/abap/` is un-ignored and passing.
+2. Every fixture test under `crates/sem-core/tests/fixtures/abap/` is un-ignored and passing.
    `cd crates && cargo test -p sem-core abap_fixture` shows zero ignored and
    zero failed.
 3. The full suite passes: `cd crates && cargo test --workspace`.
