@@ -36,16 +36,22 @@ Serial total: 12.5 to 20.5 days.
 - Run cargo from `crates/`. The default features include `grammar-all`, which
   includes `lang-abap`.
 - Fixture tests live under `crates/sem-core/tests/fixtures/abap/` and are built by someone else.
-  They are `#[ignore]` until the story that serves them lands. The ignored tests
-  that exist today, in `crates/sem-core/src/parser/plugins/code/mod.rs`, and the
-  story each one waits on:
-  `test_abap_fixture_prog`, `test_abap_fixture_prog_include`,
-  `test_abap_fixture_fugr_form_include`, `test_abap_fixture_fugr_pbo_include` (1.3);
-  `test_abap_fixture_clas`, `test_abap_fixture_clas_locals_imp`,
-  `test_abap_fixture_clas_sub`, `test_abap_fixture_clas_testclasses` (1.4);
-  `test_abap_fixture_clas_testclasses_detection` (1.7).
-  A test named `abap_fixture_<story>_<topic>` in a story's Verification section
-  does not exist yet: the story adds it, in the same file and style.
+  `crates/sem-core/tests/fixtures/abap/README.md` maps each fixture file to the
+  tests that read it and the story each belongs to. All of them are in
+  `crates/sem-core/src/parser/plugins/code/mod.rs`, none is `#[ignore]`d, and
+  `cd crates && cargo test -p sem-core abap` runs them all. Names in use:
+  `test_abap_fixture_<object>` for the per-file entity lists (`intf`, `clas`,
+  `clas_locals_def`, `clas_locals_imp`, `clas_testclasses`,
+  `clas_testclasses_detection`, `clas_sub`, `prog`, `prog_include`,
+  `fugr_function_module`, `fugr_main_program`, `fugr_top_include`,
+  `fugr_form_include`, `fugr_pbo_include`, `layout`);
+  `abap_fixture_<story>_<topic>` for the behaviour tests (`1_1_find_any_case`,
+  `1_1_refs_any_case`, `1_2_comment_not_reference`, `1_2_string_not_reference`,
+  `1_3_report`, `_form`, `_function`, `_module`, `_method`, `_class`,
+  `_interface`, `_types_data`, `_macro`, `_local_classes_attach`,
+  `1_6_errors_still_yield_entities`, `1_6_error_count_reported`); and
+  `test_abap_entity_extraction` and `test_abap_class_two_ranges` for inline
+  source. A story that adds a test names it in the same scheme and file.
 
 ## Gate 1
 

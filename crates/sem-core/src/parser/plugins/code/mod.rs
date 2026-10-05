@@ -2023,12 +2023,9 @@ return M
     // ---- ABAP fixture repository: tests/fixtures/abap/ ----
     //
     // One test per `.abap` fixture file, each asserting the exact entity list
-    // (type, name, parent name) the spec expects. A test that the current
-    // extractor cannot satisfy yet is `#[ignore]`d with the spec row it waits
-    // on, so each ignored test is a named slot:
-    //   1.1 case folding, 1.2 stripper, 1.3 full entity set, 1.4 class collapse
-    //   (definition + implementation become one `class` entity), 1.5 abapGit
-    //   layout, 1.7 test detection.
+    // (type, name, parent name) the spec expects, then `abap_fixture_<story>_<topic>`
+    // tests for each story's behaviour. None is `#[ignore]`d: every story 1.1 to
+    // 1.7 has landed. tests/fixtures/abap/README.md maps files to tests to stories.
 
     #[cfg(feature = "lang-abap")]
     fn abap_fixture_dir() -> std::path::PathBuf {
@@ -2491,7 +2488,8 @@ DATA gv_global TYPE i.
         for entry in std::fs::read_dir(&dir).unwrap() {
             let entry = entry.unwrap();
             let name = entry.file_name().into_string().unwrap();
-            if entry.path().is_dir() {
+            // The directory's README is documentation, not an abapGit object.
+            if entry.path().is_dir() || name == "README.md" {
                 continue;
             }
             let text = std::fs::read_to_string(entry.path()).unwrap();

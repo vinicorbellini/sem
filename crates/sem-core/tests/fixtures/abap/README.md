@@ -1,0 +1,57 @@
+# ABAP fixture repository
+
+A small abapGit-layout repository. Every file stays under 60 lines, is named
+`<name>.<type>[.<part>].<ext>`, and the global `clas`, `intf` and `prog` objects
+have their `.xml` envelope next to the source. The tests read it by path from
+`crates/sem-core/src/parser/plugins/code/mod.rs` (the `abap_fixture_*` helpers).
+`inside-sap/` is a separate drop zone for files from a real SAP system; no test
+reads it yet.
+
+Run them with `cd crates && cargo test -p sem-core abap`. No ABAP test is
+`#[ignore]`d.
+
+## Fixture file to tests to story
+
+Story 1.1 is case-insensitive names, 1.2 comment and string stripping, 1.3 the
+full entity set, 1.4 one entity per class, 1.5 abapGit layout, 1.6 parse-error
+tolerance, 1.7 test detection.
+
+| Fixture file | Tests that read it | Story |
+|--------------|--------------------|-------|
+| `zif_fx_order.intf.abap` | `test_abap_fixture_intf`, `abap_fixture_1_3_interface` | 1.3 |
+| | `abap_fixture_1_2_string_not_reference` (with `zcl_fx_order.clas.abap`) | 1.2 |
+| | `abap_fixture_1_1_find_any_case` (with the two class files) | 1.1 |
+| `zcl_fx_order.clas.abap` | `test_abap_fixture_clas`, `abap_fixture_1_3_class` | 1.4 |
+| | `abap_fixture_1_3_method`, `abap_fixture_1_3_local_classes_attach` (global class attaches nothing) | 1.3 |
+| | `abap_fixture_1_2_comment_not_reference`, `abap_fixture_1_2_string_not_reference` | 1.2 |
+| | `abap_fixture_1_1_find_any_case`, `abap_fixture_1_1_refs_any_case` | 1.1 |
+| | `abap_fixture_1_6_errors_still_yield_entities`, `abap_fixture_1_6_error_count_reported` (broken copies of it) | 1.6 |
+| `zcl_fx_order.clas.locals_def.abap` | `test_abap_fixture_clas_locals_def`, `abap_fixture_1_3_local_classes_attach` | 1.3 |
+| `zcl_fx_order.clas.locals_imp.abap` | `test_abap_fixture_clas_locals_imp` | 1.4 |
+| | `abap_fixture_1_3_local_classes_attach` | 1.3 |
+| `zcl_fx_order.clas.testclasses.abap` | `test_abap_fixture_clas_testclasses` | 1.4 |
+| | `test_abap_fixture_clas_testclasses_detection` | 1.7 |
+| | `abap_fixture_1_3_local_classes_attach` | 1.3 |
+| | `abap_fixture_1_6_errors_still_yield_entities` | 1.6 |
+| `zcl_fx_order_sub.clas.abap` | `test_abap_fixture_clas_sub` | 1.4 |
+| | `abap_fixture_1_1_find_any_case` | 1.1 |
+| `zfx_report.prog.abap` | `test_abap_fixture_prog`, `abap_fixture_1_3_report`, `abap_fixture_1_3_form`, `abap_fixture_1_3_macro` | 1.3 |
+| | `abap_fixture_1_6_errors_still_yield_entities`, `abap_fixture_1_6_error_count_reported` | 1.6 |
+| `zfx_report_f01.prog.abap` | `test_abap_fixture_prog_include`, `abap_fixture_1_3_form` | 1.3 |
+| `zfx_fg.fugr.zfx_fm.abap` | `test_abap_fixture_fugr_function_module`, `abap_fixture_1_3_function` | 1.3 |
+| `zfx_fg.fugr.saplzfx_fg.abap` | `test_abap_fixture_fugr_main_program` (no entities) | 1.3 |
+| `zfx_fg.fugr.lzfx_fgtop.abap` | `test_abap_fixture_fugr_top_include` (no entities) | 1.3 |
+| `zfx_fg.fugr.lzfx_fgf01.abap` | `test_abap_fixture_fugr_form_include`, `abap_fixture_1_3_form` | 1.3 |
+| `zfx_fg.fugr.lzfx_fgo01.abap` | `test_abap_fixture_fugr_pbo_include`, `abap_fixture_1_3_module` | 1.3 |
+| every file in this directory | `test_abap_fixture_layout` (envelopes, line cap, name shape) | 1.5 |
+
+The `.xml` files and the `tabl`, `dtel`, `doma` and `ttyp` objects are read only
+by `test_abap_fixture_layout`.
+
+## Tests on inline source (no fixture file)
+
+| Test | Story |
+|------|-------|
+| `test_abap_entity_extraction` | 1.4 |
+| `test_abap_class_two_ranges` | 1.4 |
+| `abap_fixture_1_3_types_data` (TYPES and DATA in sections, a method, and the top level) | 1.3 |
