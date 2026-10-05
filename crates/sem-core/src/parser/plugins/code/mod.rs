@@ -1,3 +1,4 @@
+pub mod abap_name;
 mod entity_extractor;
 pub mod languages;
 #[cfg(feature = "oxc-fastpath")]

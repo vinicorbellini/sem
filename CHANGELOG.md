@@ -8,6 +8,8 @@ All notable changes to sem are documented in this file.
 
 - **ABAP language support.** Classes, class implementations, interfaces, methods and function modules are extracted as entities from `.abap` files (the files abapGit writes) via the mkoval1/tree-sitter-abap grammar, behind a `lang-abap` feature included in `grammar-all`. Methods nest under their `CLASS ... IMPLEMENTATION` block, which is an `impl` entity, the same type as a Rust `impl`. abapGit's `*.testclasses.abap` files count as test files, and a class declared `FOR TESTING` is a test entity in any file.
 
+- **abapGit file names are read, and abapGit metadata is skipped by default.** `parse_abapgit_name` turns `zcl_foo.clas.testclasses.abap` into object `zcl_foo`, type `clas`, part `testclasses` (`#ns#` becomes `/ns/`), for attaching local and test classes to their global class. Repo-wide scans now skip `.abapgit.xml`, `package.devc.xml` and `<name>.<type>.xml` for the four-letter abapGit object types, so `pom.xml` and other XML are still scanned. `--no-default-excludes` brings them back.
+
 ### Changed
 
 - **Telemetry is off by default in this fork.** A fresh install used to count command names locally (mode `local`, never uploaded); it now records nothing until `sem config telemetry local` or `on` is run. A mode already stored in `~/.sem/telemetry.json` is respected.
