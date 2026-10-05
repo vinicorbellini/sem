@@ -88,11 +88,13 @@ type ResolvedReference = (EntityId, RefType, &'static str);
 #[derive(Clone, serde::Serialize)]
 pub struct Scope {
     parent: Option<usize>,
-    /// Definitions visible in this scope: name -> entity_id
+    /// Definitions visible in this scope: name -> entity_id. Case-sensitive by
+    /// design: no language with a `scope_resolve` config folds names
+    /// (`LanguageConfig::case_insensitive`).
     defs: HashMap<String, EntityId>,
     /// Local bindings that shadow outer names but are not graph entities.
     bindings: HashSet<String>,
-    /// Binding declaration rows keyed by name.
+    /// Binding declaration rows keyed by name. Case-sensitive, like `defs`.
     binding_rows: HashMap<String, Vec<usize>>,
     /// Variable type bindings: var_name -> class_name (from `x = Foo()`)
     types: HashMap<String, String>,

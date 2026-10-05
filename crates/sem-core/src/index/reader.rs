@@ -412,16 +412,30 @@ impl QueryIndex {
     /// whole point of the sorted `NAMES` table: the answer's shape *is* the
     /// storage's shape, so producing it costs a binary search and nothing
     /// else. Names repeat ~8× on average in real corpora.
+    ///
+    /// A case-insensitive entity (`entity::FLAG_FOLDED_NAME`) is filed under
+    /// its lowercased name, so a lowercase `name` finds it in the same range,
+    /// and any other spelling finds it in a second search for the lowercased
+    /// `name` that keeps only such entities.
     pub fn lookup(&self, name: &str) -> Vec<Entity<'_>> {
+        let mut out = self.lookup_key(name.as_bytes(), false);
+        if name.bytes().any(|b| b.is_ascii_uppercase()) {
+            out.extend(self.lookup_key(name.to_ascii_lowercase().as_bytes(), true));
+        }
+        out
+    }
+
+    fn lookup_key(&self, key: &[u8], folded_only: bool) -> Vec<Entity<'_>> {
         let names = self.section(SEC_NAMES);
         let count = self.header.entity_count as usize;
-        let key = name.as_bytes();
 
-        let lo = partition_point(count, |slot| self.name_at(names, slot) < key);
+        let lo = partition_point(count, |slot| self.name_key_cmp(names, slot, key).is_lt());
         let mut out = Vec::new();
         let mut slot = lo;
-        while slot < count && self.name_at(names, slot) == key {
-            out.push(self.entity(self.name_order(names, slot) as usize));
+        while slot < count && self.name_key_cmp(names, slot, key).is_eq() {
+            if !folded_only || self.name_is_folded(names, slot) {
+                out.push(self.entity(self.name_order(names, slot) as usize));
+            }
             slot += 1;
         }
         out
@@ -547,6 +561,21 @@ impl QueryIndex {
         let rec = self.entity_rec(self.name_order(names, slot) as usize);
         let (off, len) = format::entity::name(rec).unwrap_or((0, 0));
         self.str_at(off, len).as_bytes()
+    }
+
+    fn name_is_folded(&self, names: &[u8], slot: usize) -> bool {
+        let rec = self.entity_rec(self.name_order(names, slot) as usize);
+        format::entity::flags(rec).unwrap_or(0) & format::entity::FLAG_FOLDED_NAME != 0
+    }
+
+    /// A slot's `NAMES` key against `key`, in the order the writer sorted by.
+    fn name_key_cmp(&self, names: &[u8], slot: usize, key: &[u8]) -> std::cmp::Ordering {
+        format::entity::cmp_name_keys(
+            self.name_at(names, slot),
+            self.name_is_folded(names, slot),
+            key,
+            false,
+        )
     }
 
     fn file_path_bytes(&self, files: &[u8], slot: usize) -> &[u8] {

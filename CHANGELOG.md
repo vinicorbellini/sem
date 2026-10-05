@@ -12,6 +12,8 @@ All notable changes to sem are documented in this file.
 
 - **ABAP comments and strings no longer count as references.** A name in a `*` column-1 comment, a `"` trailing comment, a `'...'` or backtick literal, or the literal part of a `|...|` template is not a call; names inside a template's `{ ... }` expressions still are. Line numbers and byte offsets are preserved, and no other language's scan changes.
 
+- **ABAP names are case-insensitive.** `sem find ZCL_FOO`, `sem find zcl_foo` and `sem find Zcl_Foo` return the same entities, named as written in source, and a reference written in one case resolves to a definition written in another. Only ABAP folds names, and only ASCII; every other language's output is unchanged. The index files ABAP names under their lowercased form, so an index written before this change keeps answering exact spellings until it is rebuilt.
+
 ### Changed
 
 - **Telemetry is off by default in this fork.** A fresh install used to count command names locally (mode `local`, never uploaded); it now records nothing until `sem config telemetry local` or `on` is run. A mode already stored in `~/.sem/telemetry.json` is respected.

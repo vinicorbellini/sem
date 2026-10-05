@@ -111,7 +111,8 @@ fn contiguous_run(hay: &[&str], needle: &[&str]) -> bool {
 }
 
 /// Does an entity with this `name`, owner chain (innermost owner first),
-/// `file_path` and span answer `q`?
+/// `file_path` and span answer `q`? Names and owners compare
+/// case-insensitively in a case-insensitive language (ABAP).
 pub fn matches(q: &Query<'_>, name: &str, kind: &str, owners: &[&str], file_path: &str, span: (usize, usize)) -> bool {
     if q.kind.is_some_and(|k| k != kind) {
         return false;
@@ -121,14 +122,16 @@ pub fn matches(q: &Query<'_>, name: &str, kind: &str, owners: &[&str], file_path
             return false;
         }
     }
-    if q.bare() != name {
+    let fold = sem_core::parser::graph::case_insensitive_for_file(file_path);
+    let same = |a: &str, b: &str| if fold { a.eq_ignore_ascii_case(b) } else { a == b };
+    if !same(q.bare(), name) {
         return false;
     }
     let quals = &q.segments[..q.segments.len().saturating_sub(1)];
     // consume owners right to left
     let mut i = quals.len();
     let mut o = 0;
-    while i > 0 && o < owners.len() && quals[i - 1] == owners[o] {
+    while i > 0 && o < owners.len() && same(quals[i - 1], owners[o]) {
         i -= 1;
         o += 1;
     }

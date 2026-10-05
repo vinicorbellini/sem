@@ -9,7 +9,9 @@ use rayon::prelude::*;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::parser::facts_store::corpus_identity_salt;
-use crate::parser::graph::{EntityGraph, EntityInfo, EntityRef, RefType};
+use crate::parser::graph::{
+    case_insensitive_for_file, EntityGraph, EntityInfo, EntityRef, RefType,
+};
 
 use super::format::{self, *};
 
@@ -327,6 +329,12 @@ pub(crate) fn build_image(
 
     let __entbytes_t0 = std::time::Instant::now();
     let mut entity_bytes = Vec::with_capacity(entities.len() * ENTITY_REC_LEN);
+    // Per file, not per entity: one language lookup for each path.
+    let folded_files: Vec<bool> = file_paths
+        .iter()
+        .map(|path| case_insensitive_for_file(path))
+        .collect();
+    let mut folded_names: Vec<bool> = Vec::with_capacity(entities.len());
     for entity in &entities {
         let id_text = if ids_elided {
             id_tail_of(&entity.id, &entity.file_path).unwrap_or(&entity.id)
@@ -339,10 +347,14 @@ pub(crate) fn build_image(
             .as_deref()
             .and_then(|id| entity_index.get(id).copied())
             .unwrap_or(NONE_U32);
-        let flags = match test_entity_ids {
+        let mut flags = match test_entity_ids {
             Some(ids) if ids.contains(entity.id.as_str()) => format::entity::FLAG_IS_TEST,
             _ => 0,
         };
+        if folded_files[file_index[entity.file_path.as_str()] as usize] {
+            flags |= format::entity::FLAG_FOLDED_NAME;
+        }
+        folded_names.push(flags & format::entity::FLAG_FOLDED_NAME != 0);
         let (start_byte, end_byte) = entity_byte_spans
             .and_then(|spans| spans.get(entity.id.as_str()))
             .copied()
@@ -365,15 +377,20 @@ pub(crate) fn build_image(
     // NAMES: entity indices sorted by name bytes, so a name query is an
     // equal_range rather than a scan. The tie-break on
     // index keeps the table a deterministic function of the graph, which is
-    // what the consistency oracle's byte-equality property needs.
+    // what the consistency oracle's byte-equality property needs. A
+    // case-insensitive entity sorts under its lowercased name
+    // (`entity::FLAG_FOLDED_NAME`).
     image_mark("entities_section", __entbytes_t0);
     let __names_t0 = std::time::Instant::now();
     let mut name_order: Vec<u32> = (0..entities.len() as u32).collect();
     maybe_par_sort_unstable_by!(name_order, |a: &u32, b: &u32| {
-        entities[*a as usize]
-            .name
-            .cmp(&entities[*b as usize].name)
-            .then(a.cmp(b))
+        format::entity::cmp_name_keys(
+            entities[*a as usize].name.as_bytes(),
+            folded_names[*a as usize],
+            entities[*b as usize].name.as_bytes(),
+            folded_names[*b as usize],
+        )
+        .then(a.cmp(b))
     });
     let mut name_bytes = Vec::with_capacity(name_order.len() * NAME_REC_LEN);
     for index in &name_order {

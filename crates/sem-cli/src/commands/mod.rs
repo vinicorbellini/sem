@@ -186,7 +186,7 @@ fn normalize_existing_prefix(path: &Path) -> Option<PathBuf> {
 }
 
 pub fn entity_matches_query(entity: &sem_core::parser::graph::EntityInfo, query: &str) -> bool {
-    if entity.name == query {
+    if entity_name_is(entity, query) {
         return true;
     }
 
@@ -194,7 +194,17 @@ pub fn entity_matches_query(entity: &sem_core::parser::graph::EntityInfo, query:
         return false;
     };
 
-    entity.entity_type == entity_type && entity.name == name
+    entity.entity_type == entity_type && entity_name_is(entity, name)
+}
+
+/// Name equality as the entity's language defines it: ABAP names compare
+/// case-insensitively (`ZCL_FOO` is `zcl_foo`), every other language's exactly.
+fn entity_name_is(entity: &sem_core::parser::graph::EntityInfo, name: &str) -> bool {
+    if sem_core::parser::graph::case_insensitive_for_file(&entity.file_path) {
+        entity.name.eq_ignore_ascii_case(name)
+    } else {
+        entity.name == name
+    }
 }
 
 /// Like `entity_matches_query`, but also resolves `Class.method` (or
@@ -232,7 +242,7 @@ pub fn print_name_suggestions(
         .or_else(|| query.rsplit_once('.'))
         .map(|(_, child)| child)
         .unwrap_or(query);
-    let mut hits: Vec<_> = graph.entities.values().filter(|e| e.name == bare).collect();
+    let mut hits: Vec<_> = graph.entities.values().filter(|e| entity_name_is(e, bare)).collect();
     if hits.is_empty() {
         return;
     }

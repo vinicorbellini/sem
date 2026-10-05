@@ -2234,6 +2234,125 @@ return M
         assert!(deps.contains(&"zif_fx_order".to_string()), "got: {:?}", deps);
     }
 
+    // Spec 1.1: ABAP names are case-insensitive. The fixture is all lowercase;
+    // these tests read it as written and in case-shifted copies.
+
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_text(file: &str) -> String {
+        std::fs::read_to_string(abap_fixture_dir().join(file))
+            .unwrap_or_else(|e| panic!("fixture {file}: {e}"))
+    }
+
+    /// Build the entity graph of `(file name, content)` pairs in a scratch directory.
+    #[cfg(feature = "lang-abap")]
+    fn abap_graph(files: &[(&str, String)]) -> crate::parser::graph::EntityGraph {
+        let dir = tempfile::TempDir::new().unwrap();
+        for (name, content) in files {
+            std::fs::write(dir.path().join(name), content).unwrap();
+        }
+        let paths: Vec<String> = files.iter().map(|(name, _)| name.to_string()).collect();
+        let registry = crate::parser::plugins::create_default_registry();
+        crate::parser::graph::EntityGraph::build(dir.path(), &paths, &registry).0
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_1_1_find_any_case() {
+        // `sem find` resolves a name through the index's `lookup`: every
+        // spelling answers the same entities in the same order, named as
+        // written in source. A Python name next to them stays exact.
+        let mut files: Vec<(&str, String)> = [
+            "zcl_fx_order.clas.abap",
+            "zcl_fx_order_sub.clas.abap",
+            "zif_fx_order.intf.abap",
+        ]
+        .iter()
+        .map(|file| (*file, abap_fixture_text(file)))
+        .collect();
+        files.push(("order.py", "class Order:\n    pass\n".to_string()));
+        let graph = abap_graph(&files);
+        let index = crate::index::QueryIndex::from_bytes(crate::index::build(&graph, &[])).unwrap();
+        let hits = |name: &str| -> Vec<(String, String)> {
+            index
+                .lookup(name)
+                .iter()
+                .map(|e| (e.id(), e.name().to_string()))
+                .collect()
+        };
+
+        let lower = hits("zcl_fx_order");
+        assert!(!lower.is_empty());
+        assert!(
+            lower.iter().all(|(_, name)| name == "zcl_fx_order"),
+            "name as written, got: {lower:?}"
+        );
+        assert_eq!(hits("ZCL_FX_ORDER"), lower);
+        assert_eq!(hits("Zcl_Fx_Order"), lower);
+
+        // Types still filter: `method DESCRIBE` is both `describe` methods.
+        let methods: Vec<String> = index
+            .lookup("DESCRIBE")
+            .iter()
+            .filter(|e| e.entity_type() == "method")
+            .map(|e| e.id())
+            .collect();
+        assert_eq!(methods.len(), 2, "got: {methods:?}");
+
+        assert_eq!(hits("Order").len(), 1);
+        assert!(hits("order").is_empty(), "Python names stay case-sensitive");
+        assert!(hits("ORDER").is_empty(), "Python names stay case-sensitive");
+
+        // Source written in uppercase: any spelling finds it, shown uppercase.
+        let upper = abap_graph(&[(
+            "zcl_fx_order.clas.abap",
+            abap_fixture_text("zcl_fx_order.clas.abap").to_ascii_uppercase(),
+        )]);
+        let index = crate::index::QueryIndex::from_bytes(crate::index::build(&upper, &[])).unwrap();
+        for query in ["zcl_fx_order", "ZCL_FX_ORDER", "Zcl_Fx_Order"] {
+            let names: Vec<&str> = index.lookup(query).iter().map(|e| e.name()).collect();
+            assert!(!names.is_empty(), "{query}");
+            assert!(names.iter().all(|name| *name == "ZCL_FX_ORDER"), "{query}: {names:?}");
+        }
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_1_1_refs_any_case() {
+        // The class definition names its methods (`METHODS describe ...`) and
+        // the implementation defines them (`METHOD describe.`). Shifting the
+        // case of either half must give back the same edges.
+        let source = abap_fixture_text("zcl_fx_order.clas.abap");
+        let (definition, implementation) =
+            source.split_at(source.find("CLASS zcl_fx_order IMPLEMENTATION").unwrap());
+        let edges = |content: String| -> Vec<(String, String)> {
+            let graph = abap_graph(&[("zcl_fx_order.clas.abap", content)]);
+            let name = |id: &str| graph.entities[id].name.to_ascii_lowercase();
+            let mut pairs: Vec<(String, String)> = graph
+                .edges
+                .iter()
+                .map(|edge| (name(edge.from_entity.as_str()), name(edge.to_entity.as_str())))
+                .collect();
+            pairs.sort();
+            pairs
+        };
+
+        let as_written = edges(source.clone());
+        assert!(
+            as_written.contains(&("zcl_fx_order".to_string(), "describe".to_string())),
+            "got: {as_written:?}"
+        );
+        // Uppercase use, lowercase definition.
+        assert_eq!(
+            edges(definition.to_ascii_uppercase() + implementation),
+            as_written
+        );
+        // Lowercase use, uppercase definition.
+        assert_eq!(
+            edges(definition.to_string() + &implementation.to_ascii_uppercase()),
+            as_written
+        );
+    }
+
     #[test]
     #[cfg(feature = "lang-fish")]
     fn test_fish_entity_extraction() {
