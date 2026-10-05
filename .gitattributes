@@ -1,0 +1,4 @@
+# Fixtures the tests compare byte for byte (line ranges, hashes, golden output)
+# keep LF on every platform, so a Windows checkout does not rewrite them.
+crates/sem-core/tests/fixtures/abap/** text eol=lf
+crates/sem-cli/tests/fixtures/cli_simplify/** text eol=lf
