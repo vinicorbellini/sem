@@ -10,6 +10,8 @@ const DEFAULT_EXCLUDED_FILES: &[&str] = &[
     "composer.lock",
     "go.sum",
     "flake.lock",
+    ".abapgit.xml",
+    "package.devc.xml",
 ];
 
 /// Directory names excluded wherever they appear in repo-wide scans.
@@ -68,6 +70,17 @@ const DEFAULT_EXCLUDED_SUFFIXES: &[&str] = &[
     ".gif.d.ts",
     ".avif.d.ts",
     ".ico.d.ts",
+];
+
+/// abapGit object types. abapGit serialises an object's metadata to
+/// `<name>.<type>.xml`, which produces no useful entities.
+const ABAPGIT_TYPES: &[&str] = &[
+    "clas", "intf", "prog", "fugr", "devc", "tabl", "dtel", "doma", "msag", "tran", "enho", "enhs",
+    "enhc", "ttyp", "view", "shlp", "enqu", "sfsw", "sfbf", "sfbs", "ssfo", "ssst", "smim", "w3mi",
+    "w3ht", "xslt", "ddls", "dcls", "dsfd", "bdef", "srvd", "srvb", "sicf", "sxci", "nrob", "tobj",
+    "sush", "suso", "susc", "sots", "sprx", "sqsc", "para", "pinf", "chdo", "idoc", "iobj", "iwmo",
+    "iwpr", "iwsv", "iwom", "shi3", "shi5", "sobj", "slin", "webi", "wdya", "wdyn", "nspc", "doct",
+    "docv", "prax",
 ];
 
 /// File suffixes that are not useful source text for semantic extraction.
@@ -166,6 +179,17 @@ pub fn is_default_excluded(rel_path: &str) -> bool {
         return true;
     }
 
+    if let Some(file_name) = lower.rsplit('/').next() {
+        let segments: Vec<&str> = file_name.split('.').collect();
+        if segments.len() >= 3
+            && !segments[0].is_empty()
+            && segments[segments.len() - 1] == "xml"
+            && ABAPGIT_TYPES.contains(&segments[1])
+        {
+            return true;
+        }
+    }
+
     let components: Vec<&str> = lower.split('/').collect();
     if components
         .iter()
@@ -234,6 +258,16 @@ mod tests {
         assert!(!is_default_excluded("packages/compiler/build/index.ts"));
         assert!(!is_default_excluded("src/cli/commands/codegen/run.ts"));
         assert!(!is_default_excluded("tools/dist/analyzer.py"));
+        assert!(is_default_excluded(".abapgit.xml"));
+        assert!(is_default_excluded("src/package.devc.xml"));
+        assert!(is_default_excluded("src/zcl_foo.clas.xml"));
+        assert!(is_default_excluded("src/zfg.fugr.lzfg_f01.xml"));
+        assert!(is_default_excluded("src/#ns#zcl_foo.clas.xml"));
+        assert!(is_default_excluded("src\\ZCL_FOO.CLAS.XML"));
+        assert!(!is_default_excluded("pom.xml"));
+        assert!(!is_default_excluded("src/foo.xml"));
+        assert!(!is_default_excluded("src/foo.bar.xml"));
+        assert!(!is_default_excluded("src/zcl_foo.clas.abap"));
     }
 
     #[test]
