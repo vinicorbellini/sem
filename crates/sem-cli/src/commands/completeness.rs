@@ -36,12 +36,17 @@ use serde::Serialize;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Kind {
+    /// A call whose target name is computed at run time (ABAP `CALL FUNCTION lv`,
+    /// `CALL METHOD zcl_x=>(lv)`). Counts as a caller of what it can reach.
+    Dynamic,
     /// `x = Owner.name` / `x = name`: an alias the resolver does not follow.
     Alias,
     /// `name(...)` not bound by the resolver (alias, import, scope).
     Call,
     /// `obj.name(...)` with a receiver the resolver could not type.
     MemberCall,
+    /// ABAP `zif_x~name( )`: a call through an interface component selector.
+    InterfaceCall,
     /// `'name'` as a whole string literal: getattr, registries, dispatch tables.
     StringKey,
     /// The name passed or stored as a value (callback, registry, `obj.name`).
@@ -56,8 +61,22 @@ impl Kind {
     fn counts_as_caller(self) -> bool {
         !matches!(self, Kind::Import | Kind::Definition)
     }
-    fn words(self) -> &'static str {
+    /// The reason text. ABAP words some kinds differently: its `->` receiver is an
+    /// untyped reference until story 2.2 binds receivers, and a string equal to a
+    /// name is how a function module is called through a variable.
+    fn words(self, abap: bool, function: bool) -> &'static str {
+        if abap {
+            match self {
+                Kind::StringKey if !function => return "string literal equal to the name (a computed call or dispatch table can use it)",
+                Kind::MemberCall => return "call through an untyped reference (2.2): `->` or `=>` call the resolver did not bind",
+                Kind::StringKey => return "string-keyed function module name (the literal a `CALL FUNCTION lv` can hold)",
+                Kind::Call => return "call by bare name not bound by the resolver (PERFORM, CALL METHOD, or a method of the same class)",
+                _ => {}
+            }
+        }
         match self {
+            Kind::Dynamic => "dynamic call (name computed at run time)",
+            Kind::InterfaceCall => "call through an interface (2.3)",
             Kind::Alias => "alias assignment",
             Kind::Call => "call by bare name not bound by the resolver (alias, import or scope)",
             Kind::MemberCall => "member call with an untyped receiver (may be another class's member)",
@@ -133,6 +152,8 @@ enum Family {
     Hash, // ruby, shell, yaml-ish: `#` comments
     CLike,
     Rust,
+    /// ABAP: classes come from `strip_abap_content`, names fold case.
+    Abap,
     Other,
 }
 
@@ -141,6 +162,7 @@ fn family(path: &str) -> Family {
         "py" | "pyi" | "pyx" => Family::Python,
         "rb" | "sh" | "bash" | "pl" | "r" | "ex" | "exs" => Family::Hash,
         "rs" => Family::Rust,
+        "abap" => Family::Abap,
         "js" | "jsx" | "ts" | "tsx" | "mjs" | "cjs" | "go" | "java" | "kt" | "kts" | "c" | "h" | "cc" | "cpp" | "hpp" | "cs"
         | "swift" | "scala" | "dart" | "php" | "vue" | "svelte" => Family::CLike,
         _ => Family::Other,
@@ -152,15 +174,96 @@ struct Lexed {
     class: Vec<Class>,
     /// (content_start, content_end) of each string literal.
     strings: Vec<(usize, usize)>,
+    /// ABAP only: the stripped text (comments and literals blanked), lower-cased,
+    /// the same length as the source. Call shapes are read off it.
+    code: Vec<u8>,
+}
+
+/// Whether `path` is ABAP source (names compare case-insensitively).
+pub fn is_abap(path: &str) -> bool {
+    family(path) == Family::Abap
+}
+
+/// ABAP classes from the one stripper. A byte the stripper blanked starts at a
+/// non-blank character, so the literal or comment is re-read from the source at that
+/// point (blanked spaces cannot be told from code spaces, but the span's first byte can).
+fn lex_abap(src: &[u8]) -> Lexed {
+    let n = src.len();
+    let text = String::from_utf8_lossy(src);
+    let stripped = if text.len() == n { sem_core::parser::plugins::code::strip_abap_content(&text).into_bytes() } else { src.to_vec() };
+    let mut class = vec![Class::Code; n];
+    let mut strings = Vec::new();
+    let mut i = 0;
+    while i < n {
+        if stripped[i] == src[i] {
+            i += 1;
+            continue;
+        }
+        match src[i] {
+            q @ (b'\'' | b'`') => {
+                let start = i;
+                i += 1;
+                let mut content_end = n;
+                while i < n && src[i] != b'\n' {
+                    if src[i] == q {
+                        if src.get(i + 1) == Some(&q) {
+                            i += 2;
+                            continue;
+                        }
+                        content_end = i;
+                        i += 1;
+                        break;
+                    }
+                    i += 1;
+                }
+                if content_end == n {
+                    content_end = i;
+                }
+                class[start..i].iter_mut().for_each(|c| *c = Class::Str);
+                strings.push((start + 1, content_end));
+            }
+            b'*' | b'"' => {
+                let start = i;
+                while i < n && src[i] != b'\n' {
+                    i += 1;
+                }
+                class[start..i].iter_mut().for_each(|c| *c = Class::Comment);
+            }
+            b'|' | b'}' => {
+                // the literal part of a `|...|` template, up to `{` or the closing `|`
+                let start = i;
+                i += 1;
+                while i < n {
+                    match src[i] {
+                        b'\\' => i = (i + 2).min(n),
+                        b'|' | b'{' => {
+                            i += 1;
+                            break;
+                        }
+                        _ => i += 1,
+                    }
+                }
+                class[start..i].iter_mut().for_each(|c| *c = Class::Str);
+            }
+            _ => {
+                class[i] = Class::Str;
+                i += 1;
+            }
+        }
+    }
+    Lexed { class, strings, code: stripped.to_ascii_lowercase() }
 }
 
 fn lex(path: &str, src: &[u8]) -> Lexed {
     let fam = family(path);
+    if fam == Family::Abap {
+        return lex_abap(src);
+    }
     let n = src.len();
     let mut class = vec![Class::Code; n];
     let mut strings = Vec::new();
     if fam == Family::Other {
-        return Lexed { class, strings };
+        return Lexed { class, strings, code: Vec::new() };
     }
     let mut i = 0;
     while i < n {
@@ -169,7 +272,7 @@ fn lex(path: &str, src: &[u8]) -> Lexed {
         let line_comment = match fam {
             Family::Python | Family::Hash => b == b'#',
             Family::CLike | Family::Rust => b == b'/' && src.get(i + 1) == Some(&b'/'),
-            Family::Other => false,
+            Family::Abap | Family::Other => false,
         };
         if line_comment {
             while i < n && src[i] != b'\n' {
@@ -232,7 +335,7 @@ fn lex(path: &str, src: &[u8]) -> Lexed {
         }
         i += 1;
     }
-    Lexed { class, strings }
+    Lexed { class, strings, code: Vec::new() }
 }
 
 fn is_ident(b: u8) -> bool {
@@ -301,11 +404,112 @@ fn is_import_line(t: &str) -> bool {
         || t.starts_with("export *") || (t.contains("require(") && t.contains("const "))
 }
 
+/// Characters of one ABAP operand: names, namespaces, `->`, `=>`, `~`, component `-`.
+fn abap_operand_byte(b: u8) -> bool {
+    b.is_ascii_alphanumeric() || matches!(b, b'_' | b'/' | b'<' | b'>' | b'~' | b'=' | b'-' | b'$')
+}
+
+/// The word that ends just before `at` (skipping blanks and newlines), with its start.
+fn abap_prev_word(code: &[u8], at: usize) -> Option<(&str, usize)> {
+    let mut e = at;
+    while e > 0 && code[e - 1].is_ascii_whitespace() {
+        e -= 1;
+    }
+    let mut s = e;
+    while s > 0 && (code[s - 1].is_ascii_alphanumeric() || matches!(code[s - 1], b'_' | b'-')) {
+        s -= 1;
+    }
+    (s < e).then(|| (std::str::from_utf8(&code[s..e]).unwrap_or(""), s))
+}
+
+/// Whether the operand that contains `at` is the one right after `CALL METHOD`.
+fn abap_after_call_method(code: &[u8], at: usize) -> bool {
+    let mut s = at;
+    while s > 0 && abap_operand_byte(code[s - 1]) {
+        s -= 1;
+    }
+    match abap_prev_word(code, s) {
+        Some(("method", w)) => matches!(abap_prev_word(code, w), Some(("call", _))),
+        _ => false,
+    }
+}
+
+/// Keywords after which a name is being declared or implemented, not used.
+const ABAP_DECL: &[&str] = &[
+    "methods", "class-methods", "class", "interface", "form", "function", "module", "method", "define", "data", "class-data", "constants",
+    "types", "statics", "events", "class-events", "aliases",
+];
+
+/// `METHODS describe`, `METHODS: a, b` (a chain element), `FORM f`: a declaration.
+fn abap_is_declaration(code: &[u8], at: usize) -> bool {
+    let stmt_start = code[..at].iter().rposition(|&b| b == b'.').map_or(0, |p| p + 1);
+    let head = String::from_utf8_lossy(&code[stmt_start..at]).to_string();
+    let h = head.trim_start();
+    let kw: String = h.bytes().take_while(|&b| b.is_ascii_alphabetic() || b == b'-').map(char::from).collect();
+    if !ABAP_DECL.contains(&kw.as_str()) {
+        return false;
+    }
+    let rest = h[kw.len()..].trim();
+    if rest.is_empty() {
+        return true; // `METHODS name`
+    }
+    // `METHODS: a, b` -- the name opens a chain element
+    rest.strip_prefix(':').is_some_and(|chain| chain.rsplit(',').next().is_some_and(|last| last.trim().is_empty()))
+}
+
+/// A whole string literal equal to the name. `CALL FUNCTION 'NAME'` is a static call whose
+/// literal the stripper hides; any other literal is a string key (a function module held
+/// in a variable, a dispatch table).
+fn abap_literal_kind(code: &[u8], at: usize) -> Kind {
+    // the opening quote is at `at - 1`
+    if let Some(("function", w)) = abap_prev_word(code, at.saturating_sub(1)) {
+        if matches!(abap_prev_word(code, w), Some(("call", _))) {
+            return Kind::Call;
+        }
+    }
+    Kind::StringKey
+}
+
+/// How ABAP code mentions the name, read off the stripped, lower-cased text. `->` and
+/// `=>` are receivers, `~` selects an interface component, `PERFORM f` and
+/// `CALL METHOD x` name their target without parentheses.
+fn abap_code_kind(code: &[u8], at: usize, len: usize) -> Kind {
+    let paren = code.get(at + len) == Some(&b'(');
+    let before = &code[..at];
+    let arrow = before.ends_with(b"->");
+    let stat = before.ends_with(b"=>");
+    let tilde = before.ends_with(b"~");
+    if abap_after_call_method(code, at) {
+        return if arrow || stat {
+            Kind::MemberCall
+        } else if tilde {
+            Kind::InterfaceCall
+        } else {
+            Kind::Call
+        };
+    }
+    if abap_is_declaration(code, at) {
+        return Kind::Definition;
+    }
+    if arrow || stat {
+        return if paren { Kind::MemberCall } else { Kind::ValueRef };
+    }
+    if tilde {
+        return if paren { Kind::InterfaceCall } else { Kind::ValueRef };
+    }
+    if matches!(abap_prev_word(code, at), Some(("perform", _))) || paren {
+        return Kind::Call;
+    }
+    Kind::ValueRef
+}
+
 /// Classify every mention of `name` in one file. One mention per line, the
 /// strongest kind on that line.
 pub fn scan_file(path: &str, src: &str, name: &str) -> Vec<Mention> {
     let bytes = src.as_bytes();
-    let occ = occurrences(bytes, name);
+    let abap = is_abap(path);
+    // ABAP names compare case-insensitively: fold both sides (ASCII, so byte offsets hold)
+    let occ = if abap { occurrences(&bytes.to_ascii_lowercase(), &name.to_ascii_lowercase()) } else { occurrences(bytes, name) };
     if occ.is_empty() {
         return Vec::new();
     }
@@ -323,12 +527,16 @@ pub fn scan_file(path: &str, src: &str, name: &str) -> Vec<Mention> {
             Class::Comment => continue,
             Class::Str => {
                 let whole = lexed.strings.iter().any(|&(s, e)| s == at && e == at + name.len());
-                if whole {
-                    Kind::StringKey
+                if !whole {
+                    continue; // prose in a docstring or message, or the literal part of a template
+                }
+                if abap {
+                    abap_literal_kind(&lexed.code, at)
                 } else {
-                    continue; // prose in a docstring or message
+                    Kind::StringKey
                 }
             }
+            Class::Code if abap => abap_code_kind(&lexed.code, at, name.len()),
             Class::Code => {
                 let prev = prev_non_space(bytes, at, ls);
                 let next = next_non_space(bytes, at + name.len());
@@ -365,6 +573,7 @@ pub fn scan_file(path: &str, src: &str, name: &str) -> Vec<Mention> {
             Kind::Import => import_alias(line_text, name),
             _ => None,
         };
+        let _ = abap; // ABAP has no aliases by assignment and no imports
         let m = Mention { file: path.to_string(), line: line_no, kind, text: line_text.trim().chars().take(160).collect(), alias, via: None };
         match by_line.get(&line_no) {
             Some(old) if old.kind <= m.kind => {}
@@ -440,9 +649,74 @@ pub fn dynamic_prefixes(path: &str, src: &str) -> Vec<(String, usize)> {
     out
 }
 
+/// A cheap regex (case-insensitive) for the files that can hold a computed ABAP call, so a
+/// verdict reads only those. `dynamic_sites` decides exactly. A `CALL FUNCTION` operand split
+/// onto the next line is not seen by a line-based text search.
+pub const ABAP_DYNAMIC_PREFILTER: &str = r"call\s+function\s+[^'`\s]|[-=]>\(|perform\s*\(|in\s+program\s*\(|type\s*\(|new\s*\(";
+
+pub use sem_core::parser::calls::abap_dynamic::DynForm;
+
+/// One ABAP call whose target is computed at run time, placed in a file.
+#[derive(Debug, Clone)]
+pub struct DynamicSite {
+    /// The static class of the receiver, when the text names one: `zcl_x=>(lv)`, or `me->(lv)`
+    /// inside `zcl_x`'s implementation. `None` for an untyped receiver (story 2.2 binds those).
+    pub class: Option<String>,
+    pub form: DynForm,
+    /// The statically known name when only the program is computed (`PERFORM f IN PROGRAM (lv)`).
+    pub name: Option<String>,
+    pub file: String,
+    pub line: usize,
+    /// The source line, trimmed, for the reason.
+    pub text: String,
+}
+
+/// Every computed call in one ABAP file. The detection is sem-core's
+/// (`parser::calls::abap_dynamic`), the same one the call lowering of story 2.1 reports its
+/// `Pick::Unknown` reasons from, so the verdict and `Stats.unresolved` cannot disagree.
+pub fn dynamic_sites(path: &str, src: &str) -> Vec<DynamicSite> {
+    if !is_abap(path) {
+        return Vec::new();
+    }
+    sem_core::parser::calls::abap_dynamic::dynamic_sites(src)
+        .into_iter()
+        .map(|d| {
+            let (ls, le) = line_bounds(src.as_bytes(), d.at);
+            DynamicSite {
+                class: d.class,
+                form: d.form,
+                name: d.name,
+                file: path.to_string(),
+                line: src.as_bytes()[..d.at].iter().filter(|&&b| b == b'\n').count() + 1,
+                text: src[ls..le].trim().chars().take(120).collect(),
+            }
+        })
+        .collect()
+}
+
+impl DynamicSite {
+    /// Whether this site can reach `t`: the rule is the story's. A static class reaches the
+    /// methods of that class; `CALL FUNCTION lv` the function modules; a computed form name
+    /// the forms. An untyped receiver, and a computed class name, are counted, not attributed.
+    fn reaches(&self, t: &Target<'_>) -> bool {
+        match self.form {
+            DynForm::Method => {
+                // INTEGRATION 2.3: a method of a subclass of `class` is reached too.
+                t.entity_type == "method"
+                    && matches!((&self.class, t.owner), (Some(c), Some(o)) if c.eq_ignore_ascii_case(o))
+            }
+            DynForm::Function => t.entity_type == "function",
+            DynForm::Form => t.entity_type == "form" && self.name.as_deref().is_none_or(|n| n.eq_ignore_ascii_case(t.name)),
+            DynForm::Class => false,
+        }
+    }
+}
+
 /// The definition under assessment.
 pub struct Target<'a> {
     pub name: &'a str,
+    /// The entity's type as the parser names it (`method`, `function`, `form`, `class`, ...).
+    pub entity_type: &'a str,
     pub file: &'a str,
     pub span: (usize, usize),
     pub decorators: Vec<String>,
@@ -464,6 +738,7 @@ pub struct Enclosing {
 /// - `resolved`: the resolved callers' spans `(file, start, end)` (and any
 ///   other span whose mentions are already explained);
 /// - `dynamic`: `(prefix, file, line)` from `dynamic_prefixes` over the corpus;
+/// - `abap_dyn`: every computed ABAP call in the corpus (`dynamic_sites`), empty for other languages;
 /// - `not_checked`: a reason the scan could not run or was capped.
 #[allow(clippy::too_many_arguments)]
 pub fn assess(
@@ -472,6 +747,7 @@ pub fn assess(
     alias_mentions: &[Mention],
     resolved: &[(String, usize, usize)],
     dynamic: &[(String, String, usize)],
+    abap_dyn: &[DynamicSite],
     files_scanned: usize,
     not_checked: Option<String>,
     enclosing: impl Fn(&str, usize) -> Option<Enclosing>,
@@ -480,6 +756,7 @@ pub fn assess(
         (m.file == t.file && m.line >= t.span.0 && m.line <= t.span.1)
             || resolved.iter().any(|(f, s, e)| *f == m.file && m.line >= *s && m.line <= *e)
     };
+    let abap = is_abap(t.file);
     let mut reasons: Vec<Reason> = Vec::new();
     let mut unexplained: Vec<&Mention> = Vec::new();
     for m in mentions.iter().chain(alias_mentions) {
@@ -526,11 +803,27 @@ pub fn assess(
         let code = match k {
             Kind::Call => "unresolved_calls",
             Kind::MemberCall => "untyped_member_calls",
+            Kind::InterfaceCall => "interface_calls",
             Kind::StringKey => "string_keys",
             Kind::ValueRef => "value_refs",
             _ => "other",
         };
-        reasons.push(Reason { code, detail: format!("{n} {}", k.words()) });
+        let mut detail = format!("{n} {}", k.words(abap, t.entity_type == "function"));
+        if abap && matches!(k, Kind::MemberCall | Kind::InterfaceCall) {
+            // the same name defined in another class: the receiver's type decides which one a call reaches
+            let homes: BTreeSet<String> = mentions
+                .iter()
+                .filter(|m| m.kind == Kind::Definition && !explained(m))
+                .filter_map(|m| enclosing(&m.file, m.line))
+                .map(|e| e.display.split('.').next().unwrap_or("").to_string())
+                .filter(|h| !h.is_empty() && !t.owner.is_some_and(|o| o.eq_ignore_ascii_case(h)))
+                .collect();
+            if !homes.is_empty() {
+                let list: Vec<String> = homes.iter().take(3).cloned().collect();
+                detail += &format!("; `{}` is also defined in {}{}, so the receiver's type decides which one a call reaches", t.name, list.join(", "), if homes.len() > 3 { " …" } else { "" });
+            }
+        }
+        reasons.push(Reason { code, detail });
     }
     // one reason per decorator head (`@dispatch` x 15 is one fact)
     let mut by_head: BTreeMap<(&'static str, String), (usize, &'static str, String)> = BTreeMap::new();
@@ -565,6 +858,28 @@ pub fn assess(
             ),
         });
     }
+    // ABAP computed calls: attributed by the story's rule, the rest counted in `checked`
+    let abap_hits: Vec<&DynamicSite> = abap_dyn.iter().filter(|d| d.reaches(t)).collect();
+    if abap && !abap_hits.is_empty() {
+        let first = abap_hits[0];
+        let why = match first.form {
+            DynForm::Method => "its static class is this method's class",
+            DynForm::Function => "a computed function module name can be any module",
+            DynForm::Form => "a computed form name can be any form",
+            DynForm::Class => "",
+        };
+        reasons.push(Reason {
+            code: "dynamic_call",
+            detail: format!(
+                "{} dynamic call(s) (name computed at run time), first `{}` at {}:{}{}: {why}, so it can reach this definition without naming it",
+                abap_hits.len(),
+                first.text,
+                first.file,
+                first.line,
+                if abap_hits.len() > 1 { format!(" (+{} more)", abap_hits.len() - 1) } else { String::new() },
+            ),
+        });
+    }
     if let Some(why) = not_checked {
         reasons.push(Reason { code: "not_checked", detail: why });
     }
@@ -587,6 +902,22 @@ pub fn assess(
         });
         g.sites.push(Site { line: m.line, kind: m.kind, via: m.via.clone() });
     }
+    let mut dyn_sites = 0;
+    for d in abap_hits.iter().filter(|d| abap && d.form == DynForm::Method) {
+        let (display, ty, start) = match enclosing(&d.file, d.line) {
+            Some(e) => (e.display, e.entity_type, e.start_line),
+            None => ("<module level>".to_string(), "module".to_string(), 0),
+        };
+        let g = groups.entry((d.file.clone(), start, display.clone())).or_insert_with(|| PossibleCaller {
+            entity: display,
+            entity_type: ty,
+            file: d.file.clone(),
+            start_line: start,
+            sites: Vec::new(),
+        });
+        g.sites.push(Site { line: d.line, kind: Kind::Dynamic, via: None });
+        dyn_sites += 1;
+    }
     let mut possible: Vec<PossibleCaller> = groups.into_values().collect();
     // aliases and calls first (most actionable), nearest to the definition
     // first (same file, same directory, same top-level package), then by file
@@ -608,11 +939,27 @@ pub fn assess(
     Verdict {
         complete,
         incomplete_because: reasons,
-        checked: format!(
-            "every code mention of `{}` in {files_scanned} file(s) (comments and docstrings excluded), aliases one hop, dispatch/registration decorators, getattr with a literal prefix; a name computed entirely at runtime is not modeled",
-            t.name
-        ),
-        possible_caller_sites: unexplained.len(),
+        checked: if abap {
+            // computed calls of this definition's kind that the text cannot tie to it (an untyped
+            // receiver, a computed class): counted, not attributed
+            let (rel, what) = match t.entity_type {
+                "method" => (Some(DynForm::Method), "computed method call(s) on an untyped receiver or computed class"),
+                "class" => (Some(DynForm::Class), "computed class name(s)"),
+                _ => (None, ""),
+            };
+            let n = rel.map_or(0, |r| abap_dyn.iter().filter(|d| d.form == r && !d.reaches(t)).count());
+            let rest = if n == 0 { String::new() } else { format!("; {n} {what} are not attributed to any definition, so any of them might reach it") };
+            format!(
+                "every code mention of `{}` in {files_scanned} file(s), any case (comments and literals excluded), `->` `=>` `~` and CALL METHOD / CALL FUNCTION / PERFORM call shapes, computed calls (`CALL FUNCTION lv`, `zcl_x=>(lv)`, `PERFORM (lv)`) by their static class{rest}",
+                t.name
+            )
+        } else {
+            format!(
+                "every code mention of `{}` in {files_scanned} file(s) (comments and docstrings excluded), aliases one hop, dispatch/registration decorators, getattr with a literal prefix; a name computed entirely at runtime is not modeled",
+                t.name
+            )
+        },
+        possible_caller_sites: unexplained.len() + dyn_sites,
         possible_callers: possible,
     }
 }
@@ -664,6 +1011,8 @@ fn kind_short(k: Kind) -> &'static str {
         Kind::Alias => "alias",
         Kind::Call => "call",
         Kind::MemberCall => "member call",
+        Kind::Dynamic => "dynamic call",
+        Kind::InterfaceCall => "interface call",
         Kind::StringKey => "string key",
         Kind::ValueRef => "value use",
         Kind::Import => "import",
@@ -735,8 +1084,8 @@ REG = {'_af_new': Permutation._af_new}
     #[test]
     fn verdict_lists_alias_callers_and_is_incomplete() {
         let ms = scan_file("p.py", PERMS, "_af_new");
-        let t = Target { name: "_af_new", file: "p.py", span: (5, 9), decorators: vec!["@staticmethod".into()], owner: Some("Permutation") };
-        let v = assess(&t, &ms, &[], &[], &[], 1, None, |_, l| {
+        let t = Target { name: "_af_new", entity_type: "method", file: "p.py", span: (5, 9), decorators: vec!["@staticmethod".into()], owner: Some("Permutation") };
+        let v = assess(&t, &ms, &[], &[], &[], &[], 1, None, |_, l| {
             Some(Enclosing { display: format!("line{l}"), entity_type: "function".into(), start_line: l })
         });
         assert!(!v.complete);
@@ -749,8 +1098,8 @@ REG = {'_af_new': Permutation._af_new}
     fn resolved_callers_explain_their_mentions() {
         let src = "def target():\n    return 1\n\ndef a():\n    return target()\n";
         let ms = scan_file("m.py", src, "target");
-        let t = Target { name: "target", file: "m.py", span: (1, 2), decorators: vec![], owner: None };
-        let v = assess(&t, &ms, &[], &[("m.py".into(), 4, 5)], &[], 1, None, |_, _| None);
+        let t = Target { name: "target", entity_type: "function", file: "m.py", span: (1, 2), decorators: vec![], owner: None };
+        let v = assess(&t, &ms, &[], &[("m.py".into(), 4, 5)], &[], &[], 1, None, |_, _| None);
         assert!(v.complete, "{:?}", v.incomplete_because);
     }
 
@@ -794,5 +1143,80 @@ REG = {'_af_new': Permutation._af_new}
         assert_eq!(hop.len(), 1);
         assert_eq!(hop[0].line, 4);
         assert_eq!(hop[0].via.as_deref(), Some("mk"));
+    }
+
+    const ABAP: &str = "CLASS zcl_a IMPLEMENTATION.
+  METHOD run.
+    lo->Describe( ).
+    ZCL_X=>describe( ).
+    zif_x~describe( ).
+    CALL METHOD lo->describe.
+    CALL METHOD zif_x~describe.
+    CALL METHOD describe.
+    PERFORM describe USING 1.
+    describe( ).
+    lv = 'DESCRIBE'.
+    \" describe in a comment
+* describe in a column-1 comment
+    lv = 'a describe b'.
+    lv = |describe { lv } describe|.
+    lv = lo->describe.
+    lv = lo->other( describe ).
+  ENDMETHOD.
+  METHODS describe REDEFINITION.
+ENDCLASS.
+";
+
+    fn abap_kinds(src: &str, name: &str) -> Vec<(usize, Kind)> {
+        scan_file("zcl_a.clas.abap", src, name).iter().map(|m| (m.line, m.kind)).collect()
+    }
+
+    #[test]
+    fn abap_call_shapes_fold_case_and_skip_comments_and_literals() {
+        assert_eq!(
+            abap_kinds(ABAP, "describe"),
+            vec![
+                (3, Kind::MemberCall),    // lo->Describe( ), any case
+                (4, Kind::MemberCall),    // ZCL_X=>describe( ), not a bare call
+                (5, Kind::InterfaceCall), // zif_x~describe( )
+                (6, Kind::MemberCall),    // CALL METHOD lo->describe
+                (7, Kind::InterfaceCall), // CALL METHOD zif_x~describe
+                (8, Kind::Call),          // CALL METHOD describe
+                (9, Kind::Call),          // PERFORM describe
+                (10, Kind::Call),         // describe( )
+                (11, Kind::StringKey),    // 'DESCRIBE'
+                (16, Kind::ValueRef),     // lo->describe is an attribute, not a call
+                (17, Kind::ValueRef),     // passed as a value
+                (19, Kind::Definition),   // METHODS describe REDEFINITION
+            ]
+        );
+    }
+
+    #[test]
+    fn abap_name_in_comment_or_literal_is_not_a_mention() {
+        let src = "* zfx_fm here\nlv = 'call zfx_fm now'. \" zfx_fm\nlv = |zfx_fm { lv }|.\n";
+        assert!(scan_file("a.prog.abap", src, "zfx_fm").is_empty());
+        // the name inside a template expression is code
+        let src = "lv = |text { zfx_fm( ) }|.\n";
+        assert_eq!(scan_file("a.prog.abap", src, "ZFX_FM")[0].kind, Kind::Call);
+    }
+
+    #[test]
+    fn abap_string_key_any_case_and_static_function_call() {
+        let src = "CALL FUNCTION 'ZFX_FM'\n  EXPORTING a = 1.\nlv_fm = 'zfx_fm'.\nlv_x = 'Zfx_Fm'.\n";
+        let got: Vec<(usize, Kind)> = scan_file("a.prog.abap", src, "zfx_fm").iter().map(|m| (m.line, m.kind)).collect();
+        assert_eq!(got, vec![(1, Kind::Call), (3, Kind::StringKey), (4, Kind::StringKey)]);
+    }
+
+    #[test]
+    fn abap_chained_declarations_are_definitions() {
+        let src = "METHODS: a,\n  describe,\n  b RETURNING VALUE(rv) TYPE describe.\n";
+        let got: Vec<(usize, Kind)> = scan_file("a.clas.abap", src, "describe").iter().map(|m| (m.line, m.kind)).collect();
+        assert_eq!(got, vec![(2, Kind::Definition), (3, Kind::ValueRef)]);
+    }
+
+    #[test]
+    fn other_languages_still_match_case_exactly() {
+        assert!(scan_file("a.py", "Foo()\n", "foo").is_empty());
     }
 }

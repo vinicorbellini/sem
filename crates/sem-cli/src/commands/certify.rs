@@ -1000,7 +1000,11 @@ const MAX_ASSESSED: usize = 60;
 struct HeadCorpus<'a> {
     tree: &'a Tree,
     files: Vec<(String, String)>,
+    /// ABAP files fold case: their lower-cased text, same index as `files` (empty for other files).
+    folded: Vec<String>,
     dynamic: Vec<(String, String, usize)>,
+    /// Computed ABAP calls (`CALL FUNCTION lv`, `zcl_x=>(lv)`, ...) over every ABAP file.
+    abap_dyn: Vec<super::completeness::DynamicSite>,
     by_file: HashMap<&'a str, Vec<&'a EntityInfo>>,
 }
 
@@ -1015,20 +1019,26 @@ impl<'a> HeadCorpus<'a> {
             .iter()
             .flat_map(|(f, c)| super::completeness::dynamic_prefixes(f, c).into_iter().map(move |(p, l)| (p, f.clone(), l)))
             .collect();
+        let folded = files.iter().map(|(f, c)| if super::completeness::is_abap(f) { c.to_ascii_lowercase() } else { String::new() }).collect();
+        let abap_dyn = files.iter().flat_map(|(f, c)| super::completeness::dynamic_sites(f, c)).collect();
         let mut by_file: HashMap<&str, Vec<&EntityInfo>> = HashMap::new();
         for e in t.graph.entities.values() {
             by_file.entry(e.file_path.as_str()).or_default().push(e);
         }
-        HeadCorpus { tree: t, files, dynamic, by_file }
+        HeadCorpus { tree: t, files, folded, dynamic, abap_dyn, by_file }
     }
 
     fn scan(&self, name: &str, only: Option<&str>) -> Vec<super::completeness::Mention> {
         let finder = memchr::memmem::Finder::new(name.as_bytes());
+        let lower = name.to_ascii_lowercase();
+        let folded_finder = memchr::memmem::Finder::new(lower.as_bytes());
         self.files
             .iter()
-            .filter(|(f, _)| only.is_none_or(|o| o == f))
-            .filter(|(_, c)| finder.find(c.as_bytes()).is_some())
-            .flat_map(|(f, c)| super::completeness::scan_file(f, c, name))
+            .zip(&self.folded)
+            .filter(|((f, _), _)| only.is_none_or(|o| o == f))
+            // ABAP names fold case: search the lower-cased text for the lower-cased name
+            .filter(|((_, c), low)| if low.is_empty() { finder.find(c.as_bytes()).is_some() } else { folded_finder.find(low.as_bytes()).is_some() })
+            .flat_map(|((f, c), _)| super::completeness::scan_file(f, c, name))
             .collect()
     }
 
@@ -1047,14 +1057,17 @@ impl<'a> HeadCorpus<'a> {
                 d
             })
             .unwrap_or_default();
-        let files_with = self.files.iter().filter(|(_, c)| c.contains(name)).count();
-        let owner = self.tree.graph.entities.values()
-            .find(|e| e.file_path == file && e.start_line == span.0 && e.name == name)
+        let lower = name.to_ascii_lowercase();
+        let files_with = self.files.iter().zip(&self.folded).filter(|((_, c), low)| if low.is_empty() { c.contains(name) } else { low.contains(&lower) }).count();
+        let def = self.tree.graph.entities.values().find(|e| e.file_path == file && e.start_line == span.0 && e.name == name);
+        let owner = def
             .and_then(|e| e.parent_id.as_ref())
             .and_then(|p| self.tree.graph.entities.get(p.as_str()))
             .map(|p| p.name.clone());
-        let target = c::Target { name, file, span, decorators, owner: owner.as_deref() };
-        c::assess(&target, &mentions, &alias, resolved, &self.dynamic, files_with, None, |f, line| {
+        let target = c::Target { name, entity_type: def.map_or("", |e| e.entity_type.as_str()), file, span, decorators, owner: owner.as_deref() };
+        // computed ABAP calls only matter to an ABAP target
+        let abap_dyn: &[c::DynamicSite] = if c::is_abap(file) { &self.abap_dyn } else { &[] };
+        c::assess(&target, &mentions, &alias, resolved, &self.dynamic, abap_dyn, files_with, None, |f, line| {
             let ents = self.by_file.get(f)?;
             let e = ents.iter().filter(|e| e.start_line <= line && line <= e.end_line).min_by_key(|e| e.end_line - e.start_line)?;
             Some(c::Enclosing {

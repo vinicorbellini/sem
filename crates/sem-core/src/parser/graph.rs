@@ -7682,7 +7682,7 @@ const ABAP_TEMPLATE_SPAN_CAP: usize = 4096;
 /// blanked, so one stray quote cannot swallow the file. Templates may span lines, capped at
 /// `ABAP_TEMPLATE_SPAN_CAP`. Everything is one pass, since the line comment rules share the
 /// state machine, so there is no second pass as in `strip_clojure_line_comments`.
-pub(crate) fn strip_abap_content(content: &str) -> String {
+pub fn strip_abap_content(content: &str) -> String {
     let bytes = content.as_bytes();
     let len = bytes.len();
     let mut result = vec![b' '; len];
