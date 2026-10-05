@@ -320,3 +320,141 @@ its methods are not entities. Global classes were checked the same way and
 are all named correctly (462 of 462).
 
 The census table and verdicts above are from `861b66d`, without the fix.
+
+## After story 1.10
+
+| | |
+|---|---|
+| Date | 2026-10-05 |
+| sem | `story/1-10` at `39622cb` (on `abap` at `43d022c`), `cargo build --release -p sem-cli` |
+| Grammar, corpus | unchanged: `tree-sitter-abap-sqry` 32.0.1, abapGit `main` at `b2b4e25` |
+
+Story 1.10 is candidate T2-A, promoted: `METHOD x.` ... `ENDMETHOD.` blocks are
+read off the fallback pass's statements and reconciled with the grammar's
+methods (`docs/abap/README.md`, fact 10). Same commands as above, with a
+scratch `SEM_CACHE_DIR`; the clone was only read.
+
+### Whole-corpus METHOD census
+
+How the method counts above are taken, and were taken again here: every
+`src/**/*.abap` file at `b2b4e25`, the lines matching
+`^\s*METHOD\s+([\w~/]+)\s*\.` (case-insensitive) are the `METHOD x.` blocks.
+The entities are `sem find --in src --json --file-exts .abap
+--no-default-excludes`. A block counts as found when its file has a `method`
+entity of that name (case-folded); an entity spans another method when a later
+`METHOD x.` line falls inside its line range. "Before" is the `abap` branch at
+`43d022c`, which gives exactly the numbers of the `861b66d` table above.
+
+| Measure | Before (`43d022c`) | After (`39622cb`) |
+|---|---:|---:|
+| Files with `METHOD` blocks | 624 | 624 |
+| `METHOD x.` blocks in them (text count) | 7577 | 7577 |
+| ... with a method entity of that name | 5161 (68%) | 7577 (100%) |
+| Files missing at least one | 317 | 0 |
+| Method entities that span another `METHOD` line | 94 | 0 |
+| Method entities in all | 5705 | 7582 |
+
+The five method entities over 7577 are real: `METHOD constructor
+##ADT_SUPPRESS_GENERATION.` in five exception classes, which the text count's
+pattern does not match. Forms, types, variables, interfaces, function modules
+and the report are the same entities, with the same ranges, as before.
+
+Why the leaves were not enough: the grammar does not end a `'...'` literal at
+its line, so after a quote it misreads (`''`, a template like `|{ a }*|`) one
+`character_literal` leaf runs over many lines. 943 `METHOD` lines and 942
+`ENDMETHOD` lines in abapGit sit inside such a leaf, out of reach of a
+token stream cut from the leaves. The statements are now cut from the source
+with comments and literals blanked by the reference scan's stripper.
+
+How the 7582 came about: 5105 are the grammar's own (5705 less 600 dropped)
+and 2477 the fallback's. The 600 dropped are grammar methods that matched no
+block, all of them misnamed: 581 after the last part of an interface method's
+name (`get_deserialize_order` for `zif_abapgit_object~get_deserialize_order`),
+19 after a pragma (`ADT_SUPPRESS_GENERATION`) or text running on past the
+period. The block's own entity, with the right name, replaces each. The 5105
+the grammar named right are all kept.
+The grammar had lost 50 classes whole (local test classes mostly, and
+`zcl_abapgit_object_fdt0`, `zcl_abapgit_persistence_db`, `zcl_abapgit_popups`
+in its #4432 version); each is now one class from its definition and its
+implementation.
+
+### Parse-error census
+
+`sem find --in src --parse-report --json --file-exts .abap`:
+
+| Measure | Gate 1 (`861b66d`) | After 1.10 (`39622cb`) |
+|---|---:|---:|
+| Files parsed | 752 | 752 |
+| Files with error nodes | 731 | 731 |
+| Error nodes | 39314 | 39314 |
+| Entities | 7776 | 9703 |
+| Entities from the grammar | 7386 | 6786 |
+| Entities from the fallback pass | 390 | 2917 |
+| Files with at least one fallback entity | 167 | 372 |
+| Files with no entities | 5 | 3 |
+| Entities per file, median / largest | 7 / 149 | 9 / 194 |
+
+The three files with no entities are the ones with nothing to find:
+`zif_abapgit_aff_prog_v1.intf.abap` and the two `zabapgit_parallel` function
+group includes.
+
+### The eight PRs again
+
+`sem diff <sha>^ <sha> --json` on the eight PRs rated miss or partial, scored
+against the reviewer's methods recorded in "The ten" above (not re-derived).
+#6217 and #7180 were run too and are unchanged, both still a match.
+
+| PR | Reviewer's methods | sem's entities now | Was | Now |
+|---|---|---|---|---|
+| #1928 | boverview: `body`. branch_overview: `constructor`, `determine_merges`, `_reverse_sort_order` (new) | boverview: modified `body`. branch_overview: modified class, `constructor`, `determine_merges`; added `_reverse_sort_order` | miss | **match** |
+| #3185 | `render_table_header`, `_add_col` (new) | modified class, `render_table_header`; added method `_add_col`; deleted macro `_add_col`; reordered `apply_order_by`; added variable `mt_col_spec`, deleted `mv_time_zone` | partial | **match** |
+| #3891 | 30 methods over 9 files | all 30, each modified, and the class in the 7 files whose definition changed; nothing else | miss | **match** |
+| #4432 | 9 methods over 7 files, one of them the interface `zif_abapgit_popups`'s `popup_perf_test_parameters` signature | the 8 class methods (popups: modified class and `zif_abapgit_popups~popup_perf_test_parameters`); `zif_abapgit_popups`: modified interface; variable `mt_result`; language: class, orphan | miss | **partial** |
+| #5072 | `serialize_dynpros` | modified `serialize_dynpros` | miss | **match** |
+| #5711 | `serialize_default`, `serialize_non_default`, `then_is_not_binary`, `then_is_binary` | the four, modified | miss | **match** |
+| #6669 | ssfo: `sort_texts`. ueno: `serialize_docu_xxxx` | modified `sort_texts`, `serialize_docu_xxxx` | miss | **match** |
+| #7644 | `transaction_read`, `zif_abapgit_object~serialize` | modified `transaction_read`, `zif_abapgit_object~serialize` | partial | **match** |
+
+Notes on the calls:
+
+- #3185: `apply_order_by` moved unchanged and is reported as *reordered*, not
+  modified, which the protocol accepts ("a method that only moved, unchanged,
+  is not a change"; reporting the move is not naming it as changed). The
+  variable pair is the chained-`DATA:` gap T2-C, and the deleted macro is the
+  `DEFINE _add_col` the PR removed, both non-method and not rated.
+- #4432: the one file short of a match is `zif_abapgit_popups.intf.abap`,
+  where sem names the interface and not the method, because interface method
+  declarations are not entities (T2-B): a partial by the story's definition.
+  Every other file matches. `zcl_abapgit_popups` also renamed its
+  `CLASS ... IMPLEMENTATION` from upper to lower case; with the class's
+  definition recovered too, its id comes from the definition and the method
+  is matched across the two versions. (Recovering the implementation alone
+  named the class after the implementation's spelling, and the case change
+  then hid the method's edit.)
+- Method-level, over the ten: of the 64 methods a reviewer names, sem names
+  63 (was 44); the one left is #4432's interface method. It names no method
+  that did not change (was three).
+
+### Result after story 1.10
+
+| Verdict | PRs |
+|---|---|
+| match | 9 (#1928, #3185, #3891, #5072, #5711, #6217, #6669, #7180, #7644) |
+| partial | 1 (#4432) |
+| miss | 0 |
+
+**Gate 1 diff quality: PASS.** 10 of 10 are match or partial against a
+threshold of 8, and no PR has a file with a changed method where sem named
+nothing. Rolled up on each PR's best file instead of its worst, all ten are
+matches; the verdict is the same under either reading.
+
+What still falls short, none of it a miss:
+
+- Interface method declarations are not entities (T2-B), so a changed
+  signature in an `INTERFACE` reads as the interface changing (#4432).
+- A chained `DATA:` is one variable entity named after one member (T2-C),
+  noise in #3185 and #4432.
+- The 50 classes the grammar lost whole are recovered as a class and their
+  methods, but the `TYPES` and `DATA` in their definitions are still not
+  entities: the fallback reads a class's `TYPES` only under a class the grammar
+  found.
