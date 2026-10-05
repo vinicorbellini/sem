@@ -142,8 +142,20 @@ pub enum Expr {
     /// The current function's unannotated parameter `k` (typed, when the
     /// language opts in, by what every resolved call site passes).
     Param(u32),
+    /// A call whose target is computed at run time (ABAP `CALL FUNCTION lv`,
+    /// `PERFORM (lv)`): an index into [`DYNAMIC_REASONS`]. Resolves to
+    /// nothing, with that reason.
+    Dynamic(u8),
     Unknown,
 }
+
+/// The reasons of [`Expr::Dynamic`], in index order.
+pub const DYNAMIC_REASONS: [&str; 4] = [
+    "dynamic method name",
+    "dynamic function name",
+    "dynamic form name",
+    "dynamic class name",
+];
 
 /// A generic parameter and its trait bounds (from `<T: A>` and `where T: A`).
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -344,6 +356,9 @@ pub struct FileFacts {
     /// `_names`, Go unexported names): glob imports see them only from
     /// within the declaring module's subtree.
     pub private: Vec<(u32, Name)>,
+    /// Program includes the file names (`INCLUDE zfoo_f01.`), in source order
+    /// and as written, folded (ABAP).
+    pub includes: Vec<Name>,
 }
 
 /// `return <value>` in function `func` (scope `scope`).

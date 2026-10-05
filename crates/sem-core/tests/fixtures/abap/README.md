@@ -55,10 +55,10 @@ across files, 2.1 static calls.
 | | `abap_fixture_2_4_forms_do_not_leak` | 2.4 |
 | | `abap_fixture_2_1_perform`, `abap_fixture_2_1_call_function`, `abap_fixture_2_1_new_gives_class_edge` (the report's own statements and `show_order`) | 2.1 |
 | `zfx_report_f01.prog.abap` | `test_abap_fixture_prog_include`, `abap_fixture_1_3_form` | 1.3 |
-| `zfx_dynamic.prog.abap` | `abap_fixture_2_5_*` in `crates/sem-cli/tests/abap_completeness_cli.rs` (the completeness verdict reads its computed calls); the graph-side tests join once story 2.1's lowering lands | 2.5 |
+| `zfx_dynamic.prog.abap` | `abap_fixture_2_5_*` in `crates/sem-cli/tests/abap_completeness_cli.rs` (the completeness verdict reads its computed calls); `abap_fixture_2_5_dynamic_reasons_counted` for the `sem graph --json` counts | 2.5 |
 | | `abap_fixture_2_4_include_joins_forms`, `abap_fixture_2_4_forms_do_not_leak` (the include is shared with `zfx_report2`) | 2.4 |
 | `zfx_report2.prog.abap` | `abap_fixture_2_4_include_joins_forms` (`INCLUDE zfx_report_f01`), `abap_fixture_2_4_forms_do_not_leak` | 2.4 |
-| `zfx_other.prog.abap` | `abap_fixture_2_4_forms_do_not_leak`, `abap_fixture_2_4_in_program_target` (ignored until story 2.1), the same-name `show_order` | 2.4 |
+| `zfx_other.prog.abap` | `abap_fixture_2_4_forms_do_not_leak`, `abap_fixture_2_4_in_program_target`, the same-name `show_order` | 2.4 |
 | `zfx_fg.fugr.zfx_fm.abap` | `test_abap_fixture_fugr_function_module`, `abap_fixture_1_3_function` | 1.3 |
 | | `abap_fixture_2_4_fugr_perform` | 2.4 |
 | | `abap_fixture_2_1_call_function` (the target), `abap_fixture_2_1_perform` (`PERFORM calc_extra`), `abap_fixture_2_1_static_call` | 2.1 |

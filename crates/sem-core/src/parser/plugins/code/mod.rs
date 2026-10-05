@@ -3458,22 +3458,49 @@ DATA gv_global TYPE i.
 
     #[test]
     #[cfg(feature = "lang-abap")]
-    #[ignore = "waits on story 2.1: `PERFORM f IN PROGRAM x` lowers to the path x, f in calls/abap.rs"]
     fn abap_fixture_2_4_in_program_target() {
         // `PERFORM show_order IN PROGRAM zfx_report` in zfx_other goes to
         // zfx_report's form, never to zfx_other's own, which ABAP would not
-        // call. `IN PROGRAM (iv_name)` is not resolved (story 2.5 reports it).
-        // The bag-of-words pass binds the bare name `show_order` to the form
-        // of its own unit, so this needs the calls pipeline, with 2.1's
-        // lowering, to answer and `replaces_bow()` for ABAP to drop that guess.
+        // call. `IN PROGRAM (iv_name)` is not resolved: it is a dynamic site
+        // (story 2.5). Asked of the calls pipeline alone: the bag-of-words
+        // pass, which still adds its own guesses to the graph (the bare name
+        // `show_order` bound to zfx_other's own form, `zfx_report` to the
+        // report) until `replaces_bow()` flips with story 2.2's typed
+        // receivers, so the graph's edge list cannot say "only".
+        let (sites, _) = abap_pipeline_calls(&ABAP_FIXTURE_2_4_PROGRAMS);
+        let line = |needle: &str| {
+            abap_fixture_text("zfx_other.prog.abap")
+                .lines()
+                .position(|l| l.contains(needle))
+                .expect(needle)
+                + 1
+        };
+        let answers = |needle: &str| abap_answers(&sites, "zfx_other.prog.abap", line(needle));
+        assert_eq!(answers("IN PROGRAM zfx_report"), ["zfx_report.show_order"]);
+        assert_eq!(answers("IN PROGRAM (iv_name)"), ["unknown: dynamic form name"]);
+        assert_eq!(answers("PERFORM show_order USING iv_id."), ["zfx_other.show_order"]);
         let edges = abap_fixture_2_4_edges(&ABAP_FIXTURE_2_4_PROGRAMS);
-        let from_remote: Vec<&(String, String)> =
-            edges.iter().filter(|(from, _)| from == "zfx_other.run_remote").collect();
-        assert_eq!(from_remote, [&abap_edge("zfx_other.run_remote", "zfx_report.show_order")]);
         assert!(
-            !edges.iter().any(|(from, _)| from == "zfx_other.run_dynamic"),
+            edges.contains(&abap_edge("zfx_other.run_remote", "zfx_report.show_order")),
             "got: {edges:?}"
         );
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_5_dynamic_sites_are_unresolved_with_reasons() {
+        // Every computed call of zfx_dynamic is one site answered `unknown`
+        // with its form's reason, and none is an edge.
+        let (sites, stats) = abap_pipeline_calls(&["zfx_dynamic.prog.abap"]);
+        let reasons: Vec<&str> = sites
+            .iter()
+            .filter_map(|(_, _, a)| a.strip_prefix("unknown: dynamic "))
+            .collect();
+        for form in ["method name", "function name", "form name", "class name"] {
+            assert!(reasons.contains(&form), "{form}: {sites:?}");
+        }
+        let counted: usize = stats.unresolved.iter().filter(|(why, _)| why.starts_with("dynamic ")).map(|(_, n)| *n).sum();
+        assert_eq!(counted, reasons.len(), "{:?}", stats.unresolved);
     }
 
     #[test]
@@ -3740,6 +3767,52 @@ DATA gv_global TYPE i.
         (sites, stats)
     }
 
+    /// Every call site of `files` (fixture names) as the calls pipeline
+    /// answers it alone, and the pipeline's counts.
+    #[cfg(feature = "lang-abap")]
+    fn abap_pipeline_calls(files: &[&str]) -> (Vec<AbapSite>, crate::parser::calls::Stats) {
+        use crate::parser::calls::{self, SiteAnswer};
+        let registry = crate::parser::plugins::create_default_registry();
+        let sources: Vec<(&str, String)> =
+            files.iter().map(|file| (*file, abap_fixture_text(file))).collect();
+        let entities: Vec<SemanticEntity> = sources
+            .iter()
+            .flat_map(|(file, src)| registry.extract_entities(file, src))
+            .collect();
+        let labels: HashMap<&str, String> = entities
+            .iter()
+            .map(|e| (e.id.as_str(), abap_object_label(&e.file_path, &e.name)))
+            .collect();
+        let facts: Vec<(&str, calls::ir::FileFacts)> = sources
+            .iter()
+            .map(|(file, src)| (*file, calls::lower_source(file, src).expect("an ABAP file")))
+            .collect();
+        let refs: Vec<(&str, &calls::ir::FileFacts)> =
+            facts.iter().map(|(file, f)| (*file, f)).collect();
+        let lang = calls::language_for("x.prog.abap").expect("ABAP is in LANGUAGES");
+        let root = std::path::Path::new("/nonexistent");
+        let mut sites = Vec::new();
+        for ((file, src), answers) in sources.iter().zip(calls::site_answers(root, lang, &refs, &entities)) {
+            for (at, call, answer) in answers {
+                if !call {
+                    continue;
+                }
+                let answer = match answer {
+                    SiteAnswer::Defs(ids) => {
+                        ids.iter().map(|id| labels[id.as_str()].as_str()).collect::<Vec<_>>().join(" ")
+                    }
+                    SiteAnswer::Value(..) => "value".to_string(),
+                    SiteAnswer::External(_) => "external".to_string(),
+                    SiteAnswer::Unknown(why) => format!("unknown: {why}"),
+                };
+                let line = src[..at as usize].matches('\n').count() + 1;
+                sites.push((file.to_string(), line, answer));
+            }
+        }
+        let (_, stats) = calls::resolve(root, lang, &refs, &entities);
+        (sites, stats)
+    }
+
     /// The answers of the call sites on `line` of `file`, in source order.
     #[cfg(feature = "lang-abap")]
     fn abap_answers<'s>(sites: &'s [AbapSite], file: &str, line: usize) -> Vec<&'s str> {
@@ -3965,8 +4038,10 @@ DATA gv_global TYPE i.
             );
         }
         let unknown = sites.iter().filter(|(_, _, a)| a == "unknown: unknown receiver type").count();
-        let reasons: Vec<(&str, usize)> = stats.unresolved.iter().map(|(why, n)| (*why, *n)).collect();
-        assert_eq!(reasons, vec![("unknown receiver type", unknown)]);
+        let mut reasons: Vec<(&str, usize)> = stats.unresolved.iter().map(|(why, n)| (*why, *n)).collect();
+        reasons.sort();
+        // plus the function group's generated `lzfx_fguxx` include, which abapGit does not hold
+        assert_eq!(reasons, vec![("include not in repo", 1), ("unknown receiver type", unknown)]);
     }
 
     #[test]

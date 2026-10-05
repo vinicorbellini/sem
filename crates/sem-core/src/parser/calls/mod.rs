@@ -222,6 +222,28 @@ pub(crate) fn resolve_call_edges(
     out
 }
 
+/// The unresolved call sites of a repo's ABAP files by reason (the dynamic
+/// forms, `include not in repo`, `unknown receiver type`, ..), for the stats
+/// block of `sem graph --json`: `Stats.unresolved` of the ABAP pass, on its
+/// own, so a cached or indexed graph answers the same. `None` when the repo
+/// has no ABAP file, so the block of every other language stays as it was.
+pub fn abap_unresolved(
+    root: &FsPath,
+    file_paths: &[String],
+) -> Option<std::collections::BTreeMap<&'static str, usize>> {
+    let facts: Vec<(&str, FileFacts)> = file_paths
+        .iter()
+        .filter(|p| p.ends_with(".abap"))
+        .filter_map(|p| Some((p.as_str(), abap::lower(&std::fs::read_to_string(root.join(p)).ok()?))))
+        .collect();
+    if facts.is_empty() {
+        return None;
+    }
+    let files: Vec<(&str, &FileFacts)> = facts.iter().map(|(p, f)| (*p, f)).collect();
+    let (_, stats) = resolve(root, &abap::ABAP, &files, &[]);
+    Some(stats.unresolved.into_iter().collect())
+}
+
 /// Replace the call edges of files this pipeline handles with its own: the
 /// other resolvers' `Calls` edges into functions from those files are
 /// dropped (they include same-name guesses), as are their `TypeRef` edges
@@ -314,6 +336,9 @@ pub fn resolve<'e>(
     for (e, s) in per_file {
         edges.extend(e);
         stats.merge(s);
+    }
+    for (why, n) in &layout.unresolved {
+        *stats.unresolved.entry(why).or_default() += n;
     }
     // Dispatch: interface/trait method declaration -> each implementation;
     // with virtual methods, a base class's method -> each override.
@@ -947,6 +972,7 @@ fn render(f: &FileFacts, e: ir::ExprId) -> String {
         Typed(t) => format!("{:?}", f.type_pool[t as usize]),
         Param(k) => format!("param{k}"),
         Arg(c, pos, k) => format!("arg{k}@{pos}({})", render(f, c)),
+        Dynamic(k) => format!("dynamic[{}]", ir::DYNAMIC_REASONS[k as usize]),
         Unknown => "?".to_string(),
     }
 }

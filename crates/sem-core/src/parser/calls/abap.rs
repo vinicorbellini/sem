@@ -24,7 +24,11 @@ use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 use super::ir::*;
 use super::lang::{BuiltinRet, ClosureArg, Lang, Layout};
 use crate::parser::graph::strip_abap_content;
-use crate::parser::plugins::code::abap_fallback::{statements, Statement};
+use super::abap_dynamic::{dynamic_sites, DynSite};
+use crate::parser::plugins::code::abap_fallback::{include_names, statements, Statement};
+use crate::parser::plugins::code::abap_include::{
+    reads_includes, IncludeGraph, INCLUDE_NOT_IN_REPO,
+};
 use crate::parser::plugins::code::abap_name::parse_abapgit_name;
 
 pub struct Abap;
@@ -116,7 +120,10 @@ pub fn lower(src: &str) -> FileFacts {
         macros: HashSet::default(),
         in_macro: false,
         in_interface: false,
+        dynamic: dynamic_sites(src),
+        next_dynamic: 0,
     };
+    cx.f.includes = include_names(src).iter().map(|n| fold(n)).collect();
     cx.f.exprs.push(Expr::Unknown);
     // scope 0 holds the global names, scope 1 the object's local ones
     cx.f.scopes.push(ScopeDecl {
@@ -132,6 +139,7 @@ pub fn lower(src: &str) -> FileFacts {
     for statement in statements(&code) {
         cx.statement(&statement);
     }
+    cx.dynamic_sites_before(usize::MAX);
     cx.close_body(code.len());
     let mut f = cx.f;
     f.locals.sort_by_key(|l| (l.func, l.at));
@@ -190,6 +198,10 @@ struct Lower<'a> {
     macros: HashSet<Name>,
     in_macro: bool,
     in_interface: bool,
+    /// The file's computed calls (`abap_dynamic`), in source order, and how
+    /// many the statement walk has passed.
+    dynamic: Vec<DynSite>,
+    next_dynamic: usize,
 }
 
 /// A chain of member accesses being read (`a=>b->c-d`), before it is known
@@ -220,6 +232,12 @@ const OPERATORS: &[&str] = &[
 
 fn fold(s: &str) -> Name {
     s.to_ascii_lowercase().into()
+}
+
+/// The first segment of an `IN PROGRAM x` path. Not `x` itself: that names
+/// the report's function in the root, which would answer first.
+fn program_key(program: &str) -> Name {
+    format!("program:{program}").into()
 }
 
 fn name_byte(b: u8) -> bool {
@@ -272,6 +290,7 @@ impl<'a> Lower<'a> {
         };
         let start = st.tokens[0].start_byte;
         let end = before_period(st);
+        self.dynamic_sites_before(st.end_byte());
         if self.in_macro {
             self.in_macro = head != "END-OF-DEFINITION";
             return;
@@ -629,12 +648,14 @@ impl<'a> Lower<'a> {
         });
     }
 
-    /// `PERFORM f ...`, `PERFORM: f, g.`: a form of this object. A form of
-    /// another program (`IN PROGRAM p`, `f(p)`) or a dynamic name (`(f)`)
-    /// is left to includes and dynamic calls.
+    /// `PERFORM f ...`, `PERFORM: f, g.`: a form of this object's unit
+    /// (its program and includes). `IN PROGRAM p` is a form of `p`'s unit
+    /// ([`Self::perform_in_program`]); a dynamic name (`(f)`) is a dynamic
+    /// site, and the old `f(p)` is not read.
     fn perform(&mut self, st: &Statement, words: &[&str]) {
         let upper: Vec<String> = words.iter().map(|w| w.to_ascii_uppercase()).collect();
-        if upper.windows(2).any(|w| w[0] == "IN" && w[1] == "PROGRAM") {
+        if let Some(i) = upper.windows(2).position(|w| w[0] == "IN" && w[1] == "PROGRAM") {
+            self.perform_in_program(st, words, i + 2);
             return;
         }
         let code = self.code;
@@ -653,6 +674,63 @@ impl<'a> Lower<'a> {
         }
         if let Some(t) = st.tokens.get(2) {
             self.expressions(t.start_byte, before_period(st), false);
+        }
+    }
+
+    /// `PERFORM f IN PROGRAM x`: the form `f` of program `x`'s unit, as the
+    /// two-segment path `program:x`, `f` (the program is its own name space:
+    /// a bare `x` is the report's function). A computed program (`IN PROGRAM (lv)`) or
+    /// form (`PERFORM (lv) IN PROGRAM x`) is a dynamic site, reported by
+    /// [`Self::dynamic_sites_before`]; the old `PERFORM f(x)` is not read.
+    fn perform_in_program(&mut self, st: &Statement, words: &[&str], program_at: usize) {
+        let (Some(form), Some(program)) = (words.get(1), words.get(program_at)) else {
+            return;
+        };
+        if matches!(*form, ":" | ",") || form.contains('(') || program.contains('(') {
+            return;
+        }
+        let at = st.tokens[1].start_byte;
+        let (func, scope) = self.site_cx();
+        let func = func.filter(|_| !self.body.is_some_and(|b| b.method));
+        let callee = self.path_expr(&[program_key(&fold(program)), fold(form)]);
+        let expr = self.node(Expr::Call(callee));
+        let row = self.row(at);
+        self.f.sites.push(Site {
+            func,
+            scope,
+            row,
+            at: at as u32,
+            kind: SiteKind::Call,
+            expr,
+        });
+    }
+
+    /// One unresolved site for each computed call (`abap_dynamic`) that
+    /// starts before byte `end`, in the context the walk is in: the reason
+    /// is the form's, and it names no edge. Calls inside a macro's body are
+    /// not the file's.
+    fn dynamic_sites_before(&mut self, end: usize) {
+        while let Some(d) = self.dynamic.get(self.next_dynamic) {
+            if d.at >= end {
+                break;
+            }
+            let (at, reason) = (d.at, d.form.reason());
+            self.next_dynamic += 1;
+            if self.in_macro {
+                continue;
+            }
+            let index = DYNAMIC_REASONS.iter().position(|r| *r == reason).unwrap_or(0);
+            let expr = self.node(Expr::Dynamic(index as u8));
+            let (func, scope) = self.site_cx();
+            let row = self.row(at);
+            self.f.sites.push(Site {
+                func,
+                scope,
+                row,
+                at: at as u32,
+                kind: SiteKind::Call,
+                expr,
+            });
         }
     }
 
@@ -923,13 +1001,26 @@ fn named(name: &str) -> TypeExpr {
 
 /// Every file pools its scope 0 into the root, where the global classes,
 /// interfaces, function modules and reports are seen repo-wide. Its scope 1
-/// lives in its object's directory (`local_home`), which the parts of one
-/// class or function group share, and which falls back to the root
-/// (`dirs_fall_back`): an object sees its own local names first, and never
-/// another object's. A file with no abapGit name is an object of its own.
+/// lives in its compiled unit's directory (`local_home`), which the parts of
+/// one class or function group share, and which falls back to the root
+/// (`dirs_fall_back`): a unit sees its own local names first, and never
+/// another unit's. The unit is the object, joined with the objects its
+/// `INCLUDE`s name ([`IncludeGraph`]): a program with its includes is one.
+/// Each program is also importable by its name, so `PERFORM f IN PROGRAM x`
+/// (the path `program:x`, `f`) looks in `x`'s unit only. An `INCLUDE` of a file the
+/// repo does not hold is counted as unresolved. A file with no abapGit name
+/// is an object of its own.
 fn layout(files: &[(&str, &FileFacts)]) -> Layout {
+    let paths: Vec<String> = files.iter().map(|(p, _)| p.to_string()).collect();
+    let named: Vec<(&str, Vec<String>)> = files
+        .iter()
+        .filter(|(p, f)| !f.includes.is_empty() && reads_includes(p))
+        .map(|(p, f)| (*p, f.includes.iter().map(|n| n.to_string()).collect()))
+        .collect();
+    let includes = IncludeGraph::from_names(&paths, &named);
     let mut dirs: Vec<(String, Option<usize>)> = vec![(String::new(), None)];
-    let mut objects: HashMap<String, usize> = HashMap::default();
+    let mut units: HashMap<String, usize> = HashMap::default();
+    let mut dir_crates: HashMap<String, usize> = HashMap::default();
     let mut orphan_dir = Vec::with_capacity(files.len());
     let mut local_home = Vec::with_capacity(files.len());
     for (path, _) in files {
@@ -938,19 +1029,31 @@ fn layout(files: &[(&str, &FileFacts)]) -> Layout {
         orphan_dir.push(Some((0, stem.to_string())));
         local_home.push(parse_abapgit_name(path).map(|object| {
             let name = object.name.to_ascii_lowercase();
-            *objects.entry(name.clone()).or_insert_with(|| {
-                dirs.push((name, Some(0)));
+            let unit = includes.unit(&name);
+            let dir = *units.entry(unit.clone()).or_insert_with(|| {
+                dirs.push((unit, Some(0)));
                 dirs.len() - 1
-            })
+            });
+            if object.object_type == "prog" {
+                dir_crates.entry(program_key(&name).to_string()).or_insert(dir);
+            }
+            dir
         }));
     }
+    let mut unresolved: HashMap<&'static str, usize> = HashMap::default();
+    for missing in &includes.unresolved {
+        *unresolved.entry(missing.reason()).or_default() += 1;
+    }
+    debug_assert!(includes.unresolved.iter().all(|m| m.reason() == INCLUDE_NOT_IN_REPO));
     Layout {
         parent_of: vec![None; files.len()],
         dirs,
         orphan_dir,
         pooled: vec![true; files.len()],
         local_home,
+        dir_crates,
         dirs_fall_back: true,
+        unresolved,
         ..Layout::default()
     }
 }

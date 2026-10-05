@@ -424,7 +424,7 @@ impl<'t, 'a> Resolver<'t, 'a> {
                 &cx.env(),
                 depth + 1,
             ),
-            Expr::Unknown => Ty::Unknown,
+            Expr::Dynamic(_) | Expr::Unknown => Ty::Unknown,
         }
     }
 
