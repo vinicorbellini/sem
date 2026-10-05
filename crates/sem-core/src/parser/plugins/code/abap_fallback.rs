@@ -6,44 +6,67 @@
 //! lands: often inside an `ERROR` that has also swallowed the body, and
 //! sometimes the next `FORM` with it. A class's `TYPES` become `ERROR` nodes,
 //! or part of the `METHODS` or `DATA` statement before them. So none of these
-//! can be read off a node or a sibling sequence. They are read off the tokens
-//! instead: every leaf of the tree in document order, comments left out, cut
-//! into statements at each `.`. A literal is a single leaf, so a period inside
-//! one does not end a statement.
+//! can be read off a node or a sibling sequence. They are read off the source
+//! instead, with comments and literals blanked by the same stripper the
+//! reference scan uses (`strip_abap_content`), cut into statements at each `.`.
+//! A period inside a literal or a comment does not end a statement.
+//!
+//! Not off the tree's leaves: the grammar does not end a `'...'` literal at
+//! the end of its line, as ABAP does, so after a quote it misreads (`''`) one
+//! leaf can run over several lines and hold the statements in them, `METHOD`
+//! and `ENDMETHOD` among them.
+//!
+//! `METHOD` has a node, `method_implementation`, but the grammar's error
+//! recovery loses it in two ways. A statement it cannot parse can drop the
+//! rest of a `CLASS x IMPLEMENTATION`, so no method after it is an entity; or
+//! a `method_implementation` runs on past its own `ENDMETHOD` to the end of the
+//! class, so one entity covers the methods after it. So `METHOD x.` ...
+//! `ENDMETHOD.` blocks are read off the same statements, and reconciled with
+//! the grammar's methods (`reconcile_methods`): the grammar's entity wins
+//! where it has one, ended at its own `ENDMETHOD`, and a block it has none for
+//! becomes a method of its own.
 //!
 //! Every entity made here carries `source: abap-fallback` in its metadata, so
-//! they can be counted apart from the ones the grammar gives.
+//! they can be counted apart from the ones the grammar gives. A grammar method
+//! cut back to its `ENDMETHOD` is still the grammar's, and carries nothing.
 //!
 //! This module exists only for the grammar's gaps. Delete it once the grammar
-//! has nodes for forms, dynpro modules, macro definitions and `TYPES` (asked
-//! of mkoval1/tree-sitter-abap), and list those nodes in `ABAP_CONFIG` like
-//! the rest.
+//! has nodes for forms, dynpro modules, macro definitions and `TYPES`, and
+//! recovers a method without losing the class around it (asked of
+//! mkoval1/tree-sitter-abap), and list those nodes in `ABAP_CONFIG` like the
+//! rest.
 
 use std::collections::BTreeMap;
 
-use tree_sitter::Node;
-
 use super::entity_extractor::line_number_for_byte;
 use crate::model::entity::{build_entity_id, SemanticEntity};
+use crate::parser::graph::strip_abap_content;
 use crate::utils::hash::content_hash;
 
 const METADATA_SOURCE: (&str, &str) = ("source", "abap-fallback");
 
 /// Add the `report` (for `PROGRAM`), `form`, `module`, `macro` and class-level
-/// `type` entities of an ABAP file to the ones the tree walk found, then put
-/// all of them back in source order.
+/// `type` entities of an ABAP file to the ones the tree walk found, and the
+/// `method` entities its error recovery lost, then put all of them back in
+/// source order.
 ///
 /// Forms, modules and `PROGRAM` sit at the top of the file; a macro defined
 /// inside a form or module nests under it; a `TYPES` nests under the
 /// `CLASS ... DEFINITION` it is declared in. `TYPES` outside a class
 /// definition (a program's or an interface's, or a local type in a body) is
-/// not an entity, the same as `DATA` there.
+/// not an entity, the same as `DATA` there. A method nests under the
+/// `CLASS ... IMPLEMENTATION` it is written in; a `METHOD` outside one is not
+/// an entity.
 pub(super) fn extract_abap_fallback_entities(
-    root: Node,
     file_path: &str,
     source: &[u8],
     entities: &mut Vec<SemanticEntity>,
 ) {
+    let Ok(text) = std::str::from_utf8(source) else {
+        return;
+    };
+    let code = strip_abap_content(text);
+
     let classes: Vec<(usize, usize, String)> = entities
         .iter()
         .filter(|e| e.entity_type == "class")
@@ -53,9 +76,12 @@ pub(super) fn extract_abap_fallback_entities(
     let mut found = Vec::new();
     let mut open_blocks: Vec<OpenBlock> = Vec::new();
     let mut open_type: Option<OpenType> = None;
+    let mut class_blocks: Vec<ClassBlock> = Vec::new();
+    let mut open_class: Option<ClassBlock> = None;
+    let mut open_method: Option<OpenMethod> = None;
 
-    for statement in statements(root, source) {
-        let Some(head) = statement.head(source) else {
+    for statement in statements(&code) {
+        let Some(head) = statement.head(&code) else {
             continue;
         };
         let keyword = head.keyword.to_ascii_uppercase();
@@ -129,6 +155,59 @@ pub(super) fn extract_abap_fallback_entities(
                     statement.end_byte(),
                 ));
             }
+            "CLASS" => {
+                // CLASS does not nest: a block still open was never closed (or
+                // is a `DEFINITION DEFERRED`, which has no ENDCLASS), and a
+                // METHOD still open in it never will be.
+                class_blocks.extend(open_class.take());
+                open_method = None;
+                let kind = head.kind.as_ref().map(|k| k.text.to_ascii_uppercase());
+                let implementation = match kind.as_deref() {
+                    Some("IMPLEMENTATION") => true,
+                    Some("DEFINITION") => false,
+                    _ => continue,
+                };
+                let Some(name) = head.name else {
+                    continue;
+                };
+                open_class = Some(ClassBlock {
+                    name,
+                    implementation,
+                    start_byte: indented_start(source, head.start_byte),
+                    end_byte: None,
+                    methods: Vec::new(),
+                });
+            }
+            "ENDCLASS" => {
+                if let Some(mut class) = open_class.take() {
+                    class.end_byte = Some(statement.end_byte());
+                    class_blocks.push(class);
+                }
+                open_method = None;
+            }
+            "METHOD" => {
+                // METHOD does not nest either: an earlier one still open was
+                // never closed, so it is dropped rather than given a guessed end.
+                let in_implementation = open_class.as_ref().is_some_and(|c| c.implementation);
+                open_method = match head.name {
+                    Some(name) if in_implementation => Some(OpenMethod {
+                        name,
+                        start_byte: indented_start(source, head.start_byte),
+                        keyword_byte: head.start_byte,
+                    }),
+                    _ => None,
+                };
+            }
+            "ENDMETHOD" => {
+                if let (Some(method), Some(class)) = (open_method.take(), open_class.as_mut()) {
+                    class.methods.push(MethodBlock {
+                        name: method.name,
+                        start_byte: method.start_byte,
+                        keyword_byte: method.keyword_byte,
+                        end_byte: statement.end_byte(),
+                    });
+                }
+            }
             "TYPES" => {
                 let Some(class_id) = innermost_class(&classes, head.start_byte) else {
                     continue;
@@ -136,6 +215,7 @@ pub(super) fn extract_abap_fallback_entities(
                 found.extend(types_entities(
                     file_path,
                     source,
+                    &code,
                     &statement,
                     head.start_byte,
                     class_id,
@@ -145,6 +225,9 @@ pub(super) fn extract_abap_fallback_entities(
             _ => {}
         }
     }
+
+    class_blocks.extend(open_class);
+    reconcile_methods(file_path, source, &class_blocks, entities, &mut found);
 
     if found.is_empty() {
         return;
@@ -167,6 +250,34 @@ struct OpenBlock {
     start_byte: usize,
 }
 
+/// A `CLASS x DEFINITION` or `CLASS x IMPLEMENTATION`, and the `METHOD`
+/// blocks closed inside an implementation. Its end is the `ENDCLASS`, none if
+/// another `CLASS` or the end of the file comes first.
+struct ClassBlock {
+    name: Word,
+    implementation: bool,
+    start_byte: usize,
+    end_byte: Option<usize>,
+    methods: Vec<MethodBlock>,
+}
+
+/// A `METHOD` whose `ENDMETHOD` has not been seen yet.
+struct OpenMethod {
+    name: Word,
+    start_byte: usize,
+    keyword_byte: usize,
+}
+
+/// A `METHOD x.` ... `ENDMETHOD.` block: from the `METHOD` statement's
+/// indentation, where the grammar starts a `method_implementation`, to the
+/// `ENDMETHOD` statement's period.
+struct MethodBlock {
+    name: Word,
+    start_byte: usize,
+    keyword_byte: usize,
+    end_byte: usize,
+}
+
 /// A `TYPES BEGIN OF x` whose `END OF x` has not been seen yet: the classic
 /// form spreads one structure over several `TYPES` statements.
 struct OpenType {
@@ -177,6 +288,7 @@ struct OpenType {
 
 /// A word of the source and where it is, so the structural hash can leave the
 /// name out the way the grammar path does.
+#[derive(Clone)]
 struct Word {
     text: String,
     start_byte: usize,
@@ -185,27 +297,42 @@ struct Word {
 
 /// One ABAP statement: its tokens, and the period that closes it (none for a
 /// statement cut short by the end of the file).
-struct Statement<'tree> {
-    tokens: Vec<Node<'tree>>,
-    period: Option<Node<'tree>>,
+struct Statement {
+    tokens: Vec<Token>,
+    period: Option<Token>,
 }
 
-/// A statement's leading keyword (`END-OF-DEFINITION` is one keyword, though
-/// it is five tokens) and the word after it, which names a FORM, MODULE,
-/// DEFINE or PROGRAM.
+/// Where a token is. Its text is read off the stripped code, never the source,
+/// so a comment or a literal is never a word.
+#[derive(Clone, Copy)]
+struct Token {
+    start_byte: usize,
+    end_byte: usize,
+}
+
+impl Token {
+    fn text<'a>(&self, code: &'a str) -> &'a str {
+        &code[self.start_byte..self.end_byte]
+    }
+}
+
+/// A statement's leading keyword (`END-OF-DEFINITION` is one keyword), the
+/// word after it, which names a FORM, MODULE, DEFINE, PROGRAM, METHOD or
+/// CLASS, and the word after that, which says whether a CLASS statement is its
+/// `DEFINITION` or its `IMPLEMENTATION`.
 struct Head {
     keyword: String,
     name: Option<Word>,
+    kind: Option<Word>,
     start_byte: usize,
 }
 
-impl Statement<'_> {
-    fn head(&self, source: &[u8]) -> Option<Head> {
+impl Statement {
+    fn head(&self, code: &str) -> Option<Head> {
         let first = self.tokens.first()?;
         let last = self.tokens.last()?;
-        let start = trimmed_start(*first, source);
-        let text = std::str::from_utf8(&source[start..last.end_byte()]).ok()?;
-        let mut words = words(text).map(|(offset, word)| Word {
+        let start = first.start_byte;
+        let mut words = words(&code[start..last.end_byte]).map(|(offset, word)| Word {
             text: word.to_string(),
             start_byte: start + offset,
             end_byte: start + offset + word.len(),
@@ -214,6 +341,7 @@ impl Statement<'_> {
         Some(Head {
             keyword,
             name: words.next(),
+            kind: words.next(),
             start_byte: start,
         })
     }
@@ -221,7 +349,7 @@ impl Statement<'_> {
     fn end_byte(&self) -> usize {
         self.period
             .or_else(|| self.tokens.last().copied())
-            .map_or(0, |n| n.end_byte())
+            .map_or(0, |t| t.end_byte)
     }
 }
 
@@ -237,35 +365,44 @@ fn words(text: &str) -> impl Iterator<Item = (usize, &str)> {
         .filter(|(_, word)| !word.is_empty())
 }
 
-/// Cut the tree's leaves into statements at each period.
-fn statements<'tree>(root: Node<'tree>, source: &[u8]) -> Vec<Statement<'tree>> {
+/// Cut the stripped code into statements at each period. Whitespace separates
+/// tokens, and `.`, `,` and `:` are tokens of their own.
+fn statements(code: &str) -> Vec<Statement> {
     let mut statements = Vec::new();
     let mut tokens = Vec::new();
-    let mut stack = vec![root];
-    while let Some(node) = stack.pop() {
-        if matches!(node.kind(), "bol_comment" | "eol_comment") {
+    let mut word_start: Option<usize> = None;
+    for (i, b) in code.bytes().enumerate() {
+        let punctuation = matches!(b, b'.' | b',' | b':');
+        if !b.is_ascii_whitespace() && !punctuation {
+            word_start.get_or_insert(i);
             continue;
         }
-        if node.child_count() > 0 {
-            let mut cursor = node.walk();
-            let children: Vec<_> = node.children(&mut cursor).collect();
-            stack.extend(children.into_iter().rev());
-            continue;
+        if let Some(start) = word_start.take() {
+            tokens.push(Token {
+                start_byte: start,
+                end_byte: i,
+            });
         }
-        // A MISSING period is the grammar's guess, not the source's.
-        if node.is_missing() || node.start_byte() == node.end_byte() {
-            continue;
-        }
-        if node.kind() == "." {
+        let token = Token {
+            start_byte: i,
+            end_byte: i + 1,
+        };
+        if b == b'.' {
             if !tokens.is_empty() {
                 statements.push(Statement {
                     tokens: std::mem::take(&mut tokens),
-                    period: Some(node),
+                    period: Some(token),
                 });
             }
-        } else if !node_text(node, source).trim().is_empty() {
-            tokens.push(node);
+        } else if punctuation {
+            tokens.push(token);
         }
+    }
+    if let Some(start) = word_start {
+        tokens.push(Token {
+            start_byte: start,
+            end_byte: code.len(),
+        });
     }
     if !tokens.is_empty() {
         statements.push(Statement {
@@ -283,6 +420,7 @@ fn statements<'tree>(root: Node<'tree>, source: &[u8]) -> Vec<Statement<'tree>> 
 fn types_entities(
     file_path: &str,
     source: &[u8],
+    code: &str,
     statement: &Statement,
     statement_start: usize,
     class_id: &str,
@@ -291,7 +429,7 @@ fn types_entities(
     let texts: Vec<String> = statement
         .tokens
         .iter()
-        .map(|t| node_text(*t, source).trim().to_ascii_uppercase())
+        .map(|t| t.text(code).to_ascii_uppercase())
         .collect();
     let is = |i: usize, word: &str| texts.get(i).is_some_and(|t| t == word);
 
@@ -311,10 +449,7 @@ fn types_entities(
                 ));
             }
             i += 1;
-            declarator_start = statement
-                .tokens
-                .get(i)
-                .map_or(0, |t| trimmed_start(*t, source));
+            declarator_start = statement.tokens.get(i).map_or(0, |t| t.start_byte);
             continue;
         }
         if open_type.is_none() {
@@ -333,9 +468,9 @@ fn types_entities(
             };
             *open_type = Some(OpenType {
                 name: Word {
-                    text: node_text(*name, source).trim().to_string(),
-                    start_byte: trimmed_start(*name, source),
-                    end_byte: name.end_byte(),
+                    text: name.text(code).to_string(),
+                    start_byte: name.start_byte,
+                    end_byte: name.end_byte,
                 },
                 start_byte: declarator_start,
                 depth: 0,
@@ -371,7 +506,7 @@ fn type_entity(
     source: &[u8],
     open: OpenType,
     class_id: &str,
-    end: Node,
+    end: Token,
 ) -> SemanticEntity {
     fallback_entity(
         file_path,
@@ -380,8 +515,181 @@ fn type_entity(
         open.name,
         Some(class_id),
         open.start_byte,
-        end.end_byte(),
+        end.end_byte,
     )
+}
+
+/// Reconcile the `METHOD` blocks read off the statements with the `method`
+/// entities the tree walk found, so that every method entity is one block.
+///
+/// A grammar method that starts at a block's `METHOD` and has its name is that
+/// block's: it is kept, with its id and parent, and if it runs on past the
+/// block's `ENDMETHOD` it is cut back to it, so it no longer spans the methods
+/// after it. One the recovery left outside any class, with no parent, is
+/// nested under its implementation.
+///
+/// A block with no grammar method becomes a `method` of its own, nested under
+/// its `CLASS ... IMPLEMENTATION` the way the grammar nests one, so
+/// `collapse_abap_classes` moves it to the class; or under the class itself
+/// when the grammar's definition runs on over the implementation. Where the
+/// grammar has neither, the implementation is added as an `impl` too, from
+/// `CLASS` to `ENDCLASS`, and so is its `CLASS ... DEFINITION` if the grammar
+/// lost that as well, so the class is named and identified by its definition
+/// as it is when the grammar reads it. Without an `ENDCLASS` neither is added,
+/// and nor are the implementation's recovered methods.
+///
+/// A grammar method that is no block's is dropped: a `METHOD` with no
+/// `ENDMETHOD`, which the grammar reads on into the next method, as for
+/// `FORM`; or a `METHOD` whose name the grammar misread (`get_steps` for
+/// `zif_x~get_steps`, or a later token), whose block has an entity of its
+/// own.
+fn reconcile_methods(
+    file_path: &str,
+    source: &[u8],
+    class_blocks: &[ClassBlock],
+    entities: &mut Vec<SemanticEntity>,
+    found: &mut Vec<SemanticEntity>,
+) {
+    let mut claimed = vec![false; entities.len()];
+    for implementation in class_blocks.iter().filter(|c| c.implementation) {
+        // The grammar's own implementation, or its definition when that runs on
+        // over the implementation and so already holds it.
+        let holds_implementation = |e: &SemanticEntity| {
+            let at = implementation.start_byte;
+            e.start_byte.is_some_and(|start| start < at) && e.end_byte.is_some_and(|end| at < end)
+        };
+        let grammar_impl = entities.iter().find(|e| {
+            e.parent_id.is_none()
+                && e.name.eq_ignore_ascii_case(&implementation.name.text)
+                && (e.entity_type == "impl" || e.entity_type == "class" && holds_implementation(e))
+        });
+        let impl_id = match (grammar_impl, implementation.end_byte) {
+            (Some(e), _) => Some(e.id.clone()),
+            (None, Some(end_byte)) if !implementation.methods.is_empty() => {
+                let has_class = entities.iter().any(|e| {
+                    e.entity_type == "class"
+                        && e.parent_id.is_none()
+                        && e.name.eq_ignore_ascii_case(&implementation.name.text)
+                });
+                let lost_definition = class_blocks.iter().find_map(|c| {
+                    let is_definition = !c.implementation
+                        && c.name.text.eq_ignore_ascii_case(&implementation.name.text);
+                    c.end_byte.filter(|_| is_definition).map(|end| (c, end))
+                });
+                if let (false, Some((definition, end_byte))) = (has_class, lost_definition) {
+                    found.push(fallback_entity(
+                        file_path,
+                        source,
+                        "class",
+                        definition.name.clone(),
+                        None,
+                        definition.start_byte,
+                        end_byte,
+                    ));
+                }
+                let entity = fallback_entity(
+                    file_path,
+                    source,
+                    "impl",
+                    implementation.name.clone(),
+                    None,
+                    implementation.start_byte,
+                    end_byte,
+                );
+                let id = entity.id.clone();
+                found.push(entity);
+                Some(id)
+            }
+            _ => None,
+        };
+
+        for block in &implementation.methods {
+            let grammar_method = entities.iter().position(|e| {
+                e.entity_type == "method"
+                    && e.name.eq_ignore_ascii_case(&block.name.text)
+                    && e.start_byte
+                        .is_some_and(|start| starts_at(source, start, block.keyword_byte))
+            });
+            match (grammar_method, &impl_id) {
+                (Some(i), _) => {
+                    claimed[i] = true;
+                    let method = &mut entities[i];
+                    if method.end_byte.is_some_and(|end| end > block.end_byte) {
+                        end_method_at(method, source, block);
+                    }
+                    if let (None, Some(impl_id)) = (&method.parent_id, &impl_id) {
+                        method.id =
+                            build_entity_id(file_path, "method", &method.name, Some(impl_id));
+                        method.parent_id = Some(impl_id.clone());
+                    }
+                }
+                (None, Some(impl_id)) => found.push(fallback_entity(
+                    file_path,
+                    source,
+                    "method",
+                    block.name.clone(),
+                    Some(impl_id),
+                    block.start_byte,
+                    block.end_byte,
+                )),
+                (None, None) => {}
+            }
+        }
+    }
+
+    let mut index = 0;
+    entities.retain(|e| {
+        index += 1;
+        e.entity_type != "method" || claimed[index - 1]
+    });
+}
+
+/// Whether an entity starting at `start` is the one whose `METHOD` keyword is
+/// at `keyword_byte`: nothing but whitespace between the two.
+fn starts_at(source: &[u8], start: usize, keyword_byte: usize) -> bool {
+    start <= keyword_byte
+        && source[start..keyword_byte]
+            .iter()
+            .all(u8::is_ascii_whitespace)
+}
+
+/// Cut a grammar method that runs on past its `ENDMETHOD` back to it. Its
+/// node still spans the methods after it, so the hashes are over its own text
+/// the way a fallback entity's are.
+fn end_method_at(entity: &mut SemanticEntity, source: &[u8], block: &MethodBlock) {
+    let Some(start_byte) = entity.start_byte else {
+        return;
+    };
+    let content = String::from_utf8_lossy(&source[start_byte..block.end_byte]).into_owned();
+    entity.content_hash = content_hash(&content);
+    entity.structural_hash = Some(structural_hash(
+        source,
+        &block.name,
+        start_byte,
+        block.end_byte,
+    ));
+    entity.kappa = None;
+    entity.content = content;
+    entity.end_line = line_number_for_byte(source, block.end_byte.saturating_sub(1));
+    entity.end_byte = Some(block.end_byte);
+}
+
+/// The grammar starts a `method_implementation` at its line's indentation (its
+/// first leaf carries it), so a recovered block starts there too, and a method
+/// has the same content whichever of the two gives it.
+fn indented_start(source: &[u8], keyword_byte: usize) -> usize {
+    let line_start = source[..keyword_byte]
+        .iter()
+        .rposition(|&b| b == b'\n')
+        .map_or(0, |i| i + 1);
+    if source[line_start..keyword_byte]
+        .iter()
+        .all(|&b| b == b' ' || b == b'\t')
+    {
+        line_start
+    } else {
+        keyword_byte
+    }
 }
 
 fn innermost_class(classes: &[(usize, usize, String)], byte: usize) -> Option<&str> {
@@ -402,16 +710,7 @@ fn fallback_entity(
     end_byte: usize,
 ) -> SemanticEntity {
     let content = String::from_utf8_lossy(&source[start_byte..end_byte]).into_owned();
-    // No single node spans the entity, so the structural hash is over its text
-    // with whitespace collapsed and the name left out, and kappa is skipped,
-    // as for Swift's recovered containers.
-    let before = String::from_utf8_lossy(&source[start_byte..name.start_byte.max(start_byte)]);
-    let after = String::from_utf8_lossy(&source[name.end_byte.min(end_byte)..end_byte]);
-    let normalized = before
-        .split_whitespace()
-        .chain(after.split_whitespace())
-        .collect::<Vec<_>>()
-        .join(" ");
+    let structural = structural_hash(source, &name, start_byte, end_byte);
     SemanticEntity {
         id: build_entity_id(file_path, entity_type, &name.text, parent_id),
         file_path: file_path.to_string(),
@@ -419,7 +718,7 @@ fn fallback_entity(
         name: name.text,
         parent_id: parent_id.map(String::from),
         content_hash: content_hash(&content),
-        structural_hash: Some(content_hash(&normalized)),
+        structural_hash: Some(structural),
         kappa: None,
         content,
         start_line: line_number_for_byte(source, start_byte),
@@ -433,12 +732,16 @@ fn fallback_entity(
     }
 }
 
-/// The grammar's leaves carry the whitespace before them (`" show_order"`).
-fn trimmed_start(node: Node, source: &[u8]) -> usize {
-    let text = node_text(node, source);
-    node.start_byte() + (text.len() - text.trim_start().len())
-}
-
-fn node_text<'a>(node: Node, source: &'a [u8]) -> &'a str {
-    node.utf8_text(source).unwrap_or("")
+/// No single node spans the entity, so the structural hash is over its text
+/// with whitespace collapsed and the name left out, and kappa is skipped, as
+/// for Swift's recovered containers.
+fn structural_hash(source: &[u8], name: &Word, start_byte: usize, end_byte: usize) -> String {
+    let before = String::from_utf8_lossy(&source[start_byte..name.start_byte.max(start_byte)]);
+    let after = String::from_utf8_lossy(&source[name.end_byte.min(end_byte)..end_byte]);
+    let normalized = before
+        .split_whitespace()
+        .chain(after.split_whitespace())
+        .collect::<Vec<_>>()
+        .join(" ");
+    content_hash(&normalized)
 }

@@ -14,7 +14,7 @@ Run them with `cd crates && cargo test -p sem-core abap`. No ABAP test is
 
 Story 1.1 is case-insensitive names, 1.2 comment and string stripping, 1.3 the
 full entity set, 1.4 one entity per class, 1.5 abapGit layout, 1.6 parse-error
-tolerance, 1.7 test detection.
+tolerance, 1.7 test detection, 1.10 METHOD blocks the grammar loses.
 
 | Fixture file | Tests that read it | Story |
 |--------------|--------------------|-------|
@@ -25,7 +25,7 @@ tolerance, 1.7 test detection.
 | | `abap_fixture_1_3_method`, `abap_fixture_1_3_local_classes_attach` (global class attaches nothing) | 1.3 |
 | | `abap_fixture_1_2_comment_not_reference`, `abap_fixture_1_2_string_not_reference` | 1.2 |
 | | `abap_fixture_1_1_find_any_case`, `abap_fixture_1_1_refs_any_case` | 1.1 |
-| | `abap_fixture_1_6_errors_still_yield_entities`, `abap_fixture_1_6_error_count_reported` (broken copies of it) | 1.6 |
+| | `abap_fixture_1_6_errors_still_yield_entities`, `abap_fixture_1_6_error_count_reported` (broken copies of it) | 1.6, 1.10 |
 | `zcl_fx_order.clas.locals_def.abap` | `test_abap_fixture_clas_locals_def`, `abap_fixture_1_3_local_classes_attach` | 1.3 |
 | `zcl_fx_order.clas.locals_imp.abap` | `test_abap_fixture_clas_locals_imp` | 1.4 |
 | | `abap_fixture_1_3_local_classes_attach` | 1.3 |
@@ -55,3 +55,7 @@ by `test_abap_fixture_layout`.
 | `test_abap_entity_extraction` | 1.4 |
 | `test_abap_class_two_ranges` | 1.4 |
 | `abap_fixture_1_3_types_data` (TYPES and DATA in sections, a method, and the top level) | 1.3 |
+| `abap_fixture_1_10_unparseable_statement_keeps_later_methods` | 1.10 |
+| `abap_fixture_1_10_stretched_method_ends_at_its_endmethod` | 1.10 |
+| `abap_fixture_1_10_method_without_endmethod_dropped` (and METHOD in a comment or literal) | 1.10 |
+| `abap_fixture_1_10_interface_method_names` | 1.10 |

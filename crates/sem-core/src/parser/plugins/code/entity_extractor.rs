@@ -25,14 +25,10 @@ pub fn extract_entities(
     );
 
     // ABAP FORM, MODULE, DEFINE, PROGRAM and class-level TYPES have no node in
-    // the grammar; read them off the token stream instead.
+    // the grammar, and its error recovery loses METHOD blocks; read them off
+    // the statements instead.
     if config.id == "abap" {
-        extract_abap_fallback_entities(
-            tree.root_node(),
-            file_path,
-            source_code.as_bytes(),
-            &mut entities,
-        );
+        extract_abap_fallback_entities(file_path, source_code.as_bytes(), &mut entities);
         // A class's definition and implementation are one class entity.
         collapse_abap_classes(source_code.as_bytes(), &mut entities);
         // Local and test classes belong to the global class of their file name.

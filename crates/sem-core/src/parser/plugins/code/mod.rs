@@ -2760,17 +2760,21 @@ DATA gv_global TYPE i.
         assert!(rows.contains(&abap_row("report", "zfx_report", 2, 2)), "got: {rows:?}");
         assert!(rows.contains(&abap_row("form", "show_order", 21, 24)), "got: {rows:?}");
 
-        // Broken copies of the global class keep the class and the implementation's
-        // methods the parse reaches. A method after a missing `ENDMETHOD` is read
-        // as part of the one before it (`create` inside `constructor`).
+        // Broken copies of the global class keep the class and every method that
+        // has its ENDMETHOD, the ones the parse loses included (story 1.10). The
+        // grammar reads the method after a missing `ENDMETHOD` as part of the one
+        // before it (`create` inside `constructor`); `create` is its own again,
+        // and `constructor`, which has no ENDMETHOD, is dropped, as a FORM is.
+        // The unterminated literal ends at its line, as ABAP's do, so the
+        // `get_total` the grammar loses after it is there.
         let expected: [(&str, &[&str]); 3] = [
             (
                 "missing ENDMETHOD",
-                &["constructor", "describe", "zif_fx_order~add_item", "zif_fx_order~get_total"],
+                &["create", "describe", "zif_fx_order~add_item", "zif_fx_order~get_total"],
             ),
             (
                 "unterminated string",
-                &["constructor", "create", "describe", "zif_fx_order~add_item"],
+                &["constructor", "create", "describe", "zif_fx_order~add_item", "zif_fx_order~get_total"],
             ),
             (
                 "modern syntax",
@@ -2826,6 +2830,158 @@ DATA gv_global TYPE i.
         let stats = abap_stats("WRITE 'never closed.\n", "zbroken.prog.abap");
         assert_eq!(stats.entity_count, 0);
         assert!(stats.error_node_count > 0, "got: {stats:?}");
+    }
+
+    // Story 1.10: METHOD blocks the grammar's error recovery loses or stretches
+    // are read off the statements, like FORM.
+
+    /// The `source` metadata of each method entity, by name: `None` for the
+    /// grammar's own, `Some("abap-fallback")` for a recovered one.
+    #[cfg(feature = "lang-abap")]
+    fn abap_method_sources(code: &str, file: &str) -> Vec<(String, Option<String>)> {
+        CodeParserPlugin
+            .extract_entities(code, file)
+            .iter()
+            .filter(|e| e.entity_type == "method")
+            .map(|e| (e.name.clone(), e.metadata.as_ref().and_then(|m| m.get("source").cloned())))
+            .collect()
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_1_10_unparseable_statement_keeps_later_methods() {
+        // Found by the Gate 1 census (#1928, #4432, #5072, ...): the grammar does
+        // not end a `'` literal at its line, so `''` makes it read the rest of
+        // the file as literals, and every method after it is lost; here the whole
+        // implementation is. Both methods come back, each with its own range,
+        // under the class.
+        let code = "CLASS zcl_demo DEFINITION PUBLIC.\n  PUBLIC SECTION.\n    METHODS one.\n    METHODS two.\nENDCLASS.\n\nCLASS zcl_demo IMPLEMENTATION.\n  METHOD one.\n    check( '' ).\n  ENDMETHOD.\n\n  METHOD two.\n    WRITE 'y'.\n  ENDMETHOD.\nENDCLASS.\n";
+        assert_eq!(
+            abap_rows(code, "zcl_demo.clas.abap"),
+            vec![
+                abap_row("class", "zcl_demo", 1, 15),
+                abap_row("method", "one", 8, 10),
+                abap_row("method", "two", 12, 14),
+            ]
+        );
+        let entities = CodeParserPlugin.extract_entities(code, "zcl_demo.clas.abap");
+        for method in entities.iter().filter(|e| e.entity_type == "method") {
+            assert_eq!(method.parent_id.as_deref(), Some("zcl_demo.clas.abap::class::zcl_demo"));
+            assert!(method.content.starts_with("  METHOD "), "{}", method.content);
+            assert!(method.content.ends_with("ENDMETHOD."), "{}", method.content);
+        }
+
+        // The statement in a later method: the grammar keeps the methods before
+        // it, which stay its own, and the fallback adds the rest.
+        let code = "CLASS zcl_demo DEFINITION PUBLIC.\n  PUBLIC SECTION.\n    METHODS one.\nENDCLASS.\n\nCLASS zcl_demo IMPLEMENTATION.\n  METHOD one.\n    WRITE 'x'.\n  ENDMETHOD.\n\n  METHOD two.\n    check( '' ).\n  ENDMETHOD.\n\n  METHOD three.\n    WRITE 'z'.\n  ENDMETHOD.\nENDCLASS.\n";
+        assert_eq!(
+            abap_method_sources(code, "zcl_demo.clas.abap"),
+            vec![
+                ("one".to_string(), None),
+                ("two".to_string(), Some("abap-fallback".to_string())),
+                ("three".to_string(), Some("abap-fallback".to_string())),
+            ]
+        );
+        assert!(
+            abap_rows(code, "zcl_demo.clas.abap").contains(&abap_row("class", "zcl_demo", 1, 18))
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_1_10_stretched_method_ends_at_its_endmethod() {
+        // Found by the Gate 1 census (#3185, #3891, #7644): a template the
+        // grammar misreads runs `one`'s node over `two`, which is lost. `one` is
+        // cut back to its own ENDMETHOD and stays the grammar's; `two` is its own
+        // entity again.
+        let code = "CLASS zcl_demo DEFINITION PUBLIC.\n  PUBLIC SECTION.\n    METHODS one.\nENDCLASS.\n\nCLASS zcl_demo IMPLEMENTATION.\n  METHOD one.\n    lv = |{ a }*|.\n  ENDMETHOD.\n\n  METHOD two.\n    WRITE 'y'.\n  ENDMETHOD.\n\n  METHOD three.\n    WRITE 'z'.\n  ENDMETHOD.\nENDCLASS.\n";
+        assert_eq!(
+            abap_rows(code, "zcl_demo.clas.abap"),
+            vec![
+                abap_row("class", "zcl_demo", 1, 18),
+                abap_row("method", "one", 7, 9),
+                abap_row("method", "two", 11, 13),
+                abap_row("method", "three", 15, 17),
+            ]
+        );
+        let entities = CodeParserPlugin.extract_entities(code, "zcl_demo.clas.abap");
+        let one = entities.iter().find(|e| e.name == "one").expect("one");
+        assert_eq!(one.content, "  METHOD one.\n    lv = |{ a }*|.\n  ENDMETHOD.");
+        assert_eq!(one.end_byte, Some(code.find("ENDMETHOD.").unwrap() + "ENDMETHOD.".len()));
+        assert!(one.metadata.is_none(), "trimmed, still the grammar's: {:?}", one.metadata);
+        assert_eq!(
+            abap_method_sources(code, "zcl_demo.clas.abap")[1],
+            ("two".to_string(), Some("abap-fallback".to_string()))
+        );
+
+        // Trimmed or recovered, the method's content is what a clean parse gives,
+        // so a diff across the two reads it as unchanged.
+        let clean = code.replace("lv = |{ a }*|.", "lv = a.");
+        let stretched = code.replace("    WRITE 'y'.", "    lv = |{ a }*|.");
+        let content = |code: &str, name: &str| {
+            CodeParserPlugin
+                .extract_entities(code, "zcl_demo.clas.abap")
+                .into_iter()
+                .find(|e| e.name == name)
+                .map(|e| (e.content, e.content_hash))
+                .expect(name)
+        };
+        assert_eq!(content(code, "two"), content(&clean, "two"));
+        assert_eq!(content(&stretched, "three"), content(&clean, "three"));
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_1_10_method_without_endmethod_dropped() {
+        // A METHOD with no ENDMETHOD is dropped, as a FORM is; the methods before
+        // it are intact. Here the grammar loses the implementation too.
+        let code = "CLASS lcl_demo IMPLEMENTATION.\n  METHOD one.\n    WRITE 'x'.\n  ENDMETHOD.\n  METHOD two.\n    WRITE 'y'.\nENDCLASS.\n";
+        assert_eq!(
+            abap_rows(code, "zcl_demo.clas.locals_imp.abap"),
+            vec![abap_row("class", "lcl_demo", 1, 7), abap_row("method", "one", 2, 4)]
+        );
+
+        // Before another METHOD, the grammar reads it on into that one (`two`
+        // over L5-10); it is dropped there too, and `three` is its own.
+        let code = "CLASS lcl_demo IMPLEMENTATION.\n  METHOD one.\n    WRITE 'x'.\n  ENDMETHOD.\n  METHOD two.\n    WRITE 'y'.\n\n  METHOD three.\n    WRITE 'z'.\n  ENDMETHOD.\nENDCLASS.\n";
+        assert_eq!(
+            abap_rows(code, "zcl_demo.clas.locals_imp.abap"),
+            vec![
+                abap_row("class", "lcl_demo", 1, 11),
+                abap_row("method", "one", 2, 4),
+                abap_row("method", "three", 8, 10),
+            ]
+        );
+
+        // A METHOD in a comment or a literal is not a block.
+        let code = "CLASS lcl_demo IMPLEMENTATION.\n  METHOD one.\n* METHOD fake.\n    lv = 'METHOD fake. ENDMETHOD.'. \" ENDMETHOD.\n  ENDMETHOD.\nENDCLASS.\n";
+        assert_eq!(
+            abap_rows(code, "zcl_demo.clas.locals_imp.abap"),
+            vec![abap_row("class", "lcl_demo", 1, 6), abap_row("method", "one", 2, 5)]
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_1_10_interface_method_names() {
+        // `zif_x~m` is one name: the grammar's `zif_x~m` is cut back to its
+        // ENDMETHOD, and the recovered `ZIF_X~N` keeps its spelling.
+        let code = "CLASS lcl_demo IMPLEMENTATION.\n  METHOD zif_x~m.\n    lv = |{ a }*|.\n  ENDMETHOD.\n  METHOD ZIF_X~N.\n    WRITE 'y'.\n  ENDMETHOD.\nENDCLASS.\n";
+        assert_eq!(
+            abap_rows(code, "zcl_demo.clas.locals_imp.abap"),
+            vec![
+                abap_row("class", "lcl_demo", 1, 8),
+                abap_row("method", "zif_x~m", 2, 4),
+                abap_row("method", "ZIF_X~N", 5, 7),
+            ]
+        );
+        assert_eq!(
+            abap_method_sources(code, "zcl_demo.clas.locals_imp.abap"),
+            vec![
+                ("zif_x~m".to_string(), None),
+                ("ZIF_X~N".to_string(), Some("abap-fallback".to_string())),
+            ]
+        );
     }
 
     #[test]

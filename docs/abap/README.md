@@ -61,3 +61,24 @@ These differ from the first-draft implementation notes. Each story applies them.
    `abap_fallback.rs` reads `PROGRAM`, `FORM`, `MODULE`, `DEFINE` and class
    `TYPES` off the token stream (the tree's leaves, cut at each `.`), not off
    sibling nodes. It goes once mkoval1/tree-sitter-abap has nodes for them.
+10. Story 1.10 found that the token stream of fact 9 was itself wrong where
+    it mattered most. The grammar does not end a `'...'` literal at the end of
+    its line, as ABAP does, so after a quote it misreads (`''`, or a template
+    like `|{ a }*|`) one leaf runs over several lines and holds the statements
+    in them: 943 of abapGit's `METHOD` lines and 942 `ENDMETHOD` lines sit
+    inside a `character_literal` leaf. The same misreading is the main reason
+    the grammar drops the rest of a `CLASS ... IMPLEMENTATION` or runs a
+    `method_implementation` on to the end of the class. So `abap_fallback.rs`
+    now cuts its statements from the source with comments and literals blanked
+    by `strip_abap_content` (the reference scan's stripper, story 1.2), not
+    from the leaves, and reads `METHOD` ... `ENDMETHOD` blocks off them too.
+    A grammar method that starts at a block's `METHOD` with the block's name
+    wins and is cut back to its own `ENDMETHOD`; a block with no grammar
+    method becomes a `method` tagged `source: abap-fallback`, under its
+    implementation (and the implementation and its definition are added as
+    entities too when the grammar lost them). A `METHOD` with no `ENDMETHOD`
+    is no entity, as for `FORM`, and a grammar method that is no block's (an
+    unclosed one, or one named after the wrong token, `get_steps` for
+    `zif_x~get_steps`) is dropped. On abapGit every one of the 7577 `METHOD x.`
+    blocks is now a method entity and none spans another
+    (`census-gate1.md`, "After story 1.10").

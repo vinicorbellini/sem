@@ -1289,7 +1289,7 @@ static ABAP_CONFIG: LanguageConfig = LanguageConfig {
     // `report_statement` is `REPORT zfoo.` and `variable_declaration` a `DATA`
     // statement, kept only inside a class's sections. The grammar has no node
     // for `PROGRAM`, `FORM`, `MODULE`, `DEFINE` or `TYPES`; those come from
-    // `abap_fallback.rs`.
+    // `abap_fallback.rs`, as do the `METHOD` blocks its error recovery loses.
     entity_node_types: &[
         "report_statement",
         "class_declaration",
