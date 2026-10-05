@@ -370,7 +370,7 @@ fn entities_parse_report_lists_every_file_with_its_counts() {
     let ok = row("src/zcl_ok.clas.abap");
     assert_eq!(
         (ok["entity_count"].as_u64(), ok["fallback_entity_count"].as_u64(), ok["error_node_count"].as_u64()),
-        (Some(3), Some(0), Some(0))
+        (Some(2), Some(0), Some(0))
     );
     // A file with nothing extractable is listed as zero, and named on stderr.
     let broken = row("src/zbroken.prog.abap");

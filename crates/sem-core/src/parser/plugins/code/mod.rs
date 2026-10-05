@@ -2775,10 +2775,11 @@ DATA gv_global TYPE i.
     #[test]
     #[cfg(feature = "lang-abap")]
     fn abap_fixture_1_6_error_count_reported() {
-        // A file the grammar reads whole has no error nodes.
+        // A file the grammar reads whole has no error nodes: one class (its two
+        // blocks collapsed) and one method.
         let clean = "CLASS zcl_demo DEFINITION PUBLIC CREATE PUBLIC.\n  PUBLIC SECTION.\n    METHODS run.\nENDCLASS.\n\nCLASS zcl_demo IMPLEMENTATION.\n  METHOD run.\n    WRITE 'x'.\n  ENDMETHOD.\nENDCLASS.\n";
         let stats = abap_stats(clean, "zcl_demo.clas.abap");
-        assert_eq!((stats.entity_count, stats.fallback_entity_count, stats.error_node_count), (3, 0, 0));
+        assert_eq!((stats.entity_count, stats.fallback_entity_count, stats.error_node_count), (2, 0, 0));
 
         // The fixture report has error nodes, and its form and report are the
         // fallback's: counted apart from the grammar's own entities.
