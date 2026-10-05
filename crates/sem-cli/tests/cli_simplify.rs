@@ -3,7 +3,8 @@
 //!
 //! Golden outputs under `tests/fixtures/cli_simplify/` were recorded from the
 //! binary before the change, on the fixture repo `fixture()` builds (fixed
-//! author, dates and contents, so commit ids are stable). Each old invocation
+//! author, dates with a fixed offset and contents, so commit ids are stable
+//! whatever the timezone of the machine running the test). Each old invocation
 //! must still produce its golden byte for byte, after two normalizations:
 //! the fixture's temporary path becomes `<REPO>`, and JSON `elapsedMs` /
 //! `elapsed_ms` timings are dropped. Each new spelling must produce the same
@@ -53,14 +54,14 @@ fn fixture() -> TempDir {
     )
     .unwrap();
     git(r, &["add", "-A"], None);
-    git(r, &["commit", "-qm", "init"], Some("@1700000000"));
+    git(r, &["commit", "-qm", "init"], Some("1700000000 +0000"));
     fs::write(
         r.join("src/config.py"),
         "def parse_config(text):\n    pairs = [line.split(\"=\", 1) for line in text.splitlines() if line]\n    return dict(pairs)\n\n\ndef load(path):\n    with open(path) as f:\n        return parse_config(f.read())\n\n\ndef main():\n    print(load(\"app.cfg\"))\n",
     )
     .unwrap();
     git(r, &["add", "-A"], None);
-    git(r, &["commit", "-qm", "change"], Some("@1700000100"));
+    git(r, &["commit", "-qm", "change"], Some("1700000100 +0000"));
     dir
 }
 
@@ -795,7 +796,7 @@ fn impact_diff_tests_in_a_js_workspace_is_the_module_graph_selection() {
     )
     .unwrap();
     git(r, &["add", "-A"], None);
-    git(r, &["commit", "-qm", "init"], Some("@1700000000"));
+    git(r, &["commit", "-qm", "init"], Some("1700000000 +0000"));
     fs::write(
         r.join("src/math.ts"),
         "export function add(a: number, b: number) { return b + a; }\n",
