@@ -1466,6 +1466,10 @@ fn first_abap_name_token(node: Node) -> Option<Node> {
 /// local variable of a FORM or METHOD body, not a member. The grammar gives
 /// both the same `variable_declaration`, so only the sections' are entities,
 /// the way other languages keep locals out (`scope_boundary_types`).
+///
+/// The one exception, a `TOP` include's top-level `DATA`, is not read here:
+/// the grammar loses it (`FUNCTION-POOL` leaves an `ERROR` that swallows it),
+/// so `abap_fallback` makes those entities off the statements.
 fn is_abap_local_data(node: Node, config: &LanguageConfig) -> bool {
     config.id == "abap"
         && node.kind() == "variable_declaration"

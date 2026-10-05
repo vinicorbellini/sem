@@ -1,5 +1,6 @@
 mod abap_fallback;
 pub mod abap_name;
+pub mod abap_include;
 mod entity_extractor;
 pub mod languages;
 #[cfg(feature = "oxc-fastpath")]
@@ -2210,8 +2211,16 @@ return M
     #[test]
     #[cfg(feature = "lang-abap")]
     fn test_abap_fixture_fugr_top_include() {
-        // FUNCTION-POOL and a global DATA: no entities.
-        assert_eq!(abap_fixture_entities("zfx_fg.fugr.lzfx_fgtop.abap"), abap_expect(&[]));
+        // Story 2.4 changes this from no entities. `DATA` outside a class is
+        // not an entity on purpose (a program's or a form's `DATA` is a local
+        // of the unit, `is_abap_local_data`), but a `TOP` include's top-level
+        // `DATA` is the global data every module and form of the function group
+        // reads, and `calc_extra`'s use of `gv_extra` needs an entity to point
+        // at. `FUNCTION-POOL` is still not an entity.
+        assert_eq!(
+            abap_fixture_entities("zfx_fg.fugr.lzfx_fgtop.abap"),
+            abap_expect(&[("variable", "gv_extra", None)])
+        );
     }
 
     #[test]
@@ -3333,6 +3342,264 @@ DATA gv_global TYPE i.
             assert_eq!(go_targets(&fresh), expected, "after {file}");
             assert_eq!(abap_edges(&incremental), abap_edges(&fresh), "build_incremental, after {file}");
             assert_eq!(abap_edges(session.graph()), abap_edges(&fresh), "session, after {file}");
+            graph = incremental;
+            entities = next;
+        }
+    }
+
+    // Story 2.4: a program and its includes, and a function group, are one
+    // compiled unit; a form is visible in its unit and nowhere else.
+
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_4_edges(files: &[&str]) -> Vec<(String, String)> {
+        let files: Vec<(&str, String)> =
+            files.iter().map(|file| (*file, abap_fixture_text(file))).collect();
+        abap_edges(&abap_graph(&files))
+    }
+
+    #[cfg(feature = "lang-abap")]
+    const ABAP_FIXTURE_2_4_PROGRAMS: [&str; 4] = [
+        "zfx_report.prog.abap",
+        "zfx_report_f01.prog.abap",
+        "zfx_report2.prog.abap",
+        "zfx_other.prog.abap",
+    ];
+
+    #[cfg(feature = "lang-abap")]
+    const ABAP_FIXTURE_2_4_FUGR: [&str; 5] = [
+        "zfx_fg.fugr.zfx_fm.abap",
+        "zfx_fg.fugr.saplzfx_fg.abap",
+        "zfx_fg.fugr.lzfx_fgtop.abap",
+        "zfx_fg.fugr.lzfx_fgf01.abap",
+        "zfx_fg.fugr.lzfx_fgo01.abap",
+    ];
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_4_include_joins_forms() {
+        // `PERFORM format_total` in zfx_report2 reaches the form of
+        // zfx_report_f01, an object of its own that zfx_report2 includes.
+        let edges = abap_fixture_2_4_edges(&["zfx_report2.prog.abap", "zfx_report_f01.prog.abap"]);
+        assert!(
+            edges.contains(&abap_edge("zfx_report2.run_report", "zfx_report_f01.format_total")),
+            "got: {edges:?}"
+        );
+
+        // Without the `INCLUDE` line the same text reaches nothing.
+        let without = abap_fixture_text("zfx_report2.prog.abap").replace("INCLUDE zfx_report_f01.", "");
+        let files = [
+            ("zfx_report2.prog.abap", without),
+            ("zfx_report_f01.prog.abap", abap_fixture_text("zfx_report_f01.prog.abap")),
+        ];
+        let edges = abap_edges(&abap_graph(&files));
+        assert!(
+            !edges.contains(&abap_edge("zfx_report2.run_report", "zfx_report_f01.format_total")),
+            "got: {edges:?}"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_4_include_sees_main_and_siblings() {
+        // The unit is symmetric, as compilation is: an include sees the main
+        // program's forms, and a sibling include's.
+        let main = "REPORT zmain.\nINCLUDE zmain_f01.\nINCLUDE zmain_f02.\n\nFORM main_form.\n  WRITE 'm'.\nENDFORM.\n";
+        let f01 = "FORM first_form.\n  PERFORM main_form.\n  PERFORM second_form.\nENDFORM.\n";
+        let f02 = "FORM second_form.\n  WRITE 's'.\nENDFORM.\n";
+        let edges = abap_edges(&abap_graph(&[
+            ("zmain.prog.abap", main.to_string()),
+            ("zmain_f01.prog.abap", f01.to_string()),
+            ("zmain_f02.prog.abap", f02.to_string()),
+        ]));
+        assert!(edges.contains(&abap_edge("zmain_f01.first_form", "zmain.main_form")), "got: {edges:?}");
+        assert!(edges.contains(&abap_edge("zmain_f01.first_form", "zmain_f02.second_form")), "got: {edges:?}");
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_4_forms_do_not_leak() {
+        // zfx_other includes nothing. Its `show_order` is its own, and the
+        // form of zfx_report_f01 is out of its reach.
+        let edges = abap_fixture_2_4_edges(&ABAP_FIXTURE_2_4_PROGRAMS);
+        let from_other: Vec<&(String, String)> =
+            edges.iter().filter(|(from, _)| from == "zfx_other.run_own").collect();
+        assert_eq!(from_other, [&abap_edge("zfx_other.run_own", "zfx_other.show_order")]);
+        assert!(
+            !edges.iter().any(|(from, to)| from == "zfx_other.run_leak" && to == "zfx_report_f01.format_total"),
+            "got: {edges:?}"
+        );
+        assert!(
+            !edges.iter().any(|(from, to)| from.starts_with("zfx_other.") && to == "zfx_report.show_order"
+                && from != "zfx_other.run_remote"),
+            "got: {edges:?}"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    #[ignore = "waits on story 2.1: `PERFORM f IN PROGRAM x` lowers to the path x, f in calls/abap.rs"]
+    fn abap_fixture_2_4_in_program_target() {
+        // `PERFORM show_order IN PROGRAM zfx_report` in zfx_other goes to
+        // zfx_report's form, never to zfx_other's own, which ABAP would not
+        // call. `IN PROGRAM (iv_name)` is not resolved (story 2.5 reports it).
+        // The bag-of-words pass binds the bare name `show_order` to the form
+        // of its own unit, so this needs the calls pipeline, with 2.1's
+        // lowering, to answer and `replaces_bow()` for ABAP to drop that guess.
+        let edges = abap_fixture_2_4_edges(&ABAP_FIXTURE_2_4_PROGRAMS);
+        let from_remote: Vec<&(String, String)> =
+            edges.iter().filter(|(from, _)| from == "zfx_other.run_remote").collect();
+        assert_eq!(from_remote, [&abap_edge("zfx_other.run_remote", "zfx_report.show_order")]);
+        assert!(
+            !edges.iter().any(|(from, _)| from == "zfx_other.run_dynamic"),
+            "got: {edges:?}"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_4_fugr_perform() {
+        // `PERFORM calc_extra` in the module zfx_fm reaches the form in
+        // `lzfx_fgf01`, one part of the same function group.
+        let edges = abap_fixture_2_4_edges(&ABAP_FIXTURE_2_4_FUGR);
+        assert!(edges.contains(&abap_edge("zfx_fg.zfx_fm", "zfx_fg.calc_extra")), "got: {edges:?}");
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_4_fugr_global_data() {
+        // `calc_extra` reads `gv_extra`, declared by `DATA` in `lzfx_fgtop`.
+        let files: Vec<(&str, String)> =
+            ABAP_FIXTURE_2_4_FUGR.iter().map(|f| (*f, abap_fixture_text(f))).collect();
+        let graph = abap_graph(&files);
+        let found = graph.edges.iter().any(|edge| {
+            abap_label(&graph, edge.from_entity.as_str()) == "zfx_fg.calc_extra"
+                && abap_label(&graph, edge.to_entity.as_str()) == "zfx_fg.gv_extra"
+                && edge.ref_type == crate::parser::graph::RefType::TypeRef
+        });
+        assert!(found, "got: {:?}", abap_edges(&graph));
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_4_missing_include_recorded() {
+        // The generated `uxx` include is not in abapGit: recorded with a
+        // reason, not dropped and not an error. The other three resolve.
+        let dir = tempfile::TempDir::new().unwrap();
+        for file in ABAP_FIXTURE_2_4_FUGR {
+            std::fs::copy(abap_fixture_dir().join(file), dir.path().join(file)).unwrap();
+        }
+        let files: Vec<String> = ABAP_FIXTURE_2_4_FUGR.iter().map(|f| f.to_string()).collect();
+        let graph = abap_include::IncludeGraph::build(dir.path(), &files);
+        assert_eq!(
+            graph.unresolved,
+            [abap_include::UnresolvedInclude {
+                file: "zfx_fg.fugr.saplzfx_fg.abap".into(),
+                include: "lzfx_fguxx".into()
+            }]
+        );
+        assert_eq!(graph.unresolved[0].reason(), "include not in repo");
+        let mut included: Vec<&str> = graph.edges.iter().map(|(_, to)| to.as_str()).collect();
+        included.sort();
+        assert_eq!(
+            included,
+            ["zfx_fg.fugr.lzfx_fgf01.abap", "zfx_fg.fugr.lzfx_fgo01.abap", "zfx_fg.fugr.lzfx_fgtop.abap"]
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_4_include_structure_is_not_include() {
+        // `INCLUDE STRUCTURE` and `INCLUDE TYPE` inside `DATA` and `TYPES` are
+        // statements that start with the same keyword, and link no file.
+        let code = "REPORT zfx_structs.\n\nDATA: BEGIN OF gs_order.\n  INCLUDE STRUCTURE zfx_order.\nDATA: END OF gs_order.\n\nTYPES: BEGIN OF ty_order.\n  INCLUDE TYPE zfx_order.\nTYPES: END OF ty_order.\n\nINCLUDE zfx_structs_f01.\n";
+        let dir = tempfile::TempDir::new().unwrap();
+        std::fs::write(dir.path().join("zfx_structs.prog.abap"), code).unwrap();
+        let files = vec!["zfx_structs.prog.abap".to_string(), "zfx_order.tabl.xml".to_string()];
+        let graph = abap_include::IncludeGraph::build(dir.path(), &files);
+        // Only the real include, and it names no file here.
+        assert!(graph.edges.is_empty());
+        assert_eq!(
+            graph.unresolved,
+            [abap_include::UnresolvedInclude {
+                file: "zfx_structs.prog.abap".into(),
+                include: "zfx_structs_f01".into()
+            }]
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_4_top_include_data_only_in_top() {
+        // The exception is the `TOP` include. Any other program's top-level
+        // `DATA` stays out of the entity list (`test_abap_fixture_prog`).
+        let rows = abap_fixture_entities("zfx_fg.fugr.lzfx_fgtop.abap");
+        assert_eq!(rows, abap_expect(&[("variable", "gv_extra", None)]));
+        let program = "REPORT zfx_data.\nDATA gv_global TYPE i.\nFORM f.\n  DATA lv_local TYPE i.\nENDFORM.\n";
+        let dir = tempfile::TempDir::new().unwrap();
+        std::fs::write(dir.path().join("zfx_data.prog.abap"), program).unwrap();
+        let top = "FUNCTION-POOL zfx_fg.\nDATA gv_top TYPE i.\nFORM g.\n  DATA lv_local TYPE i.\nENDFORM.\n";
+        std::fs::write(dir.path().join("zfx_fg.fugr.lzfx_fgtop.abap"), top).unwrap();
+        let graph = abap_graph(&[
+            ("zfx_data.prog.abap", program.to_string()),
+            ("zfx_fg.fugr.lzfx_fgtop.abap", top.to_string()),
+        ]);
+        let mut variables: Vec<String> = graph
+            .entities
+            .values()
+            .filter(|e| e.entity_type == "variable")
+            .map(|e| e.name.clone())
+            .collect();
+        variables.sort();
+        assert_eq!(variables, ["gv_top"]);
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_4_incremental_follows_include() {
+        // zinc's `other` calls `sib_form`, a form of zsib. Both stay clean while
+        // zmain, which has no entity to change, gains `INCLUDE zinc.` and
+        // `INCLUDE zsib.` and joins them into one unit. The edge must appear,
+        // and go again with the lines, in a cached-graph rebuild and in the
+        // red-green session, exactly as a fresh build has it.
+        let main = |includes: &str| format!("REPORT zmain.\n{includes}\nFORM main_form.\n  WRITE 'm'.\nENDFORM.\n");
+        let dir = tempfile::TempDir::new().unwrap();
+        let write = |file: &str, content: &str| std::fs::write(dir.path().join(file), content).unwrap();
+        let files: Vec<String> = ["zmain.prog.abap", "zinc.prog.abap", "zsib.prog.abap"]
+            .iter()
+            .map(|f| f.to_string())
+            .collect();
+        let registry = crate::parser::plugins::create_default_registry();
+        let build = || crate::parser::graph::EntityGraph::build(dir.path(), &files, &registry);
+        let reaches = |graph: &crate::parser::graph::EntityGraph| {
+            abap_edges(graph).contains(&abap_edge("zinc.other", "zsib.sib_form"))
+        };
+
+        write("zmain.prog.abap", &main(""));
+        write("zinc.prog.abap", "FORM other.\n  PERFORM sib_form.\nENDFORM.\n");
+        write("zsib.prog.abap", "FORM sib_form.\n  WRITE 's'.\nENDFORM.\n");
+        let (mut graph, mut entities) = build();
+        let mut session = crate::parser::session::GraphSession::build(dir.path(), &files, &registry);
+        assert!(!reaches(&graph));
+
+        for (includes, expected) in [("INCLUDE zinc.\nINCLUDE zsib.", true), ("", false)] {
+            let file = "zmain.prog.abap";
+            write(file, &main(includes));
+            let (stale, clean): (Vec<_>, Vec<_>) =
+                entities.into_iter().partition(|e| e.file_path == file);
+            let (incremental, next) = crate::parser::graph::EntityGraph::build_incremental(
+                dir.path(),
+                &[file.to_string()],
+                &files,
+                clean,
+                graph.edges,
+                stale,
+                &registry,
+            );
+            session.rebuild(&files, &[file.to_string()], &registry);
+            let fresh = build().0;
+            assert_eq!(reaches(&fresh), expected, "fresh, `{includes}`");
+            assert_eq!(abap_edges(&incremental), abap_edges(&fresh), "build_incremental, `{includes}`");
+            assert_eq!(abap_edges(session.graph()), abap_edges(&fresh), "session, `{includes}`");
             graph = incremental;
             entities = next;
         }

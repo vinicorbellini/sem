@@ -86,6 +86,38 @@ pub fn abap_global_scope(file_path: &str, entity_type: &str) -> Scope {
     }
 }
 
+/// Whether `file_path` is the `TOP` include of a function group or a program:
+/// `<group>.fugr.l<group>top.abap`, or `<name>top.prog.abap` (`zfoo_top`).
+/// Its top-level `DATA` is the global data of the compiled unit, so it is the
+/// one place an ABAP `DATA` outside a class becomes an entity.
+pub fn is_abap_top_include(file_path: &str) -> bool {
+    let Some(object) = parse_abapgit_name(file_path) else {
+        return false;
+    };
+    let name = object.name.to_ascii_lowercase();
+    match (object.object_type.as_str(), object.part.as_deref()) {
+        ("fugr", Some(part)) => {
+            part.replace('#', "/").to_ascii_lowercase() == format!("l{name}top")
+        }
+        ("prog", None) => name.ends_with("top"),
+        _ => false,
+    }
+}
+
+/// The abapGit file names that can satisfy `INCLUDE <include>.` written in a
+/// file of `from`, lower-cased: the program include `<include>.prog.abap`, and
+/// for a function group's own file the group's include
+/// `<group>.fugr.<include>.abap`. A `/ns/` name is written `#ns#`.
+pub fn include_file_names(include: &str, from: &AbapObject) -> Vec<String> {
+    let escape = |name: &str| name.to_ascii_lowercase().replace('/', "#");
+    let include_key = escape(include);
+    let mut names = vec![format!("{include_key}.prog.abap")];
+    if from.object_type == "fugr" {
+        names.push(format!("{}.fugr.{include_key}.abap", escape(&from.name)));
+    }
+    names
+}
+
 /// abapGit writes the `/` of a namespaced name as `#`: `#ns#zcl_foo` is `/ns/zcl_foo`.
 fn unescape_namespace(name: &str) -> String {
     if let Some(rest) = name.strip_prefix('#') {
@@ -195,6 +227,37 @@ mod tests {
                 "{path} {entity_type}"
             );
         }
+    }
+
+    #[test]
+    fn abap_top_include_by_name() {
+        assert!(is_abap_top_include("src/zfx_fg.fugr.lzfx_fgtop.abap"));
+        assert!(is_abap_top_include("src/ZFX_FG.FUGR.LZFX_FGTOP.abap"));
+        assert!(is_abap_top_include("src/#ns#fg.fugr.l#ns#fgtop.abap"));
+        assert!(is_abap_top_include("src/zfoo_top.prog.abap"));
+        assert!(!is_abap_top_include("src/zfx_fg.fugr.lzfx_fgf01.abap"));
+        assert!(!is_abap_top_include("src/zfx_fg.fugr.saplzfx_fg.abap"));
+        assert!(!is_abap_top_include("src/zfx_fg.fugr.lother_top.abap"));
+        assert!(!is_abap_top_include("src/zcl_top.clas.abap"));
+        assert!(!is_abap_top_include("src/foo.abap"));
+    }
+
+    #[test]
+    fn abap_include_file_names() {
+        let group = parse_abapgit_name("src/zfx_fg.fugr.saplzfx_fg.abap").unwrap();
+        assert_eq!(
+            include_file_names("LZFX_FGF01", &group),
+            ["lzfx_fgf01.prog.abap", "zfx_fg.fugr.lzfx_fgf01.abap"]
+        );
+        let prog = parse_abapgit_name("src/zfx_report.prog.abap").unwrap();
+        assert_eq!(
+            include_file_names("zfx_report_f01", &prog),
+            ["zfx_report_f01.prog.abap"]
+        );
+        assert_eq!(
+            include_file_names("/ns/zinc", &prog),
+            ["#ns#zinc.prog.abap"]
+        );
     }
 
     #[test]

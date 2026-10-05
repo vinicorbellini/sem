@@ -38,6 +38,7 @@
 
 use std::collections::BTreeMap;
 
+use super::abap_name::is_abap_top_include;
 use super::entity_extractor::line_number_for_byte;
 use crate::model::entity::{build_entity_id, SemanticEntity};
 use crate::parser::graph::strip_abap_content;
@@ -76,6 +77,8 @@ pub(super) fn extract_abap_fallback_entities(
     let mut found = Vec::new();
     let mut open_blocks: Vec<OpenBlock> = Vec::new();
     let mut open_type: Option<OpenType> = None;
+    let mut open_data: Option<OpenType> = None;
+    let top_include = is_abap_top_include(file_path);
     let mut class_blocks: Vec<ClassBlock> = Vec::new();
     let mut open_class: Option<ClassBlock> = None;
     let mut open_method: Option<OpenMethod> = None;
@@ -88,6 +91,9 @@ pub(super) fn extract_abap_fallback_entities(
 
         if keyword != "TYPES" {
             open_type = None;
+        }
+        if keyword != "DATA" {
+            open_data = None;
         }
 
         match keyword.as_str() {
@@ -212,14 +218,31 @@ pub(super) fn extract_abap_fallback_entities(
                 let Some(class_id) = innermost_class(&classes, head.start_byte) else {
                     continue;
                 };
-                found.extend(types_entities(
+                found.extend(declarator_entities(
                     file_path,
                     source,
                     &code,
                     &statement,
                     head.start_byte,
-                    class_id,
+                    "type",
+                    Some(class_id),
                     &mut open_type,
+                ));
+            }
+            // Global data of a function group or program: the `DATA` of its
+            // `TOP` include, outside any FORM or MODULE. Anywhere else a `DATA`
+            // is a local, or a program global the pool leaves out (see
+            // `is_abap_local_data`).
+            "DATA" if top_include && open_blocks.is_empty() => {
+                found.extend(declarator_entities(
+                    file_path,
+                    source,
+                    &code,
+                    &statement,
+                    head.start_byte,
+                    "variable",
+                    None,
+                    &mut open_data,
                 ));
             }
             _ => {}
@@ -365,6 +388,54 @@ fn words(text: &str) -> impl Iterator<Item = (usize, &str)> {
         .filter(|(_, word)| !word.is_empty())
 }
 
+/// The names an ABAP source includes, in source order, as written: one per
+/// `INCLUDE zfoo.` statement (and per name of `INCLUDE: a, b.`).
+///
+/// `INCLUDE STRUCTURE x.` and `INCLUDE TYPE x.` inside a `DATA` or `TYPES`
+/// block are statements of their own that start with the same keyword, and are
+/// not program includes. System includes (`INCLUDE <icon>.`) are not either.
+/// Read off the statement stream like `FORM`, so a comment or a literal that
+/// says "INCLUDE" is not one.
+pub(super) fn include_names(text: &str) -> Vec<String> {
+    let code = strip_abap_content(text);
+    let mut names = Vec::new();
+    for statement in statements(&code) {
+        let mut words = statement.tokens.iter().map(|t| t.text(&code)).peekable();
+        if !words
+            .next()
+            .is_some_and(|w| w.eq_ignore_ascii_case("INCLUDE"))
+        {
+            continue;
+        }
+        // Segments of a chained statement start after the keyword and each `,`.
+        let mut segment_start = true;
+        let mut first = true;
+        for word in words {
+            match word {
+                ":" => continue,
+                "," => {
+                    segment_start = true;
+                    continue;
+                }
+                _ => {}
+            }
+            if !std::mem::take(&mut segment_start) {
+                continue;
+            }
+            if first
+                && (word.eq_ignore_ascii_case("STRUCTURE") || word.eq_ignore_ascii_case("TYPE"))
+            {
+                break;
+            }
+            first = false;
+            if !word.starts_with('<') {
+                names.push(word.to_string());
+            }
+        }
+    }
+    names
+}
+
 /// Cut the stripped code into statements at each period. Whitespace separates
 /// tokens, and `.`, `,` and `:` are tokens of their own.
 fn statements(code: &str) -> Vec<Statement> {
@@ -413,17 +484,19 @@ fn statements(code: &str) -> Vec<Statement> {
     statements
 }
 
-/// The `type` entities of one `TYPES` statement: one per declared name, so
-/// `TYPES: a TYPE i, b TYPE string.` gives `a` and `b`, and a `BEGIN OF s ...
-/// END OF s` structure gives `s`, not its components. The first declarator
-/// starts at the `TYPES` keyword; each ends at the `,` or `.` after it.
-fn types_entities(
+/// The entities of one `TYPES` (`type`) or `DATA` (`variable`) statement: one
+/// per declared name, so `TYPES: a TYPE i, b TYPE string.` gives `a` and `b`,
+/// and a `BEGIN OF s ... END OF s` structure gives `s`, not its components. The
+/// first declarator starts at the keyword; each ends at the `,` or `.` after it.
+#[allow(clippy::too_many_arguments)]
+fn declarator_entities(
     file_path: &str,
     source: &[u8],
     code: &str,
     statement: &Statement,
     statement_start: usize,
-    class_id: &str,
+    entity_type: &'static str,
+    parent_id: Option<&str>,
     open_type: &mut Option<OpenType>,
 ) -> Vec<SemanticEntity> {
     let texts: Vec<String> = statement
@@ -440,11 +513,12 @@ fn types_entities(
     while i < statement.tokens.len() {
         if is(i, ",") {
             if let Some(open) = open_type.take_if(|o| o.depth == 0) {
-                out.push(type_entity(
+                out.push(declarator_entity(
                     file_path,
                     source,
                     open,
-                    class_id,
+                    entity_type,
+                    parent_id,
                     statement.tokens[i],
                 ));
             }
@@ -495,25 +569,33 @@ fn types_entities(
         .or_else(|| statement.tokens.last().copied())
     {
         if let Some(open) = open_type.take_if(|o| o.depth == 0) {
-            out.push(type_entity(file_path, source, open, class_id, end));
+            out.push(declarator_entity(
+                file_path,
+                source,
+                open,
+                entity_type,
+                parent_id,
+                end,
+            ));
         }
     }
     out
 }
 
-fn type_entity(
+fn declarator_entity(
     file_path: &str,
     source: &[u8],
     open: OpenType,
-    class_id: &str,
+    entity_type: &'static str,
+    parent_id: Option<&str>,
     end: Token,
 ) -> SemanticEntity {
     fallback_entity(
         file_path,
         source,
-        "type",
+        entity_type,
         open.name,
-        Some(class_id),
+        parent_id,
         open.start_byte,
         end.end_byte,
     )
@@ -744,4 +826,18 @@ fn structural_hash(source: &[u8], name: &Word, start_byte: usize, end_byte: usiz
         .collect::<Vec<_>>()
         .join(" ");
     content_hash(&normalized)
+}
+
+#[cfg(test)]
+mod include_tests {
+    use super::include_names;
+
+    #[test]
+    fn include_names_reads_statements() {
+        let src = "*  INCLUDE zcomment.\nINCLUDE zfoo_f01.\nINCLUDE: zb, zc.\n\
+                   DATA: BEGIN OF s.\n  INCLUDE STRUCTURE zfx_order.\nDATA END OF s.\n\
+                   TYPES: BEGIN OF t.\n  INCLUDE TYPE zfx_x.\nTYPES END OF t.\n\
+                   INCLUDE <icon>.\nINCLUDE zopt IF FOUND.\nWRITE 'INCLUDE zstring.'.\n";
+        assert_eq!(include_names(src), ["zfoo_f01", "zb", "zc", "zopt"]);
+    }
 }

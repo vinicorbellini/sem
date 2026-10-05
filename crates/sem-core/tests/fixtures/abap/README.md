@@ -15,7 +15,7 @@ Run them with `cd crates && cargo test -p sem-core abap`. No ABAP test is
 Story 1.1 is case-insensitive names, 1.2 comment and string stripping, 1.3 the
 full entity set, 1.4 one entity per class, 1.5 abapGit layout, 1.6 parse-error
 tolerance, 1.7 test detection, 1.10 METHOD blocks the grammar loses, 2.0 names
-across files.
+across files, 2.4 includes and function groups.
 
 | Fixture file | Tests that read it | Story |
 |--------------|--------------------|-------|
@@ -47,11 +47,18 @@ across files.
 | `zcl_fx_other.clas.testclasses.abap` | `abap_fixture_2_0_local_friends_does_not_shadow` (`LOCAL FRIENDS`) | 2.0 |
 | `zfx_report.prog.abap` | `test_abap_fixture_prog`, `abap_fixture_1_3_report`, `abap_fixture_1_3_form`, `abap_fixture_1_3_macro` | 1.3 |
 | | `abap_fixture_1_6_errors_still_yield_entities`, `abap_fixture_1_6_error_count_reported` | 1.6 |
+| | `abap_fixture_2_4_forms_do_not_leak` | 2.4 |
 | `zfx_report_f01.prog.abap` | `test_abap_fixture_prog_include`, `abap_fixture_1_3_form` | 1.3 |
 | `zfx_dynamic.prog.abap` | `abap_fixture_2_5_*` in `crates/sem-cli/tests/abap_completeness_cli.rs` (the completeness verdict reads its computed calls); the graph-side tests join once story 2.1's lowering lands | 2.5 |
+| | `abap_fixture_2_4_include_joins_forms`, `abap_fixture_2_4_forms_do_not_leak` (the include is shared with `zfx_report2`) | 2.4 |
+| `zfx_report2.prog.abap` | `abap_fixture_2_4_include_joins_forms` (`INCLUDE zfx_report_f01`), `abap_fixture_2_4_forms_do_not_leak` | 2.4 |
+| `zfx_other.prog.abap` | `abap_fixture_2_4_forms_do_not_leak`, `abap_fixture_2_4_in_program_target` (ignored until story 2.1), the same-name `show_order` | 2.4 |
 | `zfx_fg.fugr.zfx_fm.abap` | `test_abap_fixture_fugr_function_module`, `abap_fixture_1_3_function` | 1.3 |
+| | `abap_fixture_2_4_fugr_perform` | 2.4 |
 | `zfx_fg.fugr.saplzfx_fg.abap` | `test_abap_fixture_fugr_main_program` (no entities) | 1.3 |
-| `zfx_fg.fugr.lzfx_fgtop.abap` | `test_abap_fixture_fugr_top_include` (no entities) | 1.3 |
+| | `abap_fixture_2_4_missing_include_recorded` (`lzfx_fguxx` is not in the repo) | 2.4 |
+| `zfx_fg.fugr.lzfx_fgtop.abap` | `test_abap_fixture_fugr_top_include` (the one `variable`, `gv_extra`) | 1.3, 2.4 |
+| | `abap_fixture_2_4_fugr_global_data`, `abap_fixture_2_4_top_include_data_only_in_top` | 2.4 |
 | `zfx_fg.fugr.lzfx_fgf01.abap` | `test_abap_fixture_fugr_form_include`, `abap_fixture_1_3_form` | 1.3 |
 | `zfx_fg.fugr.lzfx_fgo01.abap` | `test_abap_fixture_fugr_pbo_include`, `abap_fixture_1_3_module` | 1.3 |
 | every file in this directory | `test_abap_fixture_layout` (envelopes, line cap, name shape) | 1.5 |
