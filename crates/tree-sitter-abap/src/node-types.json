@@ -74,6 +74,14 @@
           "named": true
         },
         {
+          "type": "string_literal",
+          "named": true
+        },
+        {
+          "type": "string_template",
+          "named": true
+        },
+        {
           "type": "structured_data_object",
           "named": true
         }
@@ -110,6 +118,14 @@
         },
         {
           "type": "numeric_literal",
+          "named": true
+        },
+        {
+          "type": "string_literal",
+          "named": true
+        },
+        {
+          "type": "string_template",
           "named": true
         },
         {
@@ -270,6 +286,14 @@
             "named": false
           },
           {
+            "type": "string_literal",
+            "named": true
+          },
+          {
+            "type": "string_template",
+            "named": true
+          },
+          {
             "type": "structured_data_object",
             "named": true
           }
@@ -354,6 +378,14 @@
             "named": false
           },
           {
+            "type": "string_literal",
+            "named": true
+          },
+          {
+            "type": "string_template",
+            "named": true
+          },
+          {
             "type": "structured_data_object",
             "named": true
           }
@@ -436,6 +468,14 @@
           {
             "type": "receiving",
             "named": false
+          },
+          {
+            "type": "string_literal",
+            "named": true
+          },
+          {
+            "type": "string_template",
+            "named": true
           },
           {
             "type": "structured_data_object",
@@ -715,6 +755,14 @@
         },
         {
           "type": "numeric_literal",
+          "named": true
+        },
+        {
+          "type": "string_literal",
+          "named": true
+        },
+        {
+          "type": "string_template",
           "named": true
         },
         {
@@ -1048,6 +1096,14 @@
             "named": true
           },
           {
+            "type": "string_literal",
+            "named": true
+          },
+          {
+            "type": "string_template",
+            "named": true
+          },
+          {
             "type": "structured_data_object",
             "named": true
           }
@@ -1085,6 +1141,14 @@
         },
         {
           "type": "numeric_literal",
+          "named": true
+        },
+        {
+          "type": "string_literal",
+          "named": true
+        },
+        {
+          "type": "string_template",
           "named": true
         },
         {
@@ -1717,6 +1781,14 @@
           "named": true
         },
         {
+          "type": "string_literal",
+          "named": true
+        },
+        {
+          "type": "string_template",
+          "named": true
+        },
+        {
           "type": "structured_data_object",
           "named": true
         }
@@ -1893,6 +1965,14 @@
         },
         {
           "type": "select_statement_obsolete",
+          "named": true
+        },
+        {
+          "type": "string_literal",
+          "named": true
+        },
+        {
+          "type": "string_template",
           "named": true
         },
         {
@@ -2276,6 +2356,14 @@
             "named": true
           },
           {
+            "type": "string_literal",
+            "named": true
+          },
+          {
+            "type": "string_template",
+            "named": true
+          },
+          {
             "type": "structured_data_object",
             "named": true
           }
@@ -2327,6 +2415,14 @@
         },
         {
           "type": "parameter_binding",
+          "named": true
+        },
+        {
+          "type": "string_literal",
+          "named": true
+        },
+        {
+          "type": "string_template",
           "named": true
         },
         {
@@ -2786,6 +2882,14 @@
           "named": true
         },
         {
+          "type": "string_literal",
+          "named": true
+        },
+        {
+          "type": "string_template",
+          "named": true
+        },
+        {
           "type": "structured_data_object",
           "named": true
         },
@@ -2901,6 +3005,14 @@
           },
           {
             "type": "numeric_literal",
+            "named": true
+          },
+          {
+            "type": "string_literal",
+            "named": true
+          },
+          {
+            "type": "string_template",
             "named": true
           },
           {
@@ -3225,6 +3337,14 @@
         },
         {
           "type": "numeric_literal",
+          "named": true
+        },
+        {
+          "type": "string_literal",
+          "named": true
+        },
+        {
+          "type": "string_template",
           "named": true
         },
         {
@@ -3757,6 +3877,14 @@
   {
     "type": "step",
     "named": false
+  },
+  {
+    "type": "string_literal",
+    "named": true
+  },
+  {
+    "type": "string_template",
+    "named": true
   },
   {
     "type": "structure_name",

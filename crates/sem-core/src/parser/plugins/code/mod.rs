@@ -2850,18 +2850,20 @@ DATA gv_global TYPE i.
     #[test]
     #[cfg(feature = "lang-abap")]
     fn abap_fixture_1_10_unparseable_statement_keeps_later_methods() {
-        // Found by the Gate 1 census (#1928, #4432, #5072, ...): the grammar does
-        // not end a `'` literal at its line, so `''` makes it read the rest of
-        // the file as literals, and every method after it is lost; here the whole
-        // implementation is. Both methods come back, each with its own range,
-        // under the class.
-        let code = "CLASS zcl_demo DEFINITION PUBLIC.\n  PUBLIC SECTION.\n    METHODS one.\n    METHODS two.\nENDCLASS.\n\nCLASS zcl_demo IMPLEMENTATION.\n  METHOD one.\n    check( '' ).\n  ENDMETHOD.\n\n  METHOD two.\n    WRITE 'y'.\n  ENDMETHOD.\nENDCLASS.\n";
+        // Found by the Gate 1 census (#1928, #4432, #5072, ...): a statement the
+        // grammar cannot parse loses every method after it; here the whole
+        // implementation is. The census cases were mostly a `''` the grammar
+        // read on over many lines, which the fork's grammar now ends at its line
+        // (see `abap_grammar_ends_literals_at_end_of_line`); this body, cut down
+        // from abapGit's zcl_abapgit_xml, still loses it. Both methods come
+        // back, each with its own range, under the class.
+        let code = "CLASS zcl_demo DEFINITION PUBLIC.\n  PUBLIC SECTION.\n    METHODS one.\n    METHODS two.\nENDCLASS.\n\nCLASS zcl_demo IMPLEMENTATION.\n  METHOD one.\n    li_element = mi_xml_doc->find_from_name_ns( depth = 0\n                                                name = c_abapgit_tag ).\n    IF li_element IS NOT BOUND.\n    ENDIF.\n    li_version = li_element->if_ixml_node~get_attributes(\n      )->get_named_item_ns( c_attr_version ).\n    IF li_version->get_value( ) <> zif_abapgit_version=>c_xml_version.\n    ENDIF.\n  ENDMETHOD.\n\n  METHOD two.\n    WRITE 'y'.\n  ENDMETHOD.\nENDCLASS.\n";
         assert_eq!(
             abap_rows(code, "zcl_demo.clas.abap"),
             vec![
-                abap_row("class", "zcl_demo", 1, 15),
-                abap_row("method", "one", 8, 10),
-                abap_row("method", "two", 12, 14),
+                abap_row("class", "zcl_demo", 1, 22),
+                abap_row("method", "one", 8, 17),
+                abap_row("method", "two", 19, 21),
             ]
         );
         let entities = CodeParserPlugin.extract_entities(code, "zcl_demo.clas.abap");
@@ -2873,7 +2875,7 @@ DATA gv_global TYPE i.
 
         // The statement in a later method: the grammar keeps the methods before
         // it, which stay its own, and the fallback adds the rest.
-        let code = "CLASS zcl_demo DEFINITION PUBLIC.\n  PUBLIC SECTION.\n    METHODS one.\nENDCLASS.\n\nCLASS zcl_demo IMPLEMENTATION.\n  METHOD one.\n    WRITE 'x'.\n  ENDMETHOD.\n\n  METHOD two.\n    check( '' ).\n  ENDMETHOD.\n\n  METHOD three.\n    WRITE 'z'.\n  ENDMETHOD.\nENDCLASS.\n";
+        let code = "CLASS zcl_demo DEFINITION PUBLIC.\n  PUBLIC SECTION.\n    METHODS one.\nENDCLASS.\n\nCLASS zcl_demo IMPLEMENTATION.\n  METHOD one.\n    WRITE 'x'.\n  ENDMETHOD.\n\n  METHOD two.\n    li_element = mi_xml_doc->find_from_name_ns( depth = 0\n                                                name = c_abapgit_tag ).\n    IF li_element IS NOT BOUND.\n    ENDIF.\n    li_version = li_element->if_ixml_node~get_attributes(\n      )->get_named_item_ns( c_attr_version ).\n    IF li_version->get_value( ) <> zif_abapgit_version=>c_xml_version.\n    ENDIF.\n  ENDMETHOD.\n\n  METHOD three.\n    WRITE 'z'.\n  ENDMETHOD.\nENDCLASS.\n";
         assert_eq!(
             abap_method_sources(code, "zcl_demo.clas.abap"),
             vec![
@@ -2883,18 +2885,21 @@ DATA gv_global TYPE i.
             ]
         );
         assert!(
-            abap_rows(code, "zcl_demo.clas.abap").contains(&abap_row("class", "zcl_demo", 1, 18))
+            abap_rows(code, "zcl_demo.clas.abap").contains(&abap_row("class", "zcl_demo", 1, 25))
         );
     }
 
     #[test]
     #[cfg(feature = "lang-abap")]
     fn abap_fixture_1_10_stretched_method_ends_at_its_endmethod() {
-        // Found by the Gate 1 census (#3185, #3891, #7644): a template the
-        // grammar misreads runs `one`'s node over `two`, which is lost. `one` is
-        // cut back to its own ENDMETHOD and stays the grammar's; `two` is its own
-        // entity again.
-        let code = "CLASS zcl_demo DEFINITION PUBLIC.\n  PUBLIC SECTION.\n    METHODS one.\nENDCLASS.\n\nCLASS zcl_demo IMPLEMENTATION.\n  METHOD one.\n    lv = |{ a }*|.\n  ENDMETHOD.\n\n  METHOD two.\n    WRITE 'y'.\n  ENDMETHOD.\n\n  METHOD three.\n    WRITE 'z'.\n  ENDMETHOD.\nENDCLASS.\n";
+        // Found by the Gate 1 census (#3185, #3891, #7644): a statement the
+        // grammar misreads runs `one`'s node over `two`, which is lost. In the
+        // census it was mostly a template like `|{ a }*|`, which the fork's
+        // grammar now reads as one token; here it is a `*` the grammar takes for
+        // a comment to the end of the line, period included. `one` is cut back
+        // to its own ENDMETHOD and stays the grammar's; `two` is its own entity
+        // again.
+        let code = "CLASS zcl_demo DEFINITION PUBLIC.\n  PUBLIC SECTION.\n    METHODS one.\nENDCLASS.\n\nCLASS zcl_demo IMPLEMENTATION.\n  METHOD one.\n    lv = lines( lt ) * 2.\n  ENDMETHOD.\n\n  METHOD two.\n    WRITE 'y'.\n  ENDMETHOD.\n\n  METHOD three.\n    WRITE 'z'.\n  ENDMETHOD.\nENDCLASS.\n";
         assert_eq!(
             abap_rows(code, "zcl_demo.clas.abap"),
             vec![
@@ -2906,7 +2911,7 @@ DATA gv_global TYPE i.
         );
         let entities = CodeParserPlugin.extract_entities(code, "zcl_demo.clas.abap");
         let one = entities.iter().find(|e| e.name == "one").expect("one");
-        assert_eq!(one.content, "  METHOD one.\n    lv = |{ a }*|.\n  ENDMETHOD.");
+        assert_eq!(one.content, "  METHOD one.\n    lv = lines( lt ) * 2.\n  ENDMETHOD.");
         assert_eq!(one.end_byte, Some(code.find("ENDMETHOD.").unwrap() + "ENDMETHOD.".len()));
         assert!(one.metadata.is_none(), "trimmed, still the grammar's: {:?}", one.metadata);
         assert_eq!(
@@ -2916,8 +2921,8 @@ DATA gv_global TYPE i.
 
         // Trimmed or recovered, the method's content is what a clean parse gives,
         // so a diff across the two reads it as unchanged.
-        let clean = code.replace("lv = |{ a }*|.", "lv = a.");
-        let stretched = code.replace("    WRITE 'y'.", "    lv = |{ a }*|.");
+        let clean = code.replace("lv = lines( lt ) * 2.", "lv = a.");
+        let stretched = code.replace("    WRITE 'y'.", "    lv = lines( lt ) * 2.");
         let content = |code: &str, name: &str| {
             CodeParserPlugin
                 .extract_entities(code, "zcl_demo.clas.abap")
@@ -2966,7 +2971,7 @@ DATA gv_global TYPE i.
     fn abap_fixture_1_10_interface_method_names() {
         // `zif_x~m` is one name: the grammar's `zif_x~m` is cut back to its
         // ENDMETHOD, and the recovered `ZIF_X~N` keeps its spelling.
-        let code = "CLASS lcl_demo IMPLEMENTATION.\n  METHOD zif_x~m.\n    lv = |{ a }*|.\n  ENDMETHOD.\n  METHOD ZIF_X~N.\n    WRITE 'y'.\n  ENDMETHOD.\nENDCLASS.\n";
+        let code = "CLASS lcl_demo IMPLEMENTATION.\n  METHOD zif_x~m.\n    lv = lines( lt ) * 2.\n  ENDMETHOD.\n  METHOD ZIF_X~N.\n    WRITE 'y'.\n  ENDMETHOD.\nENDCLASS.\n";
         assert_eq!(
             abap_rows(code, "zcl_demo.clas.locals_imp.abap"),
             vec![
@@ -2981,6 +2986,30 @@ DATA gv_global TYPE i.
                 ("zif_x~m".to_string(), None),
                 ("ZIF_X~N".to_string(), Some("abap-fallback".to_string())),
             ]
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_grammar_ends_literals_at_end_of_line() {
+        // The fork's grammar ends a `'...'` or backtick literal at its line, with
+        // a doubled quote as the escape, and reads a `|...|` template as one
+        // token. So the census triggers above, `''` and `|{ a }*|`, no longer
+        // cost the methods after them: the grammar has every one, the fallback
+        // none.
+        let code = "CLASS zcl_demo DEFINITION PUBLIC.\n  PUBLIC SECTION.\n    METHODS one.\nENDCLASS.\n\nCLASS zcl_demo IMPLEMENTATION.\n  METHOD one.\n    check( '' ).\n    lv = `it``s`.\n  ENDMETHOD.\n\n  METHOD two.\n    lv = |{ a }*|.\n    lv = 'it''s'.\n  ENDMETHOD.\n\n  METHOD three.\n    WRITE 'z'.\n  ENDMETHOD.\nENDCLASS.\n";
+        assert_eq!(
+            abap_rows(code, "zcl_demo.clas.abap"),
+            vec![
+                abap_row("class", "zcl_demo", 1, 20),
+                abap_row("method", "one", 7, 10),
+                abap_row("method", "two", 12, 15),
+                abap_row("method", "three", 17, 19),
+            ]
+        );
+        assert_eq!(
+            abap_method_sources(code, "zcl_demo.clas.abap"),
+            vec![("one".to_string(), None), ("two".to_string(), None), ("three".to_string(), None)]
         );
     }
 

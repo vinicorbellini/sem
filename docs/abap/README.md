@@ -17,7 +17,8 @@ stories describe may be offered upstream separately, with their own
 ## Starting point
 
 Commit `2618ff1` on the `abap` branch adds the `lang-abap` feature, the
-`tree-sitter-abap-sqry` grammar, `ABAP_CONFIG`, and extraction of
+`tree-sitter-abap-sqry` grammar (since replaced by the fork in
+`crates/tree-sitter-abap`, see "Grammar fork" below), `ABAP_CONFIG`, and extraction of
 `class_declaration`, `class_implementation`, `interface_declaration`,
 `method_implementation` and `function_implementation`. Everything in the stories
 builds on that commit.
@@ -82,3 +83,54 @@ These differ from the first-draft implementation notes. Each story applies them.
     `zif_x~get_steps`) is dropped. On abapGit every one of the 7577 `METHOD x.`
     blocks is now a method entity and none spans another
     (`census-gate1.md`, "After story 1.10").
+11. The grammar's `character_literal` was `/'[^']+'/`: no `''` escape, no
+    empty literal, nothing to stop it at a line end, and no token at all for
+    backtick literals or `|...|` templates. That is the runaway literal of
+    fact 10. sem's fork of the grammar (below) fixes it: `'...'` and backtick
+    literals end at their line with a doubled quote as the escape, and a
+    `|...|` template is one `string_template` token whose `{ ... }` parts are
+    not parsed. With that fixed, abapGit still has 37305 error nodes (from
+    39314): the rest is statements the grammar has no rule for. Some files
+    have more error nodes than before, because code that a runaway literal
+    used to hide is now parsed. The fallback of fact 10 still matters: the
+    grammar still loses whole implementations and stretches methods on other
+    statements, for example a `*` mid-line, which `bol_comment` (`"*"` then
+    the rest of the line, not anchored to column 1) reads as a comment that
+    eats the statement's period.
+
+## Grammar fork
+
+sem builds against its own copy of mkoval1/tree-sitter-abap, in
+`crates/tree-sitter-abap/` (a workspace member, path dependency of
+`sem-core`'s `lang-abap`, `publish = false`). It was taken at upstream commit
+`c7604df9e25d56ae879fa25694fd9f2ddbab05d8` (2024-06-29, MIT), cloned from
+GitHub, the same commit the `tree-sitter-abap-sqry` 32.0.1 crate vendored.
+The crate's `README.md` is the authoritative list of what the fork changes.
+
+- Edit `grammar.js`, never `src/`. Regenerate with tree-sitter CLI 0.26.8, the
+  version of the `tree-sitter` crate in `crates/Cargo.lock`
+  (`npm install -g tree-sitter-cli@0.26.8`):
+  `cd crates/tree-sitter-abap && tree-sitter generate`. It warns that there is
+  no `tree-sitter.json` and generates ABI 14, as upstream did; that is
+  intended. Commit `grammar.js` and `src/` together.
+- Grammar tests: `tree-sitter test` in the same directory runs the corpus in
+  `test/corpus/` (upstream's files plus the fork's, such as `literals.txt`).
+  Then `cargo test -p tree-sitter-abap` and `cargo test -p sem-core`.
+- The census measures a grammar change on real code:
+  `sem find --in src --parse-report --file-exts .abap` on abapGit with a
+  scratch `SEM_CACHE_DIR` (`census-baseline.md`). Regenerating the unchanged
+  upstream grammar gave the same tree on all 752 abapGit files and the same
+  census (39314 error nodes, 9703 entities, 2917 from the fallback).
+- Tests that exercise `abap_fallback.rs` need a statement the grammar still
+  loses methods on. Once a grammar fix removes a test's trigger, give the test
+  a new one (cut down from abapGit) rather than dropping it, and add a test
+  that the old trigger now parses.
+
+Fixes so far, with the abapGit census after each (`*.abap` under `src/` at
+`b2b4e25`; method nodes are the grammar's own `method_implementation` nodes,
+for 7577 `METHOD` blocks):
+
+| Grammar | Error nodes | Files with error nodes | Entities | From the grammar | From the fallback | Method nodes |
+|---|---:|---:|---:|---:|---:|---:|
+| upstream `c7604df` | 39314 | 731 | 9703 | 6786 | 2917 | 5705 |
+| 1. literals end at their line | 37305 | 731 | 9808 | 7966 | 1842 | 6818 |

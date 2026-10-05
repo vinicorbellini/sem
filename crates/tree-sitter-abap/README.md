@@ -58,3 +58,15 @@ newer CLI writes (`$schema`, `reserved`, `extra`, `root`).
 
 1. Upstream's corpus file `test/corpus/raise_statement.txt ` lost the
    trailing space in its name (it cannot be checked out on Windows).
+2. **Literals end at the end of their line.** Upstream's
+   `character_literal` was `/'[^']+'/`: no `''` escape, no empty literal, and
+   free to run over line ends, so after one quote it misread (`''`, or a quote
+   inside a `|...|` template, which it had no token for) a single literal
+   swallowed every statement up to the next quote, lines later. Now
+   `character_literal` is `/'([^'\r\n]|'')*'/`, and two new tokens sit next
+   to it in `_general_expression_position`: `string_literal`, the backtick
+   literal `/`([^`\r\n]|``)*`/`, and `string_template`, a `|...|` template
+   whose text ends on its line with `\` as the escape and whose `{ ... }`
+   embedded expressions are kept opaque (they may run over lines but may not
+   contain a `}`, so a nested template with an embedded expression is not
+   read). Corpus: `test/corpus/literals.txt`.

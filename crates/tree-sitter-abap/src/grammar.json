@@ -3688,6 +3688,14 @@
         },
         {
           "type": "SYMBOL",
+          "name": "string_literal"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "string_template"
+        },
+        {
+          "type": "SYMBOL",
           "name": "_data_object"
         },
         {
@@ -5917,7 +5925,15 @@
     },
     "character_literal": {
       "type": "PATTERN",
-      "value": "'[^']+'"
+      "value": "'([^'\\r\\n]|'')*'"
+    },
+    "string_literal": {
+      "type": "PATTERN",
+      "value": "`([^`\\r\\n]|``)*`"
+    },
+    "string_template": {
+      "type": "PATTERN",
+      "value": "\\|([^|{}\\\\\\r\\n]|\\\\[^\\r\\n]|\\{[^}]*\\})*\\|"
     },
     "eol_comment": {
       "type": "SEQ",

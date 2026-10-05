@@ -495,6 +495,8 @@ module.exports = grammar({
       choice(
         $.numeric_literal,
         $.character_literal,
+        $.string_literal,
+        $.string_template,
         $._data_object,
         $._calculation_expression
       ),
@@ -927,7 +929,18 @@ module.exports = grammar({
 
     numeric_literal: $ => /[0-9]+/,
 
-    character_literal: $ => /'[^']+'/,
+    // ABAP literals end on their line: a quote is escaped by doubling it
+    // ('it''s', `a``b`), and a literal cannot run on to the next line. Without
+    // the line end in the pattern, one misread quote swallows the statements
+    // after it up to the next quote, lines later.
+    character_literal: $ => /'([^'\r\n]|'')*'/,
+
+    string_literal: $ => /`([^`\r\n]|``)*`/,
+
+    // |text { expr } text|. The text ends on its line and escapes | { } \
+    // with \. An embedded expression is kept opaque and may run over lines,
+    // but may not hold a } (so not a nested template with one).
+    string_template: $ => /\|([^|{}\\\r\n]|\\[^\r\n]|\{[^}]*\})*\|/,
 
     eol_comment: $ => seq('"', /[^\n]*/),
 
