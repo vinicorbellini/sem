@@ -4,6 +4,10 @@ All notable changes to sem are documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **ABAP language support.** Classes, class implementations, interfaces, methods and function modules are extracted as entities from `.abap` files (the files abapGit writes) via the mkoval1/tree-sitter-abap grammar, behind a `lang-abap` feature included in `grammar-all`. Methods nest under their `CLASS ... IMPLEMENTATION` block, which is an `impl` entity, the same type as a Rust `impl`.
+
 ### Changed
 
 - **Windows CI runs the test suite against release builds and reports every failure.** The wall-time and scale tests are calibrated for optimized binaries, so the debug build on the Windows runner overran them and failed main on four pushes in a row, each time on a different test because `cargo test` stopped at the first failing binary. Tests now build in release on the same target as the build step, and `--no-fail-fast` shows all failures at once.

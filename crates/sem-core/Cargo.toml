@@ -150,7 +150,7 @@ tree-sitter-d = { version = "0.8.2", optional = true }
 tree-sitter-lua = { version = "0.5.0", optional = true }
 tree-sitter-fish = { version = "3.6", optional = true }
 tree-sitter-bsl = { version = "0.1.7", optional = true }
-# SAP ABAP grammar (mkoval1/tree-sitter-abap, MIT), vendored on crates.io by the sqry project.
+# mkoval1/tree-sitter-abap, published by the sqry project as tree-sitter-abap-sqry.
 tree-sitter-abap-sqry = { version = "32.0.1", optional = true }
 rustc-hash = "2"
 # On-disk persistence for the red-green facts layer (parser::facts_store).

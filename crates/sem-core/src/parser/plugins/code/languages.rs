@@ -1270,9 +1270,14 @@ static LUA_CONFIG: LanguageConfig = LanguageConfig {
 #[cfg(feature = "lang-abap")]
 static ABAP_CONFIG: LanguageConfig = LanguageConfig {
     id: "abap",
-    // abapGit serializes objects as `<name>.<type>.abap` (`zcl_foo.clas.abap`,
-    // `zfoo.prog.abap`, `zfoo.fugr.zfoo_f01.abap`), so the final extension is `.abap`.
+    // SAP ABAP, as abapGit serializes it: one file per object, named
+    // `<name>.<type>.abap` (`zcl_foo.clas.abap`, `zfoo.prog.abap`,
+    // `zfoo.fugr.zfoo_f01.abap`), so `.abap` covers every object type.
     extensions: &[".abap"],
+    // mkoval1/tree-sitter-abap: a class is two top-level blocks,
+    // `CLASS x DEFINITION` (`class_declaration`) and `CLASS x IMPLEMENTATION`
+    // (`class_implementation`); `method_implementation` is `METHOD … ENDMETHOD`
+    // and `function_implementation` a function module's `FUNCTION … ENDFUNCTION`.
     entity_node_types: &[
         "class_declaration",
         "class_implementation",
@@ -1280,7 +1285,9 @@ static ABAP_CONFIG: LanguageConfig = LanguageConfig {
         "method_implementation",
         "function_implementation",
     ],
-    // Methods live inside `CLASS ... IMPLEMENTATION`.
+    // `CLASS x IMPLEMENTATION` holds its METHOD blocks directly, with no body
+    // node in between, so there is no container to declare: the extractor
+    // descends into the implementation itself (`push_abap_method_implementations`).
     container_node_types: &[],
     call_entity_identifiers: &[],
     suppressed_nested_entities: &[],

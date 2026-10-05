@@ -1903,32 +1903,50 @@ return M
     #[test]
     #[cfg(feature = "lang-abap")]
     fn test_abap_entity_extraction() {
-        // abapGit class file: the definition and the implementation are separate
-        // top-level blocks, and methods sit directly under the implementation.
+        // ABAP, as abapGit serializes a class (`.clas.abap`). The definition and
+        // the implementation are separate top-level blocks; METHOD blocks sit
+        // directly under the implementation and nest there as its children.
         let code = "CLASS zcl_demo DEFINITION PUBLIC CREATE PUBLIC.\n  PUBLIC SECTION.\n    METHODS run.\n    METHODS helper IMPORTING iv_x TYPE i.\nENDCLASS.\n\nCLASS zcl_demo IMPLEMENTATION.\n  METHOD run.\n    helper( 1 ).\n  ENDMETHOD.\n  METHOD helper.\n    \" a comment with helper( ) in it\n  ENDMETHOD.\nENDCLASS.\n";
         let plugin = CodeParserPlugin;
-        let entities = plugin.extract_entities(code, "src/zcl_demo.clas.abap");
-        let pairs: Vec<(&str, &str)> = entities
+        let entities = plugin.extract_entities(code, "zcl_demo.clas.abap");
+        let names: Vec<(&str, &str)> = entities
             .iter()
-            .map(|e| (e.entity_type.as_str(), e.name.as_str()))
+            .map(|e| (e.name.as_str(), e.entity_type.as_str()))
             .collect();
-        assert!(pairs.contains(&("class", "zcl_demo")), "definition, got: {pairs:?}");
+
         assert!(
-            pairs.contains(&("implementation", "zcl_demo")),
-            "implementation, got: {pairs:?}"
+            names.contains(&("zcl_demo", "class")),
+            "class definition, got: {names:?}"
         );
-        assert!(pairs.contains(&("method", "run")), "method run, got: {pairs:?}");
-        assert!(pairs.contains(&("method", "helper")), "method helper, got: {pairs:?}");
-        let helper = entities
+        assert!(
+            names.contains(&("zcl_demo", "impl")),
+            "class implementation, got: {names:?}"
+        );
+        assert!(names.contains(&("run", "method")), "method, got: {names:?}");
+        assert!(
+            names.contains(&("helper", "method")),
+            "method, got: {names:?}"
+        );
+        assert_eq!(
+            entities.len(),
+            4,
+            "only classes and methods, got: {names:?}"
+        );
+
+        let implementation = entities
             .iter()
-            .find(|e| e.name == "helper" && e.entity_type == "method")
-            .unwrap();
-        assert!(
-            helper.parent_id.as_deref().is_some_and(|p| p.contains("implementation")),
-            "methods nest under the implementation, got parent {:?}",
-            helper.parent_id
-        );
-        assert_eq!(entities.len(), 4, "four entities, got: {pairs:?}");
+            .find(|e| e.entity_type == "impl")
+            .expect("Should find the class implementation");
+        for method in ["run", "helper"] {
+            let entity = entities
+                .iter()
+                .find(|e| e.name == method)
+                .unwrap_or_else(|| panic!("Should find {method}"));
+            assert_eq!(
+                entity.parent_id.as_deref(),
+                Some(implementation.id.as_str())
+            );
+        }
     }
 
     #[test]

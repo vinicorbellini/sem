@@ -647,15 +647,6 @@ fn visit_node(
                     } else {
                         node
                     };
-                    // ABAP `CLASS x IMPLEMENTATION` holds its METHOD blocks directly,
-                    // with no body node in between.
-                    if config.id == "abap" && node_type == "class_implementation" {
-                        let mut cursor = node.walk();
-                        let nested: Vec<_> = node.named_children(&mut cursor).collect();
-                        for n in nested.into_iter().rev() {
-                            worklist.push((n, Some(entity_id.clone()), next_suppression.clone()));
-                        }
-                    }
                     let mut cursor = body_owner.walk();
                     for child in body_owner.named_children(&mut cursor) {
                         if config.container_node_types.contains(&child.kind()) {
@@ -669,6 +660,18 @@ fn visit_node(
                                 ));
                             }
                         }
+                    }
+
+                    // ABAP `CLASS x IMPLEMENTATION` has no body node to declare as a
+                    // container: its METHOD blocks are direct children, so walk them
+                    // here to nest each method under the implementation.
+                    if config.id == "abap" && node_type == "class_implementation" {
+                        push_abap_method_implementations(
+                            &mut worklist,
+                            node,
+                            &entity_id,
+                            next_suppression.clone(),
+                        );
                     }
 
                     // For JS/TS variable declarations and class fields, traverse
@@ -1414,6 +1417,21 @@ fn sibling_function_body(node: Node) -> Option<Node> {
     }
 }
 
+/// For ABAP `CLASS x IMPLEMENTATION` blocks, push the METHOD blocks (direct
+/// children, with no body node in between) so they nest under the implementation.
+fn push_abap_method_implementations<'tree>(
+    worklist: &mut Vec<(Node<'tree>, Option<String>, Option<String>)>,
+    node: Node<'tree>,
+    entity_id: &str,
+    suppression_context: Option<String>,
+) {
+    let mut cursor = node.walk();
+    let nested: Vec<_> = node.named_children(&mut cursor).collect();
+    for n in nested.into_iter().rev() {
+        worklist.push((n, Some(entity_id.to_string()), suppression_context.clone()));
+    }
+}
+
 /// Compute `structural_hash` and kappa (the semantic identity hash; see
 /// `crates/sem-core/) for an entity in a single tree walk.
 ///
@@ -1717,26 +1735,6 @@ fn find_declarator_name_range(mut node: Node) -> Option<(usize, usize)> {
 fn extract_name(node: Node, source: &[u8]) -> Option<String> {
     let node_type = node.kind();
 
-    // ABAP `name` nodes start after the keyword and include its leading space.
-    if matches!(
-        node_type,
-        "class_declaration"
-            | "class_implementation"
-            | "interface_declaration"
-            | "method_implementation"
-            | "function_implementation"
-    ) {
-        let mut cursor = node.walk();
-        let found = node
-            .named_children(&mut cursor)
-            .find(|c| c.kind() == "name")
-            .map(|c| node_text(c, source).trim().to_string())
-            .filter(|n| !n.is_empty());
-        if found.is_some() {
-            return found;
-        }
-    }
-
     if node_type == "subscript_declaration" {
         return Some("subscript".to_string());
     }
@@ -1806,6 +1804,24 @@ fn extract_name(node: Node, source: &[u8]) -> Option<String> {
                 return Some(node_text(name, source).to_string());
             }
             _ => {}
+        }
+    }
+
+    // ABAP: the `name` field starts right after the keyword, so it carries the
+    // separating space, e.g. "CLASS zcl_demo IMPLEMENTATION." -> " zcl_demo".
+    // Must be before the generic 'name' field lookup, which keeps the space.
+    if matches!(
+        node_type,
+        "class_declaration"
+            | "class_implementation"
+            | "interface_declaration"
+            | "method_implementation"
+            | "function_implementation"
+    ) {
+        if let Some(name_node) = node.child_by_field_name("name") {
+            if name_node.kind() == "name" {
+                return Some(node_text(name_node, source).trim().to_string());
+            }
         }
     }
 
@@ -2428,14 +2444,16 @@ fn map_node_type(tree_sitter_type: &str) -> &str {
         | "function_item"
         | "function_signature"
         | "subroutine_declaration_statement"
-        | "procedure_definition" => "function",
+        | "procedure_definition"
+        | "function_implementation" => "function",
         "method_declaration"
         | "method_definition"
         | "method"
         | "singleton_method"
         | "method_signature"
         | "abstract_method_signature"
-        | "operator_signature" => "method",
+        | "operator_signature"
+        | "method_implementation" => "method",
         "class_declaration"
         | "abstract_class_declaration"
         | "class_definition"
@@ -2464,10 +2482,7 @@ fn map_node_type(tree_sitter_type: &str) -> &str {
         "record_declaration" | "record_struct_declaration" => "record",
         "struct_item" | "struct_specifier" | "struct_declaration" => "struct",
         "union_specifier" => "union",
-        "impl_item" => "impl",
-        "class_implementation" => "implementation",
-        "method_implementation" => "method",
-        "function_implementation" => "function",
+        "impl_item" | "class_implementation" => "impl",
         "trait_item" => "trait",
         "mod_item"
         | "module"
