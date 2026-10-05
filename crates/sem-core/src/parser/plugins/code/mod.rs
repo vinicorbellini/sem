@@ -2984,6 +2984,271 @@ DATA gv_global TYPE i.
         );
     }
 
+    // Spec 2.0: a global name reaches across files, a local one stays in its object.
+
+    /// The story 2.0 fixture objects, with the Tier 1 ones they call.
+    #[cfg(feature = "lang-abap")]
+    const ABAP_FIXTURE_2_0_FILES: &[&str] = &[
+        "zif_fx_order.intf.abap",
+        "zcl_fx_order.clas.abap",
+        "zcl_fx_order.clas.locals_def.abap",
+        "zcl_fx_order.clas.locals_imp.abap",
+        "zcl_fx_order.clas.testclasses.abap",
+        "zcl_fx_order_sub.clas.abap",
+        "zcl_fx_user.clas.abap",
+        "zcl_fx_other.clas.abap",
+        "zcl_fx_other.clas.locals_imp.abap",
+        "zcl_fx_other.clas.testclasses.abap",
+    ];
+
+    /// An ABAP entity as `object.name`, folded (`zcl_fx_order.create`), or the
+    /// object name alone for the global class or interface itself.
+    #[cfg(feature = "lang-abap")]
+    fn abap_label(graph: &crate::parser::graph::EntityGraph, id: &str) -> String {
+        let entity = &graph.entities[id];
+        let object = abap_name::parse_abapgit_name(&entity.file_path)
+            .map(|o| o.name.to_ascii_lowercase())
+            .unwrap_or_default();
+        let name = entity.name.to_ascii_lowercase();
+        if name == object {
+            object
+        } else {
+            format!("{object}.{name}")
+        }
+    }
+
+    /// Every edge of `graph` as sorted (from, to) labels, see `abap_label`.
+    #[cfg(feature = "lang-abap")]
+    fn abap_edges(graph: &crate::parser::graph::EntityGraph) -> Vec<(String, String)> {
+        let mut edges: Vec<(String, String)> = graph
+            .edges
+            .iter()
+            .map(|edge| {
+                (
+                    abap_label(graph, edge.from_entity.as_str()),
+                    abap_label(graph, edge.to_entity.as_str()),
+                )
+            })
+            .collect();
+        edges.sort();
+        edges.dedup();
+        eprintln!("ABAP edges: {edges:?}");
+        edges
+    }
+
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_0_edges() -> Vec<(String, String)> {
+        let files: Vec<(&str, String)> = ABAP_FIXTURE_2_0_FILES
+            .iter()
+            .map(|file| (*file, abap_fixture_text(file)))
+            .collect();
+        abap_edges(&abap_graph(&files))
+    }
+
+    #[cfg(feature = "lang-abap")]
+    fn abap_edge(from: &str, to: &str) -> (String, String) {
+        (from.to_string(), to.to_string())
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_0_global_class_across_files() {
+        // `ZCL_FX_ORDER=>CREATE( 1 )` in zcl_fx_user names a class and a method
+        // defined in another file, in upper case.
+        let edges = abap_fixture_2_0_edges();
+        assert!(edges.contains(&abap_edge("zcl_fx_user.run", "zcl_fx_order")), "got: {edges:?}");
+        assert!(
+            edges.contains(&abap_edge("zcl_fx_user.run", "zcl_fx_order.create")),
+            "got: {edges:?}"
+        );
+
+        // Whatever the case of either spelling.
+        let shifted = |user: String, order: String| {
+            let mut files: Vec<(&str, String)> = ABAP_FIXTURE_2_0_FILES
+                .iter()
+                .filter(|file| !matches!(**file, "zcl_fx_user.clas.abap" | "zcl_fx_order.clas.abap"))
+                .map(|file| (*file, abap_fixture_text(file)))
+                .collect();
+            files.push(("zcl_fx_user.clas.abap", user));
+            files.push(("zcl_fx_order.clas.abap", order));
+            abap_edges(&abap_graph(&files))
+        };
+        let user = abap_fixture_text("zcl_fx_user.clas.abap");
+        let order = abap_fixture_text("zcl_fx_order.clas.abap");
+        assert_eq!(shifted(user.to_ascii_lowercase(), order.to_ascii_uppercase()), edges);
+        assert_eq!(shifted(user.clone(), order.to_ascii_uppercase()), edges);
+        assert_eq!(shifted(user.to_ascii_lowercase(), order), edges);
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_0_local_class_stays_in_object() {
+        // zcl_fx_order and zcl_fx_other each have a local `lcl_helper` with a
+        // `tag` method. Each object's use reaches its own, in its other files.
+        let edges = abap_fixture_2_0_edges();
+        for (from, object) in [("zcl_fx_order.describe", "zcl_fx_order"), ("zcl_fx_other.label", "zcl_fx_other")] {
+            let other = if object == "zcl_fx_order" { "zcl_fx_other" } else { "zcl_fx_order" };
+            assert!(edges.contains(&abap_edge(from, &format!("{object}.lcl_helper"))), "{from}: {edges:?}");
+            assert!(edges.contains(&abap_edge(from, &format!("{object}.tag"))), "{from}: {edges:?}");
+            assert!(
+                !edges.iter().any(|(f, to)| f == from && to.starts_with(&format!("{other}."))),
+                "{from} leaks into {other}: {edges:?}"
+            );
+        }
+        // No other object reaches either local class.
+        for (from, to) in &edges {
+            if to.ends_with(".lcl_helper") || to.ends_with(".tag") {
+                assert_eq!(from.split('.').next(), to.split('.').next(), "{from} -> {to}");
+            }
+        }
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_0_ambiguous_method_no_edge() {
+        // `describe` is defined in zcl_fx_order, zcl_fx_order_sub and zcl_fx_user.
+        // `io_order->describe( )` in zcl_fx_other resolves to none of them.
+        let edges = abap_fixture_2_0_edges();
+        assert!(
+            !edges.iter().any(|(from, to)| from == "zcl_fx_other.label" && to.ends_with(".describe")),
+            "got: {edges:?}"
+        );
+        // Inside an object the name is its own: zcl_fx_order's test class
+        // reaches zcl_fx_order's `describe` only.
+        let describes: Vec<&String> = edges
+            .iter()
+            .filter(|(from, to)| from == "zcl_fx_order.describe_mentions_id" && to.ends_with(".describe"))
+            .map(|(_, to)| to)
+            .collect();
+        assert_eq!(describes, vec!["zcl_fx_order.describe"]);
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_0_unique_method_across_files() {
+        // `label` is defined once, in zcl_fx_other: zcl_fx_user's call reaches it.
+        let edges = abap_fixture_2_0_edges();
+        assert!(edges.contains(&abap_edge("zcl_fx_user.run", "zcl_fx_other.label")), "got: {edges:?}");
+        // An interface component is one name though written in two tokens.
+        assert!(
+            edges.contains(&abap_edge("zcl_fx_other.total", "zcl_fx_order.zif_fx_order~get_total")),
+            "got: {edges:?}"
+        );
+        // A name defined in the object itself needs no uniqueness: zcl_fx_order's
+        // test class reaches `create` and `describe` in its global class.
+        assert!(
+            edges.contains(&abap_edge("zcl_fx_order.setup", "zcl_fx_order.create")),
+            "got: {edges:?}"
+        );
+        assert!(
+            edges.contains(&abap_edge("zcl_fx_order.describe_mentions_id", "zcl_fx_order.describe")),
+            "got: {edges:?}"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_0_local_friends_does_not_shadow() {
+        // `CLASS zcl_fx_other DEFINITION LOCAL FRIENDS ltc_other.` in the test
+        // classes names the global class. Story 1.3 makes no entity of it (nor
+        // of `DEFINITION DEFERRED`): the file holds `ltc_other` and its method.
+        // Were it a class, its `testclasses` part would keep it in the object.
+        let files: Vec<(&str, String)> = ABAP_FIXTURE_2_0_FILES
+            .iter()
+            .map(|file| (*file, abap_fixture_text(file)))
+            .collect();
+        let graph = abap_graph(&files);
+        let mut in_file: Vec<(&str, &str)> = graph
+            .entities
+            .values()
+            .filter(|e| e.file_path == "zcl_fx_other.clas.testclasses.abap")
+            .map(|e| (e.entity_type.as_str(), e.name.as_str()))
+            .collect();
+        in_file.sort();
+        assert_eq!(in_file, vec![("class", "ltc_other"), ("method", "label_has_tag")]);
+
+        // Readers in the test file and in another object both reach the
+        // global class in `zcl_fx_other.clas.abap`.
+        for reader in ["label_has_tag", "run"] {
+            let targets: Vec<&str> = graph
+                .edges
+                .iter()
+                .filter(|edge| graph.entities[edge.from_entity.as_str()].name == reader)
+                .map(|edge| edge.to_entity.as_str())
+                .filter(|id| graph.entities[*id].name == "zcl_fx_other")
+                .collect();
+            assert_eq!(targets, vec!["zcl_fx_other.clas.abap::class::zcl_fx_other"], "{reader}");
+        }
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_0_incremental_follows_other_files() {
+        // A reader in zcl_c stays clean while zcl_a and zcl_b gain and lose
+        // `ping`. Each step, an incremental rebuild (both the cached-graph path
+        // and the red-green session) must give the edges a fresh build gives.
+        let class = |name: &str, method: &str, body: &str| {
+            format!(
+                "CLASS {name} DEFINITION PUBLIC CREATE PUBLIC.\n  PUBLIC SECTION.\n    METHODS {method}.\nENDCLASS.\n\n\nCLASS {name} IMPLEMENTATION.\n\n  METHOD {method}.\n    {body}\n  ENDMETHOD.\n\nENDCLASS.\n"
+            )
+        };
+        let dir = tempfile::TempDir::new().unwrap();
+        let write = |file: &str, content: String| std::fs::write(dir.path().join(file), content).unwrap();
+        let files: Vec<String> = ["zcl_a.clas.abap", "zcl_b.clas.abap", "zcl_c.clas.abap"]
+            .iter()
+            .map(|f| f.to_string())
+            .collect();
+        let registry = crate::parser::plugins::create_default_registry();
+        let build = || crate::parser::graph::EntityGraph::build(dir.path(), &files, &registry);
+        let go_targets = |graph: &crate::parser::graph::EntityGraph| -> Vec<String> {
+            let mut targets: Vec<String> = abap_edges(graph)
+                .into_iter()
+                .filter(|(from, _)| from == "zcl_c.go")
+                .map(|(_, to)| to)
+                .collect();
+            targets.sort();
+            targets
+        };
+
+        write("zcl_a.clas.abap", class("zcl_a", "ping", "WRITE 'a'."));
+        write("zcl_b.clas.abap", class("zcl_b", "ping", "WRITE 'b'."));
+        write("zcl_c.clas.abap", class("zcl_c", "go", "lo_x->ping( )."));
+        let (mut graph, mut entities) = build();
+        let mut session = crate::parser::session::GraphSession::build(dir.path(), &files, &registry);
+        assert!(go_targets(&graph).is_empty(), "`ping` is defined twice");
+
+        // (changed file, its new content, the targets of `go` afterwards)
+        let steps = [
+            // zcl_b loses `ping`: the name is unique, `go` gains an edge.
+            ("zcl_b.clas.abap", class("zcl_b", "pong", "WRITE 'b'."), vec!["zcl_a.ping"]),
+            // zcl_b defines it again: ambiguous, the edge goes.
+            ("zcl_b.clas.abap", class("zcl_b", "ping", "WRITE 'b'."), vec![]),
+            // zcl_a loses it: unique again, now in zcl_b.
+            ("zcl_a.clas.abap", class("zcl_a", "pong", "WRITE 'a'."), vec!["zcl_b.ping"]),
+        ];
+        for (file, content, expected) in steps {
+            write(file, content);
+            let (stale, clean): (Vec<_>, Vec<_>) =
+                entities.into_iter().partition(|e| e.file_path == file);
+            let (incremental, next) = crate::parser::graph::EntityGraph::build_incremental(
+                dir.path(),
+                &[file.to_string()],
+                &files,
+                clean,
+                graph.edges,
+                stale,
+                &registry,
+            );
+            session.rebuild(&files, &[file.to_string()], &registry);
+            let fresh = build().0;
+            assert_eq!(go_targets(&fresh), expected, "after {file}");
+            assert_eq!(abap_edges(&incremental), abap_edges(&fresh), "build_incremental, after {file}");
+            assert_eq!(abap_edges(session.graph()), abap_edges(&fresh), "session, after {file}");
+            graph = incremental;
+            entities = next;
+        }
+    }
+
     #[test]
     #[cfg(feature = "lang-fish")]
     fn test_fish_entity_extraction() {

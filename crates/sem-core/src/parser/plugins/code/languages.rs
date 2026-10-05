@@ -65,6 +65,13 @@ impl LanguageConfig {
         self.id == "abap"
     }
 
+    /// Whether a name can reach a definition in another file with no import
+    /// naming it. ABAP has no imports: a global name is unique per system, so
+    /// its candidates are the whole repo (see `abap_name::abap_global_scope`).
+    pub(crate) fn repo_wide_names(&self) -> bool {
+        self.id == "abap"
+    }
+
     pub(crate) fn extract_map_entries(&self) -> bool {
         self.id == "edn"
     }

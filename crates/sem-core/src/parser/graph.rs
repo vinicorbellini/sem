@@ -1382,6 +1382,108 @@ fn build_symbol_table_by_file<'a>(
         .collect()
 }
 
+/// One folded name's ABAP candidates outside the resolving entity's own file,
+/// split by how far each reaches (see `abap_name::abap_global_scope`).
+#[derive(Default)]
+struct AbapCandidates<'a> {
+    /// Visible from every object: the `Repo` candidates, plus the name's one
+    /// `Unique` candidate when it has exactly one. A list longer than one
+    /// binds nothing.
+    repo: Vec<&'a str>,
+    /// Every candidate, keyed by its object's name, folded: visible from the
+    /// other files of the same object (a class's local parts, a function group).
+    by_object: HashMap<String, Vec<&'a str>>,
+}
+
+type AbapGlobalTable<'a> = HashMap<&'a str, AbapCandidates<'a>>;
+
+/// ABAP has no imports to widen the bag-of-words lookup past the entity's own
+/// file, and needs none: a global name is unique per system, so a global
+/// class, interface, function module or report is a candidate repo-wide, and
+/// a local class stays in its object. Built once per build, beside
+/// `build_symbol_table_by_file` and over the same `symbol_table` +
+/// `entity_map`, keyed by the same folded names (`symbol_key`).
+///
+/// Empty, at the cost of one extension lookup per file, unless one of
+/// `resolving_file_paths` is a `repo_wide_names` file, so a corpus with no
+/// ABAP never builds it and never reads it.
+///
+/// **Red-green.** An entry is a pure function of `symbol_table[name]`: each
+/// candidate's file and object come from its id (`{file_path}::...`), and its
+/// type decides its scope only for a top-level entity, whose id also carries
+/// the type. The read stays recorded as `Table::SymbolTable` by name, whose
+/// fingerprint hashes those same ids corpus-wide, so a definition gained or
+/// lost in another file invalidates every reader of the name.
+fn build_abap_global_table<'a>(
+    symbol_table: &'a SymbolTable,
+    entity_map: &'a EntityInfoMap,
+    resolving_file_paths: &[String],
+) -> AbapGlobalTable<'a> {
+    use crate::parser::plugins::code::abap_name::{abap_global_scope, parse_abapgit_name, Scope};
+    if !resolving_file_paths
+        .iter()
+        .any(|file_path| repo_wide_names_for_file(file_path))
+    {
+        return HashMap::default();
+    }
+    maybe_par_iter!(symbol_table)
+        .filter_map(|(name, ids)| {
+            let mut candidates = AbapCandidates::default();
+            let mut unique: Vec<&'a str> = Vec::new();
+            for id in ids {
+                let Some(info) = entity_map.get(id) else {
+                    continue;
+                };
+                if !repo_wide_names_for_file(&info.file_path) {
+                    continue;
+                }
+                match abap_global_scope(&info.file_path, &info.entity_type) {
+                    Scope::Repo => candidates.repo.push(id.as_str()),
+                    Scope::Unique => unique.push(id.as_str()),
+                    Scope::Object => {}
+                }
+                if let Some(object) = parse_abapgit_name(&info.file_path) {
+                    candidates
+                        .by_object
+                        .entry(object.name.to_ascii_lowercase())
+                        .or_default()
+                        .push(id.as_str());
+                }
+            }
+            if unique.len() == 1 {
+                candidates.repo.extend(unique);
+            }
+            (!candidates.by_object.is_empty() || !candidates.repo.is_empty())
+                .then_some((name.as_str(), candidates))
+        })
+        .collect()
+}
+
+/// The ABAP candidate `key` names for the entity `entity_id` when its own file
+/// has none: the first one in its own object, else the single repo-wide one.
+/// `None` when two or more global classes define the name: the reference
+/// stays unbound rather than guessed.
+///
+/// Interim: story 2.2 binds receivers by type, and once the calls pipeline
+/// `replaces_bow()` for ABAP this name guess goes, with `abap_global`.
+fn abap_scoped_target<'a>(
+    abap_global: &AbapGlobalTable<'a>,
+    key: &str,
+    entity_id: &str,
+    own_object: Option<&str>,
+) -> Option<&'a str> {
+    let candidates = abap_global.get(key)?;
+    if let Some(ids) = own_object.and_then(|object| candidates.by_object.get(object)) {
+        if let Some(id) = ids.iter().find(|id| **id != entity_id) {
+            return Some(id);
+        }
+    }
+    match candidates.repo.as_slice() {
+        [id] if *id != entity_id => Some(id),
+        _ => None,
+    }
+}
+
 struct ReferenceResolutionContext<'a> {
     entity_map: &'a EntityInfoMap,
     // `symbol_table`'s per-name candidate list, pre-bucketed by
@@ -1392,6 +1494,9 @@ struct ReferenceResolutionContext<'a> {
     // eligible answers, per the `.find(|id| … file_path == entity.file_path)`
     // filter the scan already applied.
     symbol_table_by_file: &'a HashMap<&'a str, HashMap<&'a str, Vec<&'a str>>>,
+    // The ABAP candidates past the entity's own file (see
+    // `build_abap_global_table`); empty when no ABAP file is resolved.
+    abap_global: &'a AbapGlobalTable<'a>,
     imports_by_file: &'a ImportsByFile<'a>,
     scope_consumed_words: &'a ConsumedWords,
     child_ranges_by_parent: &'a ChildRangeIndex,
@@ -1815,6 +1920,16 @@ fn resolve_entity_references(
         (entity.name.as_str(), entity.content.as_str()),
         |(name, content)| (name.as_str(), content.as_str()),
     );
+    // ABAP: a name the entity's own file does not define is looked up in its
+    // object, then repo-wide (`abap_scoped_target`). `None` for every other
+    // language, which never reaches `abap_global`.
+    let repo_wide = language_config.repo_wide_names();
+    let own_object = repo_wide
+        .then(|| {
+            crate::parser::plugins::code::abap_name::parse_abapgit_name(&entity.file_path)
+                .map(|object| object.name.to_ascii_lowercase())
+        })
+        .flatten();
     let fallback_stripped = if reference_index.is_none() {
         Some(strip_for_language(
             language_config.strip_strategy(),
@@ -2021,6 +2136,18 @@ fn resolve_entity_references(
                 let candidates = file_candidates.map_or(0, |ids| ids.len());
                 acc.record_symbol_scan(ref_name, candidates, t0.elapsed());
             }
+            let target = target.or_else(|| {
+                repo_wide
+                    .then(|| {
+                        abap_scoped_target(
+                            context.abap_global,
+                            ref_name,
+                            entity_id,
+                            own_object.as_deref(),
+                        )
+                    })
+                    .flatten()
+            });
 
             if let Some(target_id) = target {
                 rec.two(Table::BowParentChildPairs, entity_id, target_id);
@@ -2038,6 +2165,61 @@ fn resolve_entity_references(
                     source_id.clone(),
                     canonical_entity_id(context.entity_map, target_id),
                     ref_type,
+                ));
+            }
+        }
+    }
+
+    // ABAP names an interface's method `zif_x~m`, and so does its implementing
+    // method's entity. The tokenizer splits at `~`, so the bare `m` matches
+    // nothing; probe the pair as one key instead, through the same lookup as a
+    // plain name. Only the entity's own lines are read, not its children's.
+    if repo_wide && content.contains('~') {
+        let stripped: Cow<str> = match fallback_stripped.as_ref() {
+            Some(stripped) => Cow::Borrowed(stripped.as_str()),
+            None => Cow::Owned(strip_for_language(
+                language_config.strip_strategy(),
+                content,
+            )),
+        };
+        let mut seen: HashSet<String> = HashSet::default();
+        for (local_line, line) in stripped.lines().enumerate() {
+            let line_no = entity.start_line + local_line;
+            if !line.contains('~')
+                || !fallback_ranges
+                    .iter()
+                    .any(|(start, end)| (*start..=*end).contains(&line_no))
+            {
+                continue;
+            }
+            for cap in ABAP_INTERFACE_COMPONENT_RE.captures_iter(line) {
+                let key = cap.get(1).unwrap().as_str();
+                if key == own_name || !seen.insert(key.to_string()) {
+                    continue;
+                }
+                rec.one(Table::SymbolTable, key);
+                let own_file_target = context
+                    .symbol_table_by_file
+                    .get(key)
+                    .and_then(|by_file| by_file.get(entity.file_path.as_str()))
+                    .and_then(|ids| ids.iter().find(|id| **id != entity_id))
+                    .copied();
+                let Some(target_id) = own_file_target.or_else(|| {
+                    abap_scoped_target(context.abap_global, key, entity_id, own_object.as_deref())
+                }) else {
+                    continue;
+                };
+                rec.two(Table::BowParentChildPairs, entity_id, target_id);
+                rec.two(Table::BowParentChildPairs, target_id, entity_id);
+                if context.parent_child_pairs.contains(&(entity_id, target_id))
+                    || context.parent_child_pairs.contains(&(target_id, entity_id))
+                {
+                    continue;
+                }
+                entity_edges.push((
+                    source_id.clone(),
+                    canonical_entity_id(context.entity_map, target_id),
+                    infer_ref_type(content, key),
                 ));
             }
         }
@@ -3195,9 +3377,11 @@ impl EntityGraph {
         let __symbol_table_by_file_t0 = std::time::Instant::now();
         let symbol_table_by_file = build_symbol_table_by_file(symbol_table.as_ref(), &entity_map);
         resolve_profile::add_symbol_table_by_file_ns(__symbol_table_by_file_t0.elapsed());
+        let abap_global = build_abap_global_table(symbol_table.as_ref(), &entity_map, file_paths);
         let reference_context = ReferenceResolutionContext {
             entity_map: &entity_map,
             symbol_table_by_file: &symbol_table_by_file,
+            abap_global: &abap_global,
             imports_by_file: &imports_by_file,
             scope_consumed_words: &scope_consumed_words,
             child_ranges_by_parent: &child_ranges_by_parent,
@@ -3623,9 +3807,12 @@ impl EntityGraph {
 
         let imports_by_file = build_imports_by_file(&import_table);
         let symbol_table_by_file = build_symbol_table_by_file(symbol_table.as_ref(), &entity_map);
+        let abap_global =
+            build_abap_global_table(symbol_table.as_ref(), &entity_map, &resolve_file_paths);
         let reference_context = ReferenceResolutionContext {
             entity_map: &entity_map,
             symbol_table_by_file: &symbol_table_by_file,
+            abap_global: &abap_global,
             imports_by_file: &imports_by_file,
             scope_consumed_words: &scope_consumed_words,
             child_ranges_by_parent: &child_ranges_by_parent,
@@ -3915,9 +4102,17 @@ impl EntityGraph {
                 .filter_map(|entity_id| entity_file_paths.get(entity_id.as_str()).copied())
                 .filter(|file_path| !stale_set.contains(*file_path))
                 .collect();
+            // An ABAP name reaches past the files that define it
+            // (`build_abap_global_table`): a definition changed or gone in a
+            // stale ABAP file can rebind a reader in any clean ABAP file, as
+            // when a name defined twice becomes unique.
+            let repo_wide_target_changed = stale_files
+                .iter()
+                .any(|file_path| repo_wide_names_for_file(file_path));
 
             for entity in all_entities.iter().filter(|entity| {
                 affected_target_candidate_files.contains(entity.file_path.as_str())
+                    || (repo_wide_target_changed && repo_wide_names_for_file(&entity.file_path))
             }) {
                 if stale_set.contains(entity.file_path.as_str())
                     || affected_clean_ids.contains(&entity.id)
@@ -4397,9 +4592,12 @@ impl EntityGraph {
 
         let imports_by_file = build_imports_by_file(&import_table);
         let symbol_table_by_file = build_symbol_table_by_file(symbol_table.as_ref(), &entity_map);
+        let abap_global =
+            build_abap_global_table(symbol_table.as_ref(), &entity_map, &resolve_file_paths);
         let reference_context = ReferenceResolutionContext {
             entity_map: &entity_map,
             symbol_table_by_file: &symbol_table_by_file,
+            abap_global: &abap_global,
             imports_by_file: &imports_by_file,
             scope_consumed_words: &scope_consumed_words,
             child_ranges_by_parent: &child_ranges_by_parent,
@@ -7687,6 +7885,11 @@ static CLOJURE_QUALIFIED_REF_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"\b([a-zA-Z][a-zA-Z0-9_?!=*-]*/[a-zA-Z][a-zA-Z0-9_?!=*-]*)").unwrap()
 });
 
+/// `zif_x~m` in folded, stripped ABAP: an interface component, written as one
+/// name though the tokenizer splits it. `/ns/` namespaces included.
+static ABAP_INTERFACE_COMPONENT_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"([a-z_/][a-z0-9_/]*~[a-z_][a-z0-9_]*)").unwrap());
+
 fn collect_local_binding_captures<F>(
     line: &str,
     line_no: usize,
@@ -7755,6 +7958,14 @@ pub fn case_insensitive_for_file(file_path: &str) -> bool {
     let ext = file_path.rfind('.').map(|i| &file_path[i..]).unwrap_or("");
     crate::parser::plugins::code::languages::get_language_config(ext)
         .is_some_and(|c| c.case_insensitive())
+}
+
+/// Whether a name in a given file can reach another file with no import (ABAP).
+/// See `LanguageConfig::repo_wide_names`.
+fn repo_wide_names_for_file(file_path: &str) -> bool {
+    let ext = file_path.rfind('.').map(|i| &file_path[i..]).unwrap_or("");
+    crate::parser::plugins::code::languages::get_language_config(ext)
+        .is_some_and(|c| c.repo_wide_names())
 }
 
 /// The symbol-table key for an entity name: ASCII-lowercased when its file is
