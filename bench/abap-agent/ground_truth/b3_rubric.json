@@ -1,0 +1,56 @@
+{
+  "status": "draft",
+  "note": "Written from `git show <commit>` and grep at the pinned commit b2b4e25, cross-checked against `sem diff --commit`. Review before scoring a real run. An entity or caller matches when any alias occurs in the agent's lower-cased item; test classes are not rubric entities.",
+  "tasks": {
+    "b3_01": {
+      "pr": 7837,
+      "changed_entities": [
+        {"id": "zcl_abapgit_git_porcelain=>receive_pack_push", "aliases": ["receive_pack_push"], "why": "uses is_comment-time when set, else the current time"},
+        {"id": "zif_abapgit_git_definitions/ty_comment", "aliases": ["ty_comment"], "why": "new component time"},
+        {"id": "zif_abapgit_git_definitions/ty_unixtime", "aliases": ["ty_unixtime"], "why": "type moved from zcl_abapgit_git_time to the interface"},
+        {"id": "zcl_abapgit_git_time=>get_unix_from_local", "aliases": ["get_unix_from_local"], "why": "added"},
+        {"id": "zcl_abapgit_time_date=>get_system_timezone", "aliases": ["get_system_timezone", "zcl_abapgit_time_date"], "why": "new class, timezone lookup moved here"},
+        {"id": "zcl_abapgit_gui_chunk_lib=>class_constructor", "aliases": ["zcl_abapgit_gui_chunk_lib", "gui_chunk_lib"], "why": "now calls zcl_abapgit_time_date=>get_system_timezone"}
+      ],
+      "callers_left_behind": [
+        {"id": "zcl_abapgit_transport_2_branch->create", "aliases": ["transport_2_branch"], "file": "src/cts/zcl_abapgit_transport_2_branch.clas.abap", "why": "replays historic transports into commits but still leaves ty_comment-time initial, so commits get the current time"}
+      ]
+    },
+    "b3_02": {
+      "pr": 7924,
+      "changed_entities": [
+        {"id": "zcl_abapgit_git_utils=>pkt_string", "aliases": ["pkt_string"], "why": "length counts UTF-8 bytes, 2-byte hex prefix, limit 65516 instead of 255 characters"}
+      ],
+      "callers_left_behind": [
+        {"id": "zcl_abapgit_git_transport=>receive_pack", "aliases": ["receive_pack"], "file": "src/git/zcl_abapgit_git_transport.clas.abap", "why": "builds the push command pkt-line; non-ASCII ref names now change the prefix"},
+        {"id": "zcl_abapgit_git_transport=>upload_pack", "aliases": ["upload_pack"], "file": "src/git/zcl_abapgit_git_transport.clas.abap", "why": "want/deepen lines; lines of 255+ characters no longer raise"},
+        {"id": "zcl_abapgit_gitv2_porcelain=>send_command", "aliases": ["send_command", "gitv2_porcelain"], "file": "src/git/v2/zcl_abapgit_gitv2_porcelain.clas.abap", "why": "protocol v2 command and argument pkt-lines"}
+      ]
+    },
+    "b3_03": {
+      "pr": 7926,
+      "changed_entities": [
+        {"id": "zcl_abapgit_repo_online->zif_abapgit_repo_online~create_branch", "aliases": ["create_branch"], "why": "raises zcx_abapgit_exception instead of an ASSERT dump for a name outside refs/heads/"}
+      ],
+      "callers_left_behind": [
+        {"id": "zcl_abapgit_transport_2_branch->create", "aliases": ["transport_2_branch"], "file": "src/cts/zcl_abapgit_transport_2_branch.clas.abap", "why": "passes a branch name built from user input; now gets an exception it must propagate"},
+        {"id": "zcl_abapgit_gui_page_commit->zif_abapgit_gui_event_handler~on_event", "aliases": ["gui_page_commit"], "file": "src/ui/pages/zcl_abapgit_gui_page_commit.clas.abap", "why": "creates a new branch from the commit page"},
+        {"id": "zcl_abapgit_services_git=>create_branch", "aliases": ["services_git"], "file": "src/ui/routing/zcl_abapgit_services_git.clas.abap", "why": "create_branch and create_branch_common pass popup input"}
+      ]
+    },
+    "b3_04": {
+      "pr": 7878,
+      "changed_entities": [
+        {"id": "zcl_abapgit_objects_check=>warning_overwrite_files", "aliases": ["warning_overwrite_files"], "why": "added: changed files without a TADIR object"},
+        {"id": "zcl_abapgit_objects_check=>deserialize_checks", "aliases": ["deserialize_checks"], "why": "fills the new overwrite_files"},
+        {"id": "zcl_abapgit_services_repo=>gui_deserialize", "aliases": ["gui_deserialize"], "why": "nothing-to-pull check also looks at overwrite_files"},
+        {"id": "zif_abapgit_definitions/ty_deserialize_checks", "aliases": ["ty_deserialize_checks", "overwrite_files"], "why": "new component overwrite_files"},
+        {"id": "zif_abapgit_definitions/ty_files", "aliases": ["ty_files"], "why": "new table type"}
+      ],
+      "callers_left_behind": [
+        {"id": "zcl_abapgit_gui_page_pull->zif_abapgit_gui_renderable~render", "aliases": ["gui_page_pull"], "file": "src/ui/pages/zcl_abapgit_gui_page_pull.clas.abap", "why": "still decides there is nothing to pull from lines( ms_checks-overwrite ) = 0 alone"},
+        {"id": "zcl_abapgit_background_pull->zif_abapgit_background~run", "aliases": ["background_pull"], "file": "src/background/zcl_abapgit_background_pull.clas.abap", "why": "reads deserialize_checks and only handles overwrite"}
+      ]
+    }
+  }
+}
