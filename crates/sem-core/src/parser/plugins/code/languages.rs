@@ -1286,17 +1286,24 @@ static ABAP_CONFIG: LanguageConfig = LanguageConfig {
     // `CLASS x DEFINITION` (`class_declaration`) and `CLASS x IMPLEMENTATION`
     // (`class_implementation`); `method_implementation` is `METHOD … ENDMETHOD`
     // and `function_implementation` a function module's `FUNCTION … ENDFUNCTION`.
+    // `report_statement` is `REPORT zfoo.` and `variable_declaration` a `DATA`
+    // statement, kept only inside a class's sections. The grammar has no node
+    // for `PROGRAM`, `FORM`, `MODULE`, `DEFINE` or `TYPES`; those come from
+    // `abap_fallback.rs`.
     entity_node_types: &[
+        "report_statement",
         "class_declaration",
         "class_implementation",
         "interface_declaration",
         "method_implementation",
         "function_implementation",
+        "variable_declaration",
     ],
-    // `CLASS x IMPLEMENTATION` holds its METHOD blocks directly, with no body
-    // node in between, so there is no container to declare: the extractor
-    // descends into the implementation itself (`push_abap_method_implementations`).
-    container_node_types: &[],
+    // A class definition's `DATA` sits in its visibility sections. `CLASS x
+    // IMPLEMENTATION` holds its METHOD blocks directly, with no body node in
+    // between, so it has no container to declare: the extractor descends into
+    // the implementation itself (`push_abap_method_implementations`).
+    container_node_types: &["public_section", "protected_section", "private_section"],
     call_entity_identifiers: &[],
     suppressed_nested_entities: &[],
     scope_boundary_types: &[],

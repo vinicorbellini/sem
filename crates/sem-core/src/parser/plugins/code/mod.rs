@@ -1,3 +1,4 @@
+mod abap_fallback;
 pub mod abap_name;
 mod entity_extractor;
 pub mod languages;
@@ -2008,12 +2009,15 @@ return M
 
     #[test]
     #[cfg(feature = "lang-abap")]
-    #[ignore = "spec 1.4: class collapse (definition + implementation -> one class entity); also interface-prefixed method names `zif_fx_order~get_total`"]
+    #[ignore = "spec 1.4: class collapse (definition + implementation -> one class entity)"]
     fn test_abap_fixture_clas() {
         assert_eq!(
             abap_fixture_entities("zcl_fx_order.clas.abap"),
             abap_expect(&[
                 ("class", "zcl_fx_order", None),
+                ("variable", "mv_id", Some("zcl_fx_order")),
+                ("variable", "mt_names", Some("zcl_fx_order")),
+                ("variable", "mv_total", Some("zcl_fx_order")),
                 ("method", "constructor", Some("zcl_fx_order")),
                 ("method", "create", Some("zcl_fx_order")),
                 ("method", "describe", Some("zcl_fx_order")),
@@ -2023,12 +2027,17 @@ return M
         );
     }
 
+    /// Spec 1.3: a local or test class's parent is the global class of its file
+    /// name, whose entity is in another file, so the parent shows as its id.
+    #[cfg(feature = "lang-abap")]
+    const ABAP_FIXTURE_GLOBAL_CLASS: &str = "zcl_fx_order.clas.abap::class::zcl_fx_order";
+
     #[test]
     #[cfg(feature = "lang-abap")]
     fn test_abap_fixture_clas_locals_def() {
         assert_eq!(
             abap_fixture_entities("zcl_fx_order.clas.locals_def.abap"),
-            abap_expect(&[("class", "lcl_helper", None)])
+            abap_expect(&[("class", "lcl_helper", Some(ABAP_FIXTURE_GLOBAL_CLASS))])
         );
     }
 
@@ -2039,7 +2048,7 @@ return M
         assert_eq!(
             abap_fixture_entities("zcl_fx_order.clas.locals_imp.abap"),
             abap_expect(&[
-                ("class", "lcl_helper", None),
+                ("class", "lcl_helper", Some(ABAP_FIXTURE_GLOBAL_CLASS)),
                 ("method", "tag", Some("lcl_helper")),
             ])
         );
@@ -2052,7 +2061,8 @@ return M
         assert_eq!(
             abap_fixture_entities("zcl_fx_order.clas.testclasses.abap"),
             abap_expect(&[
-                ("class", "ltc_order", None),
+                ("class", "ltc_order", Some(ABAP_FIXTURE_GLOBAL_CLASS)),
+                ("variable", "mo_cut", Some("ltc_order")),
                 ("method", "setup", Some("ltc_order")),
                 ("method", "total_starts_at_zero", Some("ltc_order")),
                 ("method", "describe_mentions_id", Some("ltc_order")),
@@ -2095,17 +2105,19 @@ return M
 
     #[test]
     #[cfg(feature = "lang-abap")]
-    #[ignore = "spec 1.3: forms and macros not yet extracted"]
     fn test_abap_fixture_prog() {
         assert_eq!(
             abap_fixture_entities("zfx_report.prog.abap"),
-            abap_expect(&[("macro", "_log", None), ("form", "show_order", None)])
+            abap_expect(&[
+                ("report", "zfx_report", None),
+                ("macro", "_log", None),
+                ("form", "show_order", None),
+            ])
         );
     }
 
     #[test]
     #[cfg(feature = "lang-abap")]
-    #[ignore = "spec 1.3: forms and function modules not yet extracted"]
     fn test_abap_fixture_prog_include() {
         assert_eq!(
             abap_fixture_entities("zfx_report_f01.prog.abap"),
@@ -2138,7 +2150,6 @@ return M
 
     #[test]
     #[cfg(feature = "lang-abap")]
-    #[ignore = "spec 1.3: forms and function modules not yet extracted"]
     fn test_abap_fixture_fugr_form_include() {
         assert_eq!(
             abap_fixture_entities("zfx_fg.fugr.lzfx_fgf01.abap"),
@@ -2148,12 +2159,261 @@ return M
 
     #[test]
     #[cfg(feature = "lang-abap")]
-    #[ignore = "spec 1.3: dynpro MODULE not yet extracted"]
     fn test_abap_fixture_fugr_pbo_include() {
         assert_eq!(
             abap_fixture_entities("zfx_fg.fugr.lzfx_fgo01.abap"),
             abap_expect(&[("module", "status_0100", None)])
         );
+    }
+
+    // Spec 1.3: the full entity set, each with its name and line range. The
+    // fixture has no class-level TYPES and no PROGRAM statement, so those two
+    // read small sources of their own.
+
+    /// Extract `code` as (type, name, start line, end line) rows, in source order.
+    #[cfg(feature = "lang-abap")]
+    fn abap_rows(code: &str, file: &str) -> Vec<(String, String, usize, usize)> {
+        let entities = CodeParserPlugin.extract_entities(code, file);
+        eprintln!(
+            "ABAP {file}: {:?}",
+            entities
+                .iter()
+                .map(|e| (&e.entity_type, &e.name, e.start_line, e.end_line, &e.parent_id))
+                .collect::<Vec<_>>()
+        );
+        entities
+            .iter()
+            .map(|e| (e.entity_type.clone(), e.name.clone(), e.start_line, e.end_line))
+            .collect()
+    }
+
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_rows(file: &str) -> Vec<(String, String, usize, usize)> {
+        abap_rows(&abap_fixture_text(file), file)
+    }
+
+    #[cfg(feature = "lang-abap")]
+    fn abap_row(t: &str, n: &str, start: usize, end: usize) -> (String, String, usize, usize) {
+        (t.to_string(), n.to_string(), start, end)
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_1_3_report() {
+        let rows = abap_fixture_rows("zfx_report.prog.abap");
+        assert!(rows.contains(&abap_row("report", "zfx_report", 2, 2)), "got: {rows:?}");
+
+        // `PROGRAM` has no node of its own: it comes from the fallback, tagged.
+        let entities = CodeParserPlugin.extract_entities("PROGRAM zfoo.\n\nWRITE 'x'.\n", "zfoo.prog.abap");
+        assert_eq!(entities.len(), 1, "got: {entities:?}");
+        assert_eq!((entities[0].entity_type.as_str(), entities[0].name.as_str()), ("report", "zfoo"));
+        assert_eq!(entities[0].content, "PROGRAM zfoo.");
+        assert_eq!(
+            entities[0].metadata.as_ref().and_then(|m| m.get("source")).map(String::as_str),
+            Some("abap-fallback")
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_1_3_form() {
+        assert_eq!(
+            abap_fixture_rows("zfx_report_f01.prog.abap"),
+            vec![abap_row("form", "format_total", 5, 7)]
+        );
+        assert_eq!(
+            abap_fixture_rows("zfx_fg.fugr.lzfx_fgf01.abap"),
+            vec![abap_row("form", "calc_extra", 5, 7)]
+        );
+        // The grammar folds this ENDFORM into an ERROR with the body before it.
+        let code = abap_fixture_text("zfx_report.prog.abap");
+        let entities = CodeParserPlugin.extract_entities(&code, "zfx_report.prog.abap");
+        let form = entities.iter().find(|e| e.entity_type == "form").expect("form");
+        assert_eq!((form.name.as_str(), form.start_line, form.end_line), ("show_order", 21, 24));
+        assert!(form.content.starts_with("FORM show_order USING"), "{}", form.content);
+        assert!(form.content.ends_with("ENDFORM."), "{}", form.content);
+
+        // Error recovery can also swallow the next FORM and a MODULE whole, and
+        // the keywords can be lower case.
+        let code = "form a.\n  DATA(x) = 1.\nendform.\nFORM b.\nENDFORM.\nMODULE user_command_0100 INPUT.\n  CASE sy-ucomm.\n  ENDCASE.\nENDMODULE.\n";
+        assert_eq!(
+            abap_rows(code, "zfoo.prog.abap"),
+            vec![
+                abap_row("form", "a", 1, 3),
+                abap_row("form", "b", 4, 5),
+                abap_row("module", "user_command_0100", 6, 9),
+            ]
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_1_3_function() {
+        assert_eq!(
+            abap_fixture_rows("zfx_fg.fugr.zfx_fm.abap"),
+            vec![abap_row("function", "zfx_fm", 1, 14)]
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_1_3_module() {
+        assert_eq!(
+            abap_fixture_rows("zfx_fg.fugr.lzfx_fgo01.abap"),
+            vec![abap_row("module", "status_0100", 5, 8)]
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_1_3_method() {
+        let entities = abap_fixture_entities("zcl_fx_order.clas.abap");
+        let methods: Vec<_> = entities.iter().filter(|(t, _, _)| t == "method").collect();
+        assert_eq!(
+            methods
+                .iter()
+                .map(|(_, n, p)| (n.as_str(), p.as_deref()))
+                .collect::<Vec<_>>(),
+            vec![
+                ("constructor", Some("zcl_fx_order")),
+                ("create", Some("zcl_fx_order")),
+                ("describe", Some("zcl_fx_order")),
+                ("zif_fx_order~add_item", Some("zcl_fx_order")),
+                ("zif_fx_order~get_total", Some("zcl_fx_order")),
+            ]
+        );
+        let rows = abap_fixture_rows("zcl_fx_order.clas.abap");
+        assert!(rows.contains(&abap_row("method", "constructor", 20, 22)), "got: {rows:?}");
+        assert!(rows.contains(&abap_row("method", "zif_fx_order~get_total", 38, 42)), "got: {rows:?}");
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_1_3_class() {
+        let rows = abap_fixture_rows("zcl_fx_order.clas.abap");
+        assert!(rows.contains(&abap_row("class", "zcl_fx_order", 2, 15)), "got: {rows:?}");
+        assert!(rows.contains(&abap_row("impl", "zcl_fx_order", 18, 44)), "got: {rows:?}");
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_1_3_interface() {
+        assert_eq!(
+            abap_fixture_rows("zif_fx_order.intf.abap"),
+            vec![abap_row("interface", "zif_fx_order", 1, 14)]
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_1_3_types_data() {
+        // TYPES has no node (an ERROR, or the tail of the METHODS or DATA before
+        // it); DATA is a variable_declaration, and an entity only in a section.
+        let code = "\
+CLASS zcl_t DEFINITION PUBLIC.
+  PUBLIC SECTION.
+    TYPES ty_id TYPE i.
+    TYPES: BEGIN OF ty_s,
+             a TYPE i,
+           END OF ty_s.
+    METHODS run.
+    TYPES: ty_a TYPE i,
+           ty_b TYPE string.
+    DATA mv_x TYPE i.
+    types ty_c type i.
+  PRIVATE SECTION.
+    TYPES BEGIN OF ty_old.
+    TYPES   f TYPE i.
+    TYPES END OF ty_old.
+    DATA mv_y TYPE ty_s.
+ENDCLASS.
+
+CLASS zcl_t IMPLEMENTATION.
+  METHOD run.
+    TYPES ty_local TYPE i.
+    DATA lv_local TYPE ty_local.
+  ENDMETHOD.
+ENDCLASS.
+
+TYPES ty_global TYPE i.
+DATA gv_global TYPE i.
+";
+        let rows = abap_rows(code, "zcl_t.clas.abap");
+        assert_eq!(
+            rows,
+            vec![
+                abap_row("class", "zcl_t", 1, 17),
+                abap_row("type", "ty_id", 3, 3),
+                abap_row("type", "ty_s", 4, 6),
+                abap_row("type", "ty_a", 8, 8),
+                abap_row("type", "ty_b", 9, 9),
+                abap_row("variable", "mv_x", 10, 10),
+                abap_row("type", "ty_c", 11, 11),
+                abap_row("type", "ty_old", 13, 15),
+                abap_row("variable", "mv_y", 16, 16),
+                abap_row("impl", "zcl_t", 19, 24),
+                abap_row("method", "run", 20, 23),
+            ]
+        );
+        let entities = CodeParserPlugin.extract_entities(code, "zcl_t.clas.abap");
+        let class_id = &entities[0].id;
+        for e in entities.iter().filter(|e| matches!(e.entity_type.as_str(), "type" | "variable")) {
+            assert_eq!(e.parent_id.as_ref(), Some(class_id), "{}", e.name);
+        }
+        let by_name = |n: &str| entities.iter().find(|e| e.name == n).unwrap();
+        // The grammar folds `types ty_c ...` into mv_x's node; each keeps its own text.
+        assert_eq!(by_name("mv_x").content, "DATA mv_x TYPE i.");
+        assert_eq!(by_name("ty_c").content, "types ty_c type i.");
+        assert_eq!(by_name("ty_a").content, "TYPES: ty_a TYPE i,");
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_1_3_macro() {
+        let rows = abap_fixture_rows("zfx_report.prog.abap");
+        assert!(rows.contains(&abap_row("macro", "_log", 6, 8)), "got: {rows:?}");
+
+        // A macro defined inside a form nests under it.
+        let code = "FORM f.\n  DEFINE m.\n    WRITE &1.\n  END-OF-DEFINITION.\n  m 'x'.\nENDFORM.\n";
+        let entities = CodeParserPlugin.extract_entities(code, "zfoo.prog.abap");
+        assert_eq!(
+            abap_rows(code, "zfoo.prog.abap"),
+            vec![abap_row("form", "f", 1, 6), abap_row("macro", "m", 2, 4)]
+        );
+        assert_eq!(entities[1].parent_id.as_ref(), Some(&entities[0].id));
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_1_3_local_classes_attach() {
+        for file in [
+            "zcl_fx_order.clas.locals_def.abap",
+            "zcl_fx_order.clas.locals_imp.abap",
+            "zcl_fx_order.clas.testclasses.abap",
+        ] {
+            let code = abap_fixture_text(file);
+            let entities = CodeParserPlugin.extract_entities(&code, &format!("src/{file}"));
+            let top: Vec<_> = entities
+                .iter()
+                .filter(|e| matches!(e.entity_type.as_str(), "class" | "impl"))
+                .collect();
+            assert!(!top.is_empty(), "{file}");
+            for e in top {
+                assert_eq!(
+                    e.parent_id.as_deref(),
+                    Some("src/zcl_fx_order.clas.abap::class::zcl_fx_order"),
+                    "{file}: {}",
+                    e.name
+                );
+                // The id itself is unchanged, so a definition and an
+                // implementation of one local class stay apart.
+                assert_eq!(e.id, format!("src/{file}::{}::{}", e.entity_type, e.name));
+            }
+        }
+        // The global class's own file attaches nothing.
+        let entities = CodeParserPlugin
+            .extract_entities(&abap_fixture_text("zcl_fx_order.clas.abap"), "src/zcl_fx_order.clas.abap");
+        assert!(entities.iter().filter(|e| e.entity_type == "class").all(|e| e.parent_id.is_none()));
     }
 
     #[test]
@@ -2223,15 +2483,16 @@ return M
     #[cfg(feature = "lang-abap")]
     fn abap_fixture_1_2_string_not_reference() {
         // Spec 1.2: the `'calls get_total( ) and describe( ) in a literal'` literal
-        // is not a reference, while the `{ zif_fx_order~get_total( ) }` expression
-        // inside `describe`'s template is. Methods of the implemented interface are
-        // named for their interface until 1.3, so the row name is `zif_fx_order`.
+        // is not a reference, while the `{ mv_id }` expression inside `describe`'s
+        // template is (`mv_id` appears nowhere else in `describe`).
         let rows = abap_fixture_dependencies(&["zif_fx_order.intf.abap", "zcl_fx_order.clas.abap"]);
-        for (_, deps) in rows.iter().filter(|(name, _)| name == "zif_fx_order") {
-            assert!(!deps.contains(&"describe".to_string()), "got: {:?}", deps);
-        }
+        let (_, deps) = rows
+            .iter()
+            .find(|(name, _)| name == "zif_fx_order~get_total")
+            .expect("zif_fx_order~get_total");
+        assert!(!deps.contains(&"describe".to_string()), "got: {:?}", deps);
         let (_, deps) = rows.iter().find(|(name, _)| name == "describe").expect("describe");
-        assert!(deps.contains(&"zif_fx_order".to_string()), "got: {:?}", deps);
+        assert!(deps.contains(&"mv_id".to_string()), "got: {:?}", deps);
     }
 
     // Spec 1.1: ABAP names are case-insensitive. The fixture is all lowercase;

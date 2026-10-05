@@ -91,6 +91,9 @@ fn is_code_entity(entity_type: &str) -> bool {
             | "macro_definition"
             | "type"
             | "type_alias"
+            | "form"
+            | "macro"
+            | "report"
     )
 }
 
