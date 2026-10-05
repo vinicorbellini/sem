@@ -106,3 +106,48 @@ newer CLI writes (`$schema`, `reserved`, `extra`, `root`).
    and now start at their first character, which moves error recovery in
    files that have errors (see the census in `docs/abap/README.md`). Corpus:
    `test/corpus/comments.txt`.
+5. **Chained declarations, and the declarations upstream had no rule for.**
+   Upstream had no chained `METHODS:`, `CLASS-METHODS:` or `INTERFACES:`, no
+   `INTERFACES`, `CLASS-DATA`, `CONSTANTS` or `TYPES` at all, and a class
+   definition or interface took only single `DATA`, so a class definition
+   with any of them was an `ERROR` (abapGit writes 263 chained `METHODS:`,
+   560 chained `TYPES:`, 358 `INTERFACES`). Now:
+   - `METHODS:` and `CLASS-METHODS:` take comma-separated parts, each a
+     `method_declaration` (or `method_redefinition`, `constructor_declaration`,
+     `class_method_declaration`) under a `chained_method_declaration` or
+     `chained_class_method_declaration`; the single statements read the same
+     parts. `CLASS-METHODS x FOR TESTING` is read too.
+   - `INTERFACES x [PARTIALLY IMPLEMENTED] [ALL METHODS ABSTRACT|FINAL] ...`
+     is an `interfaces_declaration`, chained under a
+     `chained_interfaces_declaration`.
+   - `CONSTANTS` and `TYPES`, single (`constants_declaration`,
+     `types_declaration`) and chained (`chained_constants_declaration` of
+     `constant`s, `chained_types_declaration` of `type_definition`s), in class
+     definitions, interfaces, method bodies and programs. Their chains are flat,
+     as ABAP reads them: `structure_begin` (`BEGIN OF s`), the components and
+     `structure_end` are parts of their own, so a structure may close in a
+     later statement (`TYPES BEGIN OF s. INCLUDE TYPE t. TYPES END OF s.`);
+     `structure_include` is `INCLUDE TYPE|STRUCTURE t [AS n [RENAMING WITH
+     SUFFIX x]]`.
+   - A class's or interface's attributes are `variable_declaration`s directly
+     under their section, however they are written: `CLASS-DATA a TYPE i.`,
+     and each part of `DATA:` or `CLASS-DATA:` (the chain has no node there),
+     a `BEGIN OF s, ..., END OF s` part being one `variable_declaration` named
+     `s` that holds its `component`s. This is what sem extracts class
+     attributes from. In a method body or a program, `DATA:` keeps its
+     `chained_variable_declaration` node, of `variable`s and
+     `structure_declaration`s; upstream's `chained_structure_declaration`
+     (one `BEGIN OF` per statement, its components typed like method
+     parameters) is gone, and its corpus test in `chained_statements.txt` now
+     expects the new shape.
+   - Typing: a type may be a structured type's component (`dokil-id`) or a
+     class's or interface's type (`zif_x=>ty`); data typing takes
+     `LENGTH`/`DECIMALS`, `VALUE` with a literal, a negative number or a
+     constant, `TYPE RANGE OF`, table keys (`WITH [UNIQUE|NON-UNIQUE]
+     DEFAULT KEY | KEY c ... | EMPTY KEY`, secondary `SORTED|HASHED KEY k
+     COMPONENTS c ...`) and `INITIAL SIZE`; a method parameter takes the table
+     and range types, `TYPE LINE OF`, the generic `INDEX TABLE` and
+     `STANDARD TABLE`, and `DEFAULT` with a literal.
+
+   Corpus: `test/corpus/chained_declarations.txt`.
+

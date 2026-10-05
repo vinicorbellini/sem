@@ -3313,6 +3313,36 @@ DATA gv_global TYPE i.
     }
 
     #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_grammar_reads_chained_declarations() {
+        // The grammar had no chained `METHODS:`, `INTERFACES:`, `CLASS-DATA` or
+        // `TYPES` and read a class's `DATA:` only through error recovery, which
+        // put test class definitions in an ERROR. Now a section's attributes are
+        // variables however they are written (a chained `DATA:` part, a
+        // structure, `CLASS-DATA` single or chained), and the methods after the
+        // definition stay the grammar's. The structure's components are not
+        // attributes, and `TYPES` still come from the fallback.
+        let code = "CLASS ltcl_demo DEFINITION FINAL FOR TESTING DURATION SHORT RISK LEVEL HARMLESS.\n  PRIVATE SECTION.\n    INTERFACES: zif_a, zif_b.\n    TYPES: BEGIN OF ty_s,\n        id TYPE dokil-id,\n      END OF ty_s.\n    CONSTANTS c_max TYPE i VALUE 3.\n    DATA: mv_a TYPE i,\n      BEGIN OF ms_called,\n        popup TYPE abap_bool,\n      END OF ms_called.\n    CLASS-DATA: go_x TYPE REF TO zcl_x.\n    CLASS-DATA gv_y TYPE string.\n    METHODS: setup,\n      first_test FOR TESTING RAISING zcx_error.\nENDCLASS.\n\nCLASS ltcl_demo IMPLEMENTATION.\n  METHOD setup.\n  ENDMETHOD.\n  METHOD first_test.\n  ENDMETHOD.\nENDCLASS.\n";
+        assert_eq!(
+            abap_rows(code, "zcl_demo.clas.testclasses.abap"),
+            vec![
+                abap_row("class", "ltcl_demo", 1, 23),
+                abap_row("type", "ty_s", 4, 6),
+                abap_row("variable", "mv_a", 8, 8),
+                abap_row("variable", "ms_called", 9, 11),
+                abap_row("variable", "go_x", 12, 12),
+                abap_row("variable", "gv_y", 13, 13),
+                abap_row("method", "setup", 19, 20),
+                abap_row("method", "first_test", 21, 22),
+            ]
+        );
+        assert_eq!(
+            abap_method_sources(code, "zcl_demo.clas.testclasses.abap"),
+            vec![("setup".to_string(), None), ("first_test".to_string(), None)]
+        );
+    }
+
+    #[test]
     #[cfg(feature = "lang-fish")]
     fn test_fish_entity_extraction() {
         let code = r#"function greet
