@@ -128,6 +128,19 @@ pub trait Lang: Sync {
     fn virtual_methods(&self) -> bool {
         false
     }
+    /// The part of a member's name that its trait's declaration is named by:
+    /// an ABAP class implements interface method `m` as `zif_x~m`, so both
+    /// are `m`. Dispatch pairs a declaration with the members of its impls
+    /// by this key.
+    fn member_key<'a>(&self, name: &'a str) -> &'a str {
+        name
+    }
+    /// A type has the methods its traits declare only by their qualified
+    /// names (ABAP's `zif_x~m`, see [`Lang::member_key`]) or an alias it
+    /// declares: a bare name on it never names a trait's declaration.
+    fn qualified_trait_methods(&self) -> bool {
+        false
+    }
     /// A base class from outside the repo that defines no ordinary methods
     /// (Python's `Generic`, `ABC`): it cannot shadow a repo base's.
     fn neutral_base(&self, _ty: &str) -> bool {

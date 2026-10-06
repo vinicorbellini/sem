@@ -5,9 +5,14 @@
 //! files of one class or function group, joined with the programs an
 //! `INCLUDE` pastes them into), classes are types whose methods live in an
 //! impl and whose `INHERITING FROM` base is searched for what they lack, an
-//! interface is a trait whose `METHODS` it declares, a method calls its own
-//! class's methods with no receiver written, and `CALL FUNCTION 'X'` and
-//! `PERFORM f` call by name.
+//! interface is a trait whose `METHODS` it declares and whose `INTERFACES`
+//! are its supertraits, a class implements each of its `INTERFACES` in an
+//! impl of that trait whose methods are named in full (`zif_x~m`, the
+//! declaration's `m` by [`Lang::member_key`]), its `ALIASES` are other
+//! names of those, a method overrides its base class's only when it says
+//! `REDEFINITION` (so a call of the base's method dispatches to it), a
+//! method calls its own class's methods with no receiver written, and
+//! `CALL FUNCTION 'X'` and `PERFORM f` call by name.
 //!
 //! Receivers are typed by what is declared, never guessed from a name: a
 //! `TYPE REF TO` on a local, a parameter or an attribute, the constructor
@@ -39,7 +44,9 @@ use super::ir::*;
 use super::lang::{BuiltinRet, ClosureArg, Lang, Layout};
 use crate::parser::graph::strip_abap_content;
 use super::abap_dynamic::{dynamic_sites, DynSite};
-use crate::parser::plugins::code::abap_fallback::{include_names, statements, Statement};
+use crate::parser::plugins::code::abap_fallback::{
+    chain_parts, include_names, statements, Statement,
+};
 use crate::parser::plugins::code::abap_include::{
     reads_includes, IncludeGraph, INCLUDE_NOT_IN_REPO,
 };
@@ -92,6 +99,22 @@ impl Lang for Abap {
 
     fn elem(&self, _container: &str) -> Option<BuiltinRet> {
         None
+    }
+
+    fn virtual_methods(&self) -> bool {
+        // a call of a base class's method may run a `REDEFINITION` of it
+        true
+    }
+
+    fn member_key<'a>(&self, name: &'a str) -> &'a str {
+        // `zif_x~m` implements interface method `m`
+        name.rsplit('~').next().unwrap_or(name)
+    }
+
+    fn qualified_trait_methods(&self) -> bool {
+        // `lo->m( )` on a class is never its interfaces' `m`: that is
+        // `lo->zif_x~m( )`, or an `ALIASES`
+        true
     }
 
     fn function_scoped_names(&self) -> bool {
@@ -181,6 +204,9 @@ struct ClassCx {
     ty: Option<u32>,
     /// Its methods' impl, once this file implements it.
     imp: Option<u32>,
+    /// Its impl of each interface it implements in this file, which holds
+    /// its `zif_x~m` methods.
+    trait_impls: HashMap<Name, u32>,
     /// The scope its own name lives in: 0 for a global class, 1 for a local one.
     outer: u32,
     /// Its own block: its attributes, and its methods' sites.
@@ -524,6 +550,7 @@ impl<'a> Lower<'a> {
                 variants: Vec::new(),
                 embeds,
                 field_inits: Vec::new(),
+                aliases: Vec::new(),
             });
             let cx = self.class_cx(&name, outer);
             cx.ty = Some(ty);
@@ -569,6 +596,7 @@ impl<'a> Lower<'a> {
                 ClassCx {
                     ty: None,
                     imp: None,
+                    trait_impls: HashMap::default(),
                     outer,
                     scope,
                     attrs: HashMap::default(),
@@ -579,6 +607,28 @@ impl<'a> Lower<'a> {
             );
         }
         self.classes.get_mut(name).unwrap()
+    }
+
+    /// The impl of interface `iface` by class `class` in this file, made on
+    /// first sight: at its `INTERFACES zif_x`, or else at a `METHOD zif_x~m`
+    /// (a local class defined in another file, or an interface that another
+    /// one includes).
+    fn trait_impl(&mut self, class: &Name, iface: &str) -> u32 {
+        let cx = &self.classes[class];
+        if let Some(&imp) = cx.trait_impls.get(iface) {
+            return imp;
+        }
+        let imp = self.f.impls.len() as u32;
+        self.f.impls.push(ImplDecl {
+            scope: cx.outer,
+            generics: Vec::new(),
+            self_ty: named(class),
+            trait_: Some(Path::single(iface)),
+            assoc_types: Vec::new(),
+        });
+        let cx = self.classes.get_mut(class).unwrap();
+        cx.trait_impls.insert(iface.into(), imp);
+        imp
     }
 
     /// `INTERFACE x [PUBLIC].` declares a trait, whose `METHODS` follow.
@@ -601,8 +651,8 @@ impl<'a> Lower<'a> {
     }
 
     /// A statement in an `INTERFACE`: its `METHODS` are the trait's methods,
-    /// with their signatures, and whatever else it reads is the interface's
-    /// reference.
+    /// with their signatures, the interfaces it includes are its
+    /// supertraits, and whatever else it reads is the interface's reference.
     fn interface_member(&mut self, head: &str, st: &Statement) {
         let Some((iface, trait_)) = self.interface.clone() else {
             return;
@@ -622,6 +672,7 @@ impl<'a> Lower<'a> {
                         has_self: head == "METHODS",
                         enclosing: None,
                         ret: sig.ret_type(),
+                        shadows: false,
                     });
                     // its parameters, for the methods implementing it
                     // (`Expr::Signature`)
@@ -636,6 +687,17 @@ impl<'a> Lower<'a> {
                         .insert(name, sig);
                 }
             }
+            "INTERFACES" => {
+                for part in chain_parts(st, self.code) {
+                    let name = fold(part.tokens[0].text(self.code));
+                    let supertraits = &mut self.f.traits[trait_ as usize].supertraits;
+                    supertraits.push(Path::single(&name));
+                }
+            }
+            // an alias is declared, not read (calls by one are not bound)
+            "ALIASES" => {
+                self.aliases(st);
+            }
             "DATA" | "CLASS-DATA" | "CONSTANTS" | "TYPES" => {
                 let declared = self.declared(st);
                 self.declaring
@@ -647,9 +709,9 @@ impl<'a> Lower<'a> {
     }
 
     /// A declaration in a class's definition: its attributes and their
-    /// types, its methods' signatures and which are static, and its type
-    /// aliases. What it reads (a parameter's type, an interface) is the
-    /// class's reference.
+    /// types, its methods' signatures and which are static, the interfaces
+    /// it implements, its methods' aliases and its type aliases. What it
+    /// reads (a parameter's type, an interface) is the class's reference.
     fn declaration(&mut self, head: &str, st: &Statement) {
         let Some(class) = self.class.clone() else {
             return;
@@ -687,10 +749,38 @@ impl<'a> Lower<'a> {
                     self.declaring.push(at);
                 }
             }
+            "INTERFACES" => {
+                for part in chain_parts(st, self.code) {
+                    let iface = fold(part.tokens[0].text(self.code));
+                    self.trait_impl(&class, &iface);
+                }
+            }
+            "ALIASES" => {
+                let aliases = self.aliases(st);
+                if let Some(ty) = self.classes[&class].ty {
+                    self.f.types[ty as usize].aliases.extend(aliases);
+                }
+            }
             "TYPES" => self.types(st, scope),
             _ => {}
         }
         self.declaration_part(st.tokens[0].start_byte, before_period(st), scope);
+    }
+
+    /// `ALIASES a FOR zif_x~m`, `ALIASES: a FOR ..., b FOR ....`: each
+    /// alias and the method it names. An alias is declared, not read.
+    fn aliases(&mut self, st: &Statement) -> Vec<(Name, Name)> {
+        let code = self.code;
+        let mut out = Vec::new();
+        for part in chain_parts(st, code) {
+            if let [alias, keyword, method, ..] = part.tokens {
+                if keyword.text(code).eq_ignore_ascii_case("FOR") {
+                    self.declaring.push(alias.start_byte);
+                    out.push((fold(alias.text(code)), fold(method.text(code))));
+                }
+            }
+        }
+        out
     }
 
     /// Read `code[from..to]` for references only, as sites of no procedure
@@ -717,6 +807,7 @@ impl<'a> Lower<'a> {
                 variants: Vec::new(),
                 embeds: Vec::new(),
                 field_inits: Vec::new(),
+                aliases: Vec::new(),
             });
             self.declaring.push(at);
         }
@@ -774,14 +865,13 @@ impl<'a> Lower<'a> {
     fn signatures(&self, st: &Statement) -> Vec<(Name, usize, Sig)> {
         let code = self.code;
         let mut out = Vec::new();
-        let words: Vec<(&str, usize)> = st.tokens[1..]
-            .iter()
-            .map(|t| (t.text(code), t.start_byte))
-            .collect();
-        for part in words.split(|(w, _)| matches!(*w, ":" | ",")) {
-            let Some(&(name, at)) = part.first() else {
-                continue;
-            };
+        for part in chain_parts(st, code) {
+            let part: Vec<(&str, usize)> = part
+                .tokens
+                .iter()
+                .map(|t| (t.text(code), t.start_byte))
+                .collect();
+            let (name, at) = part[0];
             let upper: Vec<String> = part.iter().map(|(w, _)| w.to_ascii_uppercase()).collect();
             // an event handler's parameters take the event's types
             let handler = upper.windows(2).any(|w| w[0] == "FOR" && w[1] == "EVENT");
@@ -812,6 +902,7 @@ impl<'a> Lower<'a> {
             has_self: false,
             enclosing: None,
             ret: None,
+            shadows: false,
         });
         self.f.fns.len() as u32 - 1
     }
@@ -913,7 +1004,9 @@ impl<'a> Lower<'a> {
     /// class's `METHODS m`, an interface's for `zif_x~m`, or the base
     /// class's for a redefinition. Where none of those is in this file, a
     /// receiver is read from that declaration as the resolver finds it
-    /// (`receiver`), or is unknown and said to be.
+    /// (`receiver`), or is unknown and said to be. `zif_x~m` is a member of
+    /// the class's impl of `zif_x`, and a method of a class defined in this
+    /// file without `REDEFINITION` shadows any base's of its name.
     fn method(&mut self, name: &str, start: usize) {
         let Some(class) = self.class.clone() else {
             return;
@@ -922,12 +1015,18 @@ impl<'a> Lower<'a> {
         let name = fold(name);
         let cx = &self.classes[&class];
         let (scope, imp, has_self) = (cx.scope, cx.imp, !cx.statics.contains(&name));
+        let shadows = cx.ty.is_some() && !cx.sigs.get(&name).is_some_and(|s| s.redefinition);
+        let base = cx.base.clone();
         let Some(imp) = imp else { return };
+        let imp = match name.split_once('~') {
+            Some((iface, _)) => self.trait_impl(&class, iface),
+            None => imp,
+        };
         let sig = self.signature_of(&class, &name);
         self.declared_by = match name.split_once('~') {
             _ if sig.is_some() => None,
             Some((iface, method)) => Some((iface.into(), method.into())),
-            None => cx.base.clone().map(|base| (base, name.clone())),
+            None => base.map(|base| (base, name.clone())),
         };
         let row = self.row(start);
         let func = self.f.fns.len() as u32;
@@ -941,6 +1040,7 @@ impl<'a> Lower<'a> {
             has_self,
             enclosing: None,
             ret: sig.as_ref().and_then(Sig::ret_type),
+            shadows,
         });
         self.body = Some(Body {
             func,

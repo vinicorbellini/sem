@@ -435,6 +435,7 @@ impl<'a> Lower<'a> {
                     variants,
                     embeds: Vec::new(),
                     field_inits: Vec::new(),
+                    aliases: Vec::new(),
                 });
             }
             "type_item" => {
@@ -456,6 +457,7 @@ impl<'a> Lower<'a> {
                         variants: Vec::new(),
                         embeds: Vec::new(),
                         field_inits: Vec::new(),
+                        aliases: Vec::new(),
                     });
                 }
             }
@@ -521,6 +523,7 @@ impl<'a> Lower<'a> {
                         has_self: false,
                         enclosing: None,
                         ret: None,
+                        shadows: false,
                     });
                     self.body(v, Some(func), scope);
                 }
@@ -621,6 +624,7 @@ impl<'a> Lower<'a> {
             has_self,
             enclosing: None,
             ret,
+            shadows: false,
         });
         self.signature_mentions(n, Some(func), scope, &[]);
         if let Some(body) = n.child_by_field_name("body") {

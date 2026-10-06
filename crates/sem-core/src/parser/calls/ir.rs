@@ -204,6 +204,10 @@ pub struct FnDecl {
     /// functions capture nothing.
     pub enclosing: Option<u32>,
     pub ret: Option<TypeExpr>,
+    /// A method of its own even where a base class has one of its name,
+    /// which it shadows and does not override (an ABAP method declared
+    /// without `REDEFINITION`): no dispatch edge leads to it from the base's.
+    pub shadows: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -235,6 +239,8 @@ pub struct TypeDecl {
     /// Attributes without a declared type, typed by an initializer
     /// (`self.x = Foo()` in a method): `(name, method, scope, initializer)`.
     pub field_inits: Vec<(Name, u32, u32, ExprId)>,
+    /// Other names of methods (ABAP `ALIASES a FOR zif_x~m`): `(a, zif_x~m)`.
+    pub aliases: Vec<(Name, Name)>,
 }
 
 /// A module-level value (`const`, `static`, Go `var`): its declared type,

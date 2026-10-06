@@ -434,7 +434,8 @@ fn param_hints(
 }
 
 /// `(base class method, override)` pairs: a call answered with the base's
-/// method may run any subclass's override of it.
+/// method may run any subclass's override of it. A method that shadows the
+/// base's (`FnDecl::shadows`) overrides nothing.
 fn override_pairs(r: &Resolver, facts: &[&FileFacts], impls: &ImplTables) -> Vec<(FnRef, FnRef)> {
     let mut out = Vec::new();
     for (&(f, ty), impl_keys) in &impls.by_adt {
@@ -444,8 +445,11 @@ fn override_pairs(r: &Resolver, facts: &[&FileFacts], impls: &ImplTables) -> Vec
         let t = infer::Ty::Adt(f, ty, Vec::new());
         for &(fi, ii) in impl_keys {
             for &m in &impls.impl_members[fi as usize][ii as usize] {
-                let name = &facts[fi as usize].fns[m as usize].name;
-                if let Some(Pick::Defs(defs, _)) = r.inherited(f, ty, &t, name, 0) {
+                let decl = &facts[fi as usize].fns[m as usize];
+                if decl.shadows {
+                    continue;
+                }
+                if let Some(Pick::Defs(defs, _)) = r.inherited(f, ty, &t, &decl.name, 0) {
                     for d in defs {
                         if let scope::Def::Fn(bf, bi) = d {
                             out.push(((bf, bi), (fi, m)));
@@ -459,8 +463,9 @@ fn override_pairs(r: &Resolver, facts: &[&FileFacts], impls: &ImplTables) -> Vec
 }
 
 /// `(trait method declaration, implementing method)` pairs: nominal
-/// (`impl Trait for T`) and, for structurally typed languages, every type
-/// whose methods cover all of an interface's (Go).
+/// (`impl Trait for T`, members matched by [`Lang::member_key`]) and, for
+/// structurally typed languages, every type whose methods cover all of an
+/// interface's (Go).
 fn dispatch_pairs(
     lang: &dyn Lang,
     facts: &[&FileFacts],
@@ -471,9 +476,10 @@ fn dispatch_pairs(
     for (&(tf, tt), impl_keys) in &impls.by_trait {
         for &(f, i) in impl_keys {
             for &m in &impls.impl_members[f as usize][i as usize] {
+                let key = lang.member_key(name((f, m)));
                 let decl = impls.trait_members[tf as usize][tt as usize]
                     .iter()
-                    .find(|&&d| name((tf, d)) == name((f, m)));
+                    .find(|&&d| lang.member_key(name((tf, d))) == key);
                 if let Some(&d) = decl {
                     out.push(((tf, d), (f, m)));
                 }

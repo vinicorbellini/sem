@@ -16,11 +16,12 @@ Story 1.1 is case-insensitive names, 1.2 comment and string stripping, 1.3 the
 full entity set, 1.4 one entity per class, 1.5 abapGit layout, 1.6 parse-error
 tolerance, 1.7 test detection, 1.10 METHOD blocks the grammar loses, 2.0 names
 across files, 2.4 includes and function groups, 2.1 static calls, 2.2 receiver
-types.
+types, 2.3 inheritance and interfaces.
 
 | Fixture file | Tests that read it | Story |
 |--------------|--------------------|-------|
 | `zif_fx_order.intf.abap` | `test_abap_fixture_intf`, `abap_fixture_1_3_interface` | 1.3 |
+| | `abap_fixture_2_3_interface_method_entities` (`add_item` and `get_total` are methods of the interface), `_interface_call_dispatches` (the declarations dispatched from) | 2.3 |
 | | `abap_fixture_1_2_string_not_reference` (with `zcl_fx_order.clas.abap`) | 1.2 |
 | | `abap_fixture_1_1_find_any_case` (with the two class files) | 1.1 |
 | `zcl_fx_order.clas.abap` | `test_abap_fixture_clas`, `abap_fixture_1_3_class` | 1.4 |
@@ -41,12 +42,16 @@ types.
 | | `abap_fixture_1_6_errors_still_yield_entities` | 1.6 |
 | | `abap_fixture_2_0_unique_method_across_files`, `abap_fixture_2_0_ambiguous_method_no_edge` (same-object names) | 2.0 |
 | `zcl_fx_order_sub.clas.abap` | `test_abap_fixture_clas_sub` | 1.4 |
+| | `abap_fixture_2_3_base_call_dispatches` (`describe REDEFINITION`), `abap_fixture_2_3_impact_through_dispatch` | 2.3 |
 | | `abap_fixture_1_1_find_any_case` | 1.1 |
 | | `abap_fixture_2_0_ambiguous_method_no_edge` (a third `describe`) | 2.0 |
 | | `abap_fixture_2_1_super_call` (`super->describe( )`) | 2.1 |
 | `zcl_fx_user.clas.abap` | `abap_fixture_2_0_global_class_across_files`, `abap_fixture_2_0_unique_method_across_files`, `abap_fixture_2_0_ambiguous_method_no_edge` (its `describe`) | 2.0 |
 | | `abap_fixture_2_1_static_call` (`ZCL_FX_ORDER=>CREATE( 1 )`) | 2.1 |
 | `zcl_fx_calls.clas.abap` | the `abap_fixture_2_1_*` tests: one method per static call form, each in its functional and `CALL METHOD` spelling or in both cases, a `NEW`, and receivers typed by their declarations (2.2) | 2.1 |
+| `zif_fx_audit.intf.abap` | `abap_fixture_2_3_chained_methods` (`METHODS: audit ..., log ...`), `abap_fixture_2_3_interface_includes_interface` (`INTERFACES zif_fx_order`) | 2.3 |
+| `zcl_fx_order_alt.clas.abap` | `abap_fixture_2_3_alias_resolves` (`ALIASES total FOR zif_fx_order~get_total`, called bare and as `me->total( )`), `abap_fixture_2_3_interface_call_dispatches` and `_interface_includes_interface` (it implements `zif_fx_order` through `zif_fx_audit`), `abap_fixture_2_3_impact_through_dispatch` | 2.3 |
+| `zcl_fx_dispatch.clas.abap` | the `abap_fixture_2_3_*` tests: one method per call through an interface, a base class, an alias and an interface that includes another | 2.3 |
 | `zcl_fx_types.clas.abap` | the `abap_fixture_2_2_*` tests: one method per binding form (an `IMPORTING` parameter, a `CHANGING` one typed through `TYPES`, `RETURNING`, a chain, `CAST`, `CREATE OBJECT`, `NEW #` on an attribute), and one per unknown reason (`REF TO object` and `data`, undeclared, a class outside the repo, a local class of another object) | 2.2 |
 | `zcl_fx_order.clas.abap`, `.testclasses`, `zfx_fg.fugr.zfx_fm.abap` | `abap_fixture_2_2_new_binds_local` (`NEW lcl_helper( )`), `_new_hash_takes_target_type` (`create`), `_attribute_type` (`mo_cut`), `_return_type_chain` (`lo_order`) | 2.2 |
 | `zcl_fx_other.clas.abap` | `abap_fixture_2_0_local_class_stays_in_object`, `abap_fixture_2_0_ambiguous_method_no_edge`, `abap_fixture_2_0_unique_method_across_files` (`zif_fx_order~get_total`) | 2.0 |
@@ -92,3 +97,4 @@ by `test_abap_fixture_layout`.
 | `abap_fixture_2_1_keyword_is_not_a_unique_name` (`CREATE PUBLIC` against the one `create`, and since 2.2 typed and untyped receivers; also reads the 2.0 fixture objects) | 2.0, 2.2 |
 | `abap_fixture_2_2_param_type` (a form's `USING`, a function module's comment-block signature, an interface's and a base class's parameters in another file) | 2.2 |
 | `abap_fixture_2_2_untyped_stays_unknown` (a local class's `METHODS` in `locals_def` and its `METHOD` in `locals_imp`; `NEW #( )` with no target) | 2.2 |
+| `abap_fixture_2_3_redefinition_pairs` (only `REDEFINITION` overrides: not a method named like a private base method, nor a constructor) | 2.3 |
