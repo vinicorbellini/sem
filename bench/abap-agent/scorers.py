@@ -20,6 +20,7 @@ import tools
 # ── Config ──────────────────────────────────────────────────────────────────
 
 LINE_TOLERANCE = 2        # B1: a reported line within this many lines of the true call matches
+TRUTH_SCOPE = "src/"       # B1: the ground truth covers src/ only; answer items elsewhere are not scored
 NPM_UNIT_TIMEOUT_S = 1800
 HIDDEN_TEST_CLASS = "ltcl_hidden_b2"
 
@@ -93,6 +94,12 @@ def score_b1(answer: str, truth) -> dict:
         result["error"] = "no ground truth yet (ground_truth/whereused.json)"
         return result
 
+    # The truth reads src/ only (story 2.7). A caller elsewhere, e.g. abapGit's test/src/, is outside its
+    # scope: neither hit nor miss. On b1_04 the real call in test/src/zcl_abapgit_sap_package_test used
+    # to count as a false positive in every arm (docs/abap/census-gate2.md lists it as real).
+    out_of_scope = [c for c in callers if not _norm_file(c.get("file")).startswith(TRUTH_SCOPE)]
+    callers = [c for c in callers if c not in out_of_scope]
+    result["out_of_scope"] = sorted(f"{_norm_file(c.get('file'))}::{_method_part(c.get('method'))}" for c in out_of_scope)
     predicted = {(_norm_file(c.get("file")), _method_part(c.get("method"))) for c in callers}
     expected = {(_norm_file(t["file"]), _method_part(t["method"])) for t in truth}
     method_scores = set_scores(predicted, expected)
@@ -263,7 +270,7 @@ def load_rubric(path: Path, task_id: str):
 
 IDENTIFIER = re.compile(r"[a-z0-9_]+")
 ABAPGIT_PREFIX = re.compile(r"^z(?:cl|if|cx)_abapgit_")
-TEST_CLASS_ITEM = re.compile(r"^\s*ltc\w*\s*(?:->|=>)", re.I)
+TEST_CLASS_ITEM = re.compile(r"(?:^|->|=>)\s*ltc\w*\s*(?:->|=>|$)", re.I)
 
 
 def _identifiers(item: str) -> set[str]:
@@ -284,8 +291,12 @@ def _matches(item: str, rubric_entry: dict) -> bool:
 
 
 def _is_test_class_item(item: str) -> bool:
-    """'ltcl_foo->bar': the rubric does not list test classes, so such an item is neither hit nor miss."""
-    return bool(TEST_CLASS_ITEM.match(item))
+    """'ltcl_foo->bar' or 'zcl_foo->ltcl_bar': the rubric does not list test classes, so such an item is neither hit nor miss.
+
+    The second form (a local test class named under its global class) used to count as a false
+    positive: on gate2 b3_03 both arms listed 'zcl_abapgit_repo_online->ltcl_create_branch'.
+    """
+    return bool(TEST_CLASS_ITEM.search(item.strip()))
 
 
 def score_b3(answer: str, rubric) -> dict:

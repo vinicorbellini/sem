@@ -182,11 +182,13 @@ commit results with `git add -f bench/abap-agent/results.csv bench/abap-agent/re
 | `error` | Cap reached, max turns, timeout, sem mcp not connected, API error, refusal, missing ground truth, patch not applying. |
 
 B1 line numbers are also scored, within ±2 lines (`line_precision`, `line_recall` in `results.jsonl`).
+B1 answer items outside `src/` (abapGit's `test/src/`) are neither hits nor misses, because the
+ground truth reads `src/` only (`TRUTH_SCOPE` in `scorers.py`; listed as `out_of_scope` in the score).
 
 B3 matching (`scorers._matches`): an answer item matches a rubric entry when one of the entry's
 aliases equals a whole identifier in the item. The identifier may carry a `zcl_abapgit_` /
-`zif_abapgit_` / `zcx_abapgit_` prefix. Items naming a local test class (`ltcl_...->...`) are
-neither hits nor misses. `caller_precision` is reported in `results.jsonl` but not scored, because
+`zif_abapgit_` / `zcx_abapgit_` prefix. Items naming a local test class (`ltcl_...->...`, or
+`<class>->ltcl_...` since Gate 2) are neither hits nor misses. `caller_precision` is reported in `results.jsonl` but not scored, because
 the rubric is a draft.
 
 ## Briefing
@@ -244,6 +246,100 @@ find out that `sem_find` callers cannot resolve across files yet. It went straig
 `Bash` and still paid for the sem tool schemas and MCP instructions, about 4,200 extra tokens on
 every request (first request 10,140 vs 5,913 tokens on `b1_05`). That puts its B1 tokens read 48%
 above the grep arm, against the adoption rule's 15% ceiling, before sem contributes anything.
+
+## Gate 2, 2026-10-06
+
+Checkpoint `gate2`, one repetition, `--brief` (the sem arm's prompt carries the briefing; the grep
+arm's does not), `claude-sonnet-5-5` at effort high through Claude Code 2.1.289. sem was built from
+this branch at `f61bf50` (`build` `f61bf50a7f9c`, clean `crates/`; the binary still reports
+`sem 0.27.0`). B1: 20 runs, B3: 8 runs, B2: 12 runs, all 40 planned. Cumulative cost: **$3.13** by
+Claude Code's figure. No run hit an error, the turn bound or the timeout, and the sem server was
+`connected` in every sem run. Per-run means, except cost (summed):
+
+| Class | Arm | Runs | Success | Precision | Tokens read | Output tokens | Cost (USD) | Wall time (s) | Tool calls | sem calls |
+|---|---|---|---|---|---|---|---|---|---|---|
+| B1 | grep | 10 | 1.000 | 1.000 | 27,127 | 2,289 | 0.49 | 19.1 | 2.5 | - |
+| B1 | sem (brief) | 10 | 1.000 | 1.000 | 40,369 (+49%) | 2,164 | 0.59 | 22.7 | 3.2 | 1.0 |
+| B1 | baseline grep | 10 | 0.992 | 0.992 | 31,115 | 2,370 | 0.49 | 19.1 | 3.0 | - |
+| B1 | baseline sem | 10 | 1.000 | 1.000 | 46,117 (+48%) | 2,459 | 0.55 | 18.7 | 3.1 | 0 |
+| B2 | grep | 6 | 6/6 pass | - | 59,542 | 2,118 | 0.45 | 53.3 | 6.5 | - |
+| B2 | sem (brief) | 6 | 6/6 pass | - | 91,419 (+54%) | 2,180 | 0.54 | 57.6 (+8%) | 7.0 | 1.5 |
+| B2 | baseline | - | not run | | | | | | | |
+| B3 | grep | 4 | 0.875 | 1.000 | 108,572 | 4,240 | 0.54 | 39.7 | 6.5 | - |
+| B3 | sem (brief) | 4 | 1.000 | 1.000 | 123,847 (+14%) | 3,828 | 0.52 | 37.3 | 7.0 | 1.25 |
+| B3 | baseline grep | 4 | 1.000 | 1.000 | 118,153 | 3,917 | 0.55 | 34.6 | 6.8 | - |
+| B3 | baseline sem | 4 | 1.000 | 1.000 | 109,642 (-7%) | 3,785 | 0.47 | 39.6 | 5.2 | 0 |
+
+Success and precision are from the scorers as fixed during this run (below), applied to the stored
+answers of both checkpoints; the baseline's B1 rows carry no score in `results.csv`, these are its
+answers scored now against `whereused.grep.json`. "sem calls" counts `sem_*` entries in
+`calls_by_tool` (`results.jsonl`); `results.csv` has no column for it. The only B1 miss at either
+checkpoint is the baseline grep arm's `b1_01`, which attributed a call in
+`zcl_abapgit_repo_online` to `set_objects` instead of `check_for_valid_branch`. The only B3 miss at
+Gate 2 is the grep arm's `b3_01`, which did not name `zcl_abapgit_transport_2_branch` among the
+callers left behind (caller recall 0). B2 timings per task, grep vs sem (s): 56.7/64.4, 50.5/52.2,
+52.4/61.6, 55.4/50.0, 57.4/64.5, 47.3/52.9; sem was faster on one task of six.
+
+**Scorer fixes.** Two scorers were wrong on real answers; both are fixed in `scorers.py`, and the
+stored rows in `results.csv` / `results.jsonl` keep the scores they were written with (the files
+are append-only):
+
+- B3: an item naming a local test class under its global class, `zcl_abapgit_repo_online->ltcl_create_branch`,
+  counted as a wrong changed entity, because the test-class rule only matched items starting with
+  `ltc`. Both arms listed it on `b3_03` (stored 0.8333, entity precision 0.5). Rescored: 1.0 in both arms.
+- B1: the real call in `test/src/zcl_abapgit_sap_package_test.clas.testclasses.abap`
+  (`check_list_subpackages`, `b1_04`) counted as a false positive, though the ground truth reads
+  `src/` only and `docs/abap/census-gate2.md` lists that call as real and out of the truth's scope.
+  Every arm at both checkpoints listed it (stored 0.9697, precision 0.9412). Answer items outside
+  `src/` are now neither hits nor misses. Rescored: 1.0 in every arm.
+
+Neither fix moves one arm against the other. Stored means were B1 0.997 in both arms and B3 0.833
+(grep) vs 0.958 (sem).
+
+**What the briefed sem arm did.** The briefing worked as an instruction: every sem run called a sem
+tool, 25 calls in 20 runs, against none in the baseline. It was `sem_find` with `mode: "callers"`
+in 22 calls, `sem_grep` 4 times on B2 (`sem_grep` is not named in the briefing), `sem_certify` once
+(`b3_04`) and `sem_impact` never, not even on B2, where the briefing names it for "what a change
+affects and which tests to run". On B1 and B2 the first turn always sent `sem_find` together with
+`Grep` (or `sem_grep`) in the same message, then built the answer from the text search: call lines
+come from grep, since `sem_find` reports each caller at its method's line, not the call's.
+`sem_find` answered with callers in 8 of 10 B1 runs, and in all 8 its list covered every caller in
+the ground truth. In 6 of them it said `complete`; on `b1_04` and `b1_08` it said `INCOMPLETE` and
+added possible callers (same-named implementations, the name used as a value) that are not calls.
+Six of those eight final answers mention `sem_find`, two of them to say it agreed with grep. In 7 of 22 calls it
+answered "matches N definitions; pass file" (B1 `b1_06`, `b1_10`; B2 `b2_02`, `b2_03`, `b2_04`,
+where the test class's own same-named test method is the second definition; B3 `b3_02`, `b3_03`),
+and the agent retried with `file` once (`b3_02`) and otherwise went on with grep. On B3 `sem_find`
+came in the second turn, after `git show`, to look up callers of a changed method; `sem_certify`
+was called once, in parallel with `git show`, and the answer was written from both.
+
+**Adoption rule** (`brief` = 1 against the grep arm of `gate2`):
+
+- B1 precision: sem 1.000 vs grep 1.000, **+0 points** (needs +20). Not met.
+- B2 wall time at equal pass rate (6/6 each): sem 57.6 s vs grep 53.3 s, **+8%** (needs -30%). Not met.
+- Input tokens (tokens read): B1 **+49%**, B2 **+54%**, B3 +14% (ceiling +15%). Over on both
+  classes the rule decides on.
+
+**Verdict: drop** for this checkpoint. Neither criterion holds, so the rule's "in between,
+per task" case does not arise; no single task shows sem ahead on both B1 precision and tokens, or
+on B2 wall time by 30%.
+
+**Reading.** Briefed, the agent did use sem: one `sem_find` per B1 run, one or two sem calls per B2
+run, and every answer it gave was as correct as the grep arm's, so sem cost nothing in quality, and
+where `sem_find` answered, its callers covered the ground truth. It did not use sem in place of
+grep, though: it ran both side by side in the first turn and took its file and line answers from
+the text search, so the sem calls added a cold index, the tool schemas and their output to the
+context (+49% tokens on B1, +54% on B2) without removing a single grep. The benchmark also cannot
+show a precision gain: grep scores 1.000 on B1 at this checkpoint (0.992 at baseline), because
+abapGit's method names are distinctive enough that a case-insensitive grep plus reading the
+enclosing method is already exact, so the 20-point B1 criterion is out of reach on these ten
+targets. On B2 the edit-and-test loop dominates (both arms about 50 to 60 s, all twelve passing,
+no caller missed) and caller lookup is a small part of it, so sem made the runs slightly slower,
+not faster, and `sem_impact` (the tool meant for "which tests to run") was never called. The one
+concrete sem defect the transcripts show is the "matches N definitions" answer on 7 of 22 lookups,
+5 of them caused by a local test method that shares the target's name, which sent the agent back to
+grep; a B1/B2 set where grep is ambiguous (common names, dynamic calls, interface dispatch) is what
+it would take for this benchmark to show what sem resolves that grep cannot.
 
 ## Known issues
 
