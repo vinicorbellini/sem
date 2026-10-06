@@ -18,12 +18,14 @@ The arm order alternates by repetition.
 | Class | Tasks | Asks | Scored by |
 |---|---|---|---|
 | B1 where-used | 10 (`tasks/b1_whereused.json`) | list every method that calls X, with file and line | precision/recall of calling methods against `ground_truth/whereused.json` |
+| B1A where-used, ambiguous | 12 (`tasks/b1a_whereused.json`) | the same, for a method whose name other classes also declare | as B1, against `ground_truth/whereused-ambiguous.json` |
 | B2 change-and-verify | 6 (`tasks/b2_change.json`) | add mandatory parameter p to method X, update every caller, make the tests pass | hidden tests and `npm run unit` pass, test classes the agent ran, callers missed |
 | B3 review | 4 (`tasks/b3_review.json`) | summarise what merged PR #n changed and what it could break | changed entities and callers left behind against `ground_truth/b3_rubric.json` |
 
 How the targets were picked is in each task file's `selection` field. In short:
 
 - **B1**: methods declared in exactly one class or interface, with 3 to 30 calling methods found by grep, spread over 3 or more files. The grep counts are stored as a baseline, not as ground truth.
+- **B1A**: methods whose name is declared in 3 or more classes or interfaces, so a text search for the name is ambiguous. See "B1A targets".
 - **B2**: methods whose own class has a test class that runs under `npm run unit`. Each hidden test in `hidden_tests/` was checked twice. It passes against a reference implementation (the parameter added with a DEFAULT, callers untouched). It fails to build on the unchanged checkout.
 - **B3**: four squash-merged PRs from the 300 commits before the pinned one.
 
@@ -43,6 +45,101 @@ output to:
 
 `b3_rubric.json` is a **draft**. It was written from `git show` and grep at the pinned commit and
 cross-checked with `sem diff --commit`. Review it before reading much into B3 scores.
+
+## B1A targets
+
+Gate 2 found grep at its ceiling on B1: each B1 target's name is declared once, so a text search for it
+finds exactly the callers. B1A ("where-used, ambiguous") keeps B1's prompt shape, answer format, scorer and
+ground-truth schema, and picks targets whose name other classes and interfaces declare too. The rule was
+written before any candidate's callers were read (`selection` in `tasks/b1a_whereused.json`):
+
+| Dimension | Threshold |
+|---|---|
+| (a) name declared in several objects | `METHODS`/`CLASS-METHODS` of that name (chains split, `REDEFINITION` not counted) in **3 or more** classes or interfaces, global or local. Every target meets it. |
+| (b) interface method, several implementations | declared in a global interface that **3 or more** global classes implement. The question is **callers of the interface method**: every call bound to `zif_x~m`, whatever class implements it. A same-named method of an implementing class (one inherited from a superclass, say) is a different method. |
+| (c) name also used as something else | whole-word grep hits of the name **at least twice** its call-shaped hits (the name is also a field, parameter, variable, constant component or literal). |
+| (d) short name | **under 8** characters. |
+
+Candidates are instance methods of a global class and methods of a global interface under `src/`: no test
+methods, event handlers, constructors or B1 targets. `CLASS-METHODS` are left out, because `zcl_x=>m(` names
+the class at every call from outside it, so the class disambiguates. Each candidate needs **6 to 80**
+call-shaped grep hits (`->name(`, `=>name(`, `~name(`, `CALL METHOD ...name`, any receiver) in 3 or more files.
+Strata, assigned in this order: `intf` (b), `short` (d), `polluted` (c), `multi` (the rest). Each takes 3 picks at
+index 0, k and 2k of its candidates in (file, line) order, with k = n div 3. A used index or a name already
+picked moves to the next index. **Post-check**, the only use of callers: a pick is kept only with **3 to 40**
+true calling methods and true call sites at most **75%** of its call-shaped hits. Otherwise the next index is tried.
+
+`polluted` ran out after one pick. The rule had not said what happens then, so one sentence was added at that
+point, before any further callers were read. A stratum that runs out hands its remaining picks, round robin, to
+`intf`, `short` and `multi` in that order. `intf` and `multi` had run out too, so both went to `short`. The
+walk, with every rejected candidate and why, is at the top of `ground_truth/whereused-ambiguous.review.md`. Of
+the 58 candidates tried, 38 were rejected, almost all for having 1 or 2 callers (private helpers called from
+their own class), and 8 skipped for a name already picked. One was rejected by the 75% check:
+`zcl_abapgit_stage->get_all`, where 12 of 15 call-shaped hits are true.
+
+| Task | Target | Stratum | Dimensions | Declared in | grep hits | grep files | Call-shaped hits | True call sites | True callers |
+|---|---|---|---|---:|---:|---:|---:|---:|---:|
+| b1a_01 | `zif_abapgit_object~is_active` | intf | a, b, c | 5 | 278 | 141 | 15 | 8 | 7 |
+| b1a_02 | `zif_abapgit_object~get_metadata` | intf | a, b, c | 3 | 287 | 145 | 13 | 3 | 3 |
+| b1a_03 | `zif_abapgit_gui_event_handler~on_event` | intf | a, b, c | 6 | 71 | 52 | 8 | 4 | 4 |
+| b1a_04 | `zcl_abapgit_object_pinf->load` | short | a, c, d | 7 | 70 | 29 | 28 | 3 | 3 |
+| b1a_05 | `zcl_abapgit_persistence_db->list` | short | a, c, d | 5 | 116 | 70 | 19 | 3 | 3 |
+| b1a_06 | `zcl_abapgit_gui_page_flow->refresh` | short | a, c, d | 7 | 117 | 32 | 29 | 5 | 3 |
+| b1a_07 | `zcl_abapgit_string_map->clear` | short | a, c, d | 9 | 1033 | 284 | 27 | 4 | 4 |
+| b1a_08 | `zcl_abapgit_string_map->to_abap` | short | a, d | 6 | 88 | 19 | 64 | 10 | 7 |
+| b1a_09 | `zcl_abapgit_syntax_highlighter->parse_line` | polluted | a, c | 3 | 30 | 9 | 14 | 8 | 7 |
+| b1a_10 | `zcl_abapgit_html_form_utils->normalize` | multi | a | 6 | 49 | 27 | 36 | 21 | 19 |
+| b1a_11 | `zcl_abapgit_html_form_utils->validate` | multi | a | 7 | 70 | 30 | 38 | 27 | 19 |
+| b1a_12 | `zcl_abapgit_html_form_utils->is_empty` | multi | a | 7 | 55 | 28 | 39 | 8 | 3 |
+| total | | | | | 2264 | | 330 | 104 | 82 |
+
+"grep hits" and "grep files" are lines and files of `src/` with the name as a whole word, case-insensitive (the
+task file's `grep_hits`, `grep_files`): what a plain text search returns. "Call-shaped hits" narrows that to
+lines that look like a call of some method of that name (`grep_call_sites`). "True callers" are distinct
+(file, calling method) pairs, the scoring unit. Across the twelve, 104 of 330 call-shaped hits are calls of the
+target (32%). On B1 the call-shaped counts (144 sites) and the truth (145) differ by five sites
+(`docs/abap/census-gate2.md`). The set leans on two classes: three targets are in
+`zcl_abapgit_html_form_utils` and two in `zcl_abapgit_string_map`. Both came out of the index rule; nothing was
+swapped by hand.
+
+**The prompt.** The template is B1's, plus two sentences: calls to other classes' same-named methods are not
+calls of the target, and dynamic calls do not count. A per-task `count_rule` field (filled in by
+`build_prompt`, which formats the template with the task's fields) says what counts. For a class target, a
+receiver statically typed as the class or a subclass, a call that returns that type, `me->`, `super->` or a bare
+call inside the class or a subclass. For an interface target, every call bound to `zif_x~m` (see (b) above), named
+explicitly: an interface reference, an alias, `->zif_x~m(` on a class reference, inside an implementer, and
+`super->zif_x~m(` in a redefinition.
+
+**The ground truth.** `ground_truth/whereused-ambiguous.json`, in the schema of `whereused.grep.json`, `src/`
+only, like the first truth. It is not the output of `scripts/abap-whereused-grep.py`, whose rows assume a name
+declared once. Each of the 2264 whole-word hits was decided by hand against the receiver's declaration, and
+every decision is a line in `ground_truth/whereused-ambiguous.review.md` (`file:line | decision | reason`). 2160
+are not calls of the target: CLEAR statements (937, all on `clear`), comments and literals, declarations and
+`METHOD` headers, and calls whose receiver is typed as another class or interface. sem was neither built nor
+run for any of it.
+
+Judgement calls a second reader should check:
+
+- `b1a_09`: `lo_syntax->parse_line( )` in the test classes of `zcl_abapgit_syntax_abap` and `_xml` has a subclass
+  receiver, so at run time it goes to the subclass's redefinition. Under the subclass rule it counts, and so do
+  the five `super->parse_line( )` calls in the four redefinitions. A reading of "callers of this implementation only"
+  would drop the two test callers.
+- `b1a_03`: `super->zif_abapgit_gui_event_handler~on_event( )` in `zcl_abapgit_gui_page_patch` counts, as the
+  prompt says.
+- `b1a_01`, `b1a_02`: about 250 bare `is_active( )` / `get_metadata( )` calls in the object classes call the
+  protected methods inherited from `zcl_abapgit_objects_super`, not the interface method; every one of those
+  classes was checked to inherit from it. This is the trap grep falls into on these two targets.
+- `b1a_02`: two real callers sit in abapGit's `test/src/` (`zcl_abapgit_test_doma`, `zcl_abapgit_test_dtel`,
+  `lo_doma` / `lo_dtel TYPE REF TO zif_abapgit_object`). They are outside the truth's scope, so the scorer counts them
+  neither as hits nor as misses (`TRUTH_SCOPE`).
+- Dynamic calls are not counted. The only one naming a target's name with an unknown receiver is
+  `CALL METHOD lo_odso->('IS_ACTIVE')` in `zcl_abapgit_object_odso`, on an SAP object (`TYPE REF TO object`).
+
+Check: `python3` loads the truth and the task file, confirms every task id has a non-empty caller list,
+and confirms every truth file path and every `defined_in` exists at the pinned commit (`git cat-file -e`).
+
+`run.py` does not run B1A yet: `CLASSES`, `--class` and `RUN_TIMEOUT_S` know B1 to B3. B1A needs the B1 path
+(scorer `score_b1`, ground truth from the task file's `ground_truth`) under the new class name.
 
 ## Running
 
