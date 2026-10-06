@@ -7,6 +7,7 @@ Prints Markdown, so it can be pasted into the README. Scores are the stored ones
 Usage:
     python3 bench/abap-agent/summarize.py --checkpoint gate2b --brief sem-first
     python3 bench/abap-agent/summarize.py --checkpoint gate2
+    python3 bench/abap-agent/summarize.py --checkpoint control --brief sem-first
 """
 
 import argparse
@@ -18,7 +19,7 @@ from pathlib import Path
 BENCH_DIR = Path(__file__).resolve().parent
 RESULTS_CSV = BENCH_DIR / "results.csv"
 RESULTS_JSONL = BENCH_DIR / "results.jsonl"
-CLASSES = ("B1", "B1A", "B2", "B3")
+CLASSES = ("B1", "B1A", "B2", "B3", "C1")
 
 
 def load_rows(checkpoint: str) -> list[dict]:
@@ -95,6 +96,9 @@ def verdict(checkpoint: str, by: dict) -> list[str]:
         return (g, s) if g and s else (None, None)
 
     lines = []
+    if checkpoint == "control":
+        # README: "Control: Rust where-used (reporting only)". It decides nothing; the Gate 2b verdict stands.
+        return ["- Reporting only: the Rust control (C1) has no adoption rule; the Gate 2b verdict (drop) is unchanged."]
     if checkpoint == "gate2b":
         g, s = pair("B1A")
         b1a = None

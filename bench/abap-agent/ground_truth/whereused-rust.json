@@ -1,0 +1,574 @@
+{
+ "repo_commit": "dc2cc4d7173d9f3eab87d491b351927fbe2f1f63",
+ "targets": {
+  "c1_01": [
+   {
+    "method": "fit::python_misfits",
+    "file": "crates/sem-core/src/parser/calls/fit.rs",
+    "line": 255
+   },
+   {
+    "method": "calls::lower_file",
+    "file": "crates/sem-core/src/parser/calls/mod.rs",
+    "line": 247
+   },
+   {
+    "method": "calls::lower_source",
+    "file": "crates/sem-core/src/parser/calls/mod.rs",
+    "line": 259
+   }
+  ],
+  "c1_02": [
+   {
+    "method": "fit::python_misfits",
+    "file": "crates/sem-core/src/parser/calls/fit.rs",
+    "line": 260
+   },
+   {
+    "method": "calls::resolve",
+    "file": "crates/sem-core/src/parser/calls/mod.rs",
+    "line": 270
+   },
+   {
+    "method": "calls::site_answers",
+    "file": "crates/sem-core/src/parser/calls/mod.rs",
+    "line": 749
+   },
+   {
+    "method": "calls::dispatch_answers",
+    "file": "crates/sem-core/src/parser/calls/mod.rs",
+    "line": 831
+   },
+   {
+    "method": "calls::explain",
+    "file": "crates/sem-core/src/parser/calls/mod.rs",
+    "line": 852
+   },
+   {
+    "method": "calls::explain_path",
+    "file": "crates/sem-core/src/parser/calls/mod.rs",
+    "line": 990
+   },
+   {
+    "method": "tests::edges_at",
+    "file": "crates/sem-core/src/parser/calls/tests.rs",
+    "line": 27
+   }
+  ],
+  "c1_03": [
+   {
+    "method": "parse_profile::bench_split",
+    "file": "crates/sem-core/benches/parse_profile.rs",
+    "line": 38
+   },
+   {
+    "method": "parse_profile::bench_extract",
+    "file": "crates/sem-core/benches/parse_profile.rs",
+    "line": 84
+   },
+   {
+    "method": "MutatingExtractor::extract",
+    "file": "crates/sem-core/src/parser/diff_oracle.rs",
+    "line": 664
+   },
+   {
+    "method": "CodeParserPlugin::extract_entities",
+    "file": "crates/sem-core/src/parser/plugins/code/mod.rs",
+    "line": 479
+   },
+   {
+    "method": "ParserRegistry::extract_entities_with_tree",
+    "file": "crates/sem-core/src/parser/registry.rs",
+    "line": 318
+   },
+   {
+    "method": "parse_cache::cached_extraction_matches_the_uncached_path",
+    "file": "crates/sem-core/tests/parse_cache.rs",
+    "line": 90
+   }
+  ],
+  "c1_04": [
+   {
+    "method": "arch_view::flow_items",
+    "file": "crates/sem-cli/src/commands/arch_view.rs",
+    "line": 618
+   },
+   {
+    "method": "arch_view::flow_items",
+    "file": "crates/sem-cli/src/commands/arch_view.rs",
+    "line": 621
+   },
+   {
+    "method": "arch_view::merge_minor_flows",
+    "file": "crates/sem-cli/src/commands/arch_view.rs",
+    "line": 685
+   },
+   {
+    "method": "arch_view::build_view",
+    "file": "crates/sem-cli/src/commands/arch_view.rs",
+    "line": 770
+   },
+   {
+    "method": "arch_view::build_view",
+    "file": "crates/sem-cli/src/commands/arch_view.rs",
+    "line": 774
+   },
+   {
+    "method": "arch_view::build_view",
+    "file": "crates/sem-cli/src/commands/arch_view.rs",
+    "line": 780
+   },
+   {
+    "method": "arch_view::build_view",
+    "file": "crates/sem-cli/src/commands/arch_view.rs",
+    "line": 995
+   },
+   {
+    "method": "arch_view::build_view",
+    "file": "crates/sem-cli/src/commands/arch_view.rs",
+    "line": 996
+   },
+   {
+    "method": "arch_view::build_view",
+    "file": "crates/sem-cli/src/commands/arch_view.rs",
+    "line": 1050
+   }
+  ],
+  "c1_05": [
+   {
+    "method": "qualified::resolve_index",
+    "file": "crates/sem-cli/src/commands/qualified.rs",
+    "line": 228
+   },
+   {
+    "method": "qualified::near_matches",
+    "file": "crates/sem-cli/src/commands/qualified.rs",
+    "line": 310
+   },
+   {
+    "method": "query::index_answer_verified",
+    "file": "crates/sem-cli/src/commands/query.rs",
+    "line": 651
+   },
+   {
+    "method": "query::resolve_by_name_indices",
+    "file": "crates/sem-cli/src/commands/query.rs",
+    "line": 787
+   },
+   {
+    "method": "index_probe::oracle",
+    "file": "crates/sem-core/examples/index_probe.rs",
+    "line": 241
+   },
+   {
+    "method": "index_probe::lookup_mode",
+    "file": "crates/sem-core/examples/index_probe.rs",
+    "line": 1025
+   },
+   {
+    "method": "index_probe::refs_mode",
+    "file": "crates/sem-core/examples/index_probe.rs",
+    "line": 1071
+   },
+   {
+    "method": "tests::lookup_returns_every_entity_with_that_name",
+    "file": "crates/sem-core/src/index/mod.rs",
+    "line": 187
+   },
+   {
+    "method": "tests::lookup_round_trips_every_field",
+    "file": "crates/sem-core/src/index/mod.rs",
+    "line": 197
+   },
+   {
+    "method": "tests::lookup_misses_are_empty_not_errors",
+    "file": "crates/sem-core/src/index/mod.rs",
+    "line": 212
+   },
+   {
+    "method": "tests::lookup_misses_are_empty_not_errors",
+    "file": "crates/sem-core/src/index/mod.rs",
+    "line": 213
+   },
+   {
+    "method": "tests::lookup_agrees_with_the_graph_for_every_name",
+    "file": "crates/sem-core/src/index/mod.rs",
+    "line": 233
+   },
+   {
+    "method": "tests::parent_ids_survive_the_index_relative_encoding",
+    "file": "crates/sem-core/src/index/mod.rs",
+    "line": 254
+   },
+   {
+    "method": "tests::ids_that_break_the_prefix_rule_fall_back_to_whole_ids",
+    "file": "crates/sem-core/src/index/mod.rs",
+    "line": 430
+   },
+   {
+    "method": "tests::ids_that_break_the_prefix_rule_fall_back_to_whole_ids",
+    "file": "crates/sem-core/src/index/mod.rs",
+    "line": 432
+   },
+   {
+    "method": "tests::json_pointer_ids_round_trip_under_elision",
+    "file": "crates/sem-core/src/index/mod.rs",
+    "line": 452
+   },
+   {
+    "method": "tests::an_empty_graph_produces_a_valid_empty_index",
+    "file": "crates/sem-core/src/index/mod.rs",
+    "line": 477
+   },
+   {
+    "method": "tests::refs_of_returns_direct_dependencies",
+    "file": "crates/sem-core/src/index/mod.rs",
+    "line": 531
+   },
+   {
+    "method": "tests::callers_of_returns_direct_dependents_across_files",
+    "file": "crates/sem-core/src/index/mod.rs",
+    "line": 546
+   },
+   {
+    "method": "tests::refs_and_callers_are_empty_for_leaf_and_unreferenced_entities",
+    "file": "crates/sem-core/src/index/mod.rs",
+    "line": 564
+   },
+   {
+    "method": "tests::refs_and_callers_are_empty_for_leaf_and_unreferenced_entities",
+    "file": "crates/sem-core/src/index/mod.rs",
+    "line": 566
+   },
+   {
+    "method": "tests::refs_and_callers_agree_with_the_graph_for_every_entity",
+    "file": "crates/sem-core/src/index/mod.rs",
+    "line": 587
+   },
+   {
+    "method": "tests::refs_of_typed_recovers_each_edges_kind",
+    "file": "crates/sem-core/src/index/mod.rs",
+    "line": 662
+   },
+   {
+    "method": "tests::callers_of_typed_recovers_each_edges_kind",
+    "file": "crates/sem-core/src/index/mod.rs",
+    "line": 688
+   },
+   {
+    "method": "tests::untyped_refs_and_callers_still_resolve_the_right_entity_when_kind_is_nonzero",
+    "file": "crates/sem-core/src/index/mod.rs",
+    "line": 715
+   },
+   {
+    "method": "tests::untyped_refs_and_callers_still_resolve_the_right_entity_when_kind_is_nonzero",
+    "file": "crates/sem-core/src/index/mod.rs",
+    "line": 724
+   }
+  ],
+  "c1_06": [
+   {
+    "method": "Lower::visit",
+    "file": "crates/sem-core/src/parser/calls/rust.rs",
+    "line": 670
+   },
+   {
+    "method": "Lower::visit",
+    "file": "crates/sem-core/src/parser/calls/rust.rs",
+    "line": 701
+   },
+   {
+    "method": "Lower::visit",
+    "file": "crates/sem-core/src/parser/calls/rust.rs",
+    "line": 715
+   },
+   {
+    "method": "Lower::visit",
+    "file": "crates/sem-core/src/parser/calls/rust.rs",
+    "line": 726
+   },
+   {
+    "method": "Lower::call_site",
+    "file": "crates/sem-core/src/parser/calls/rust.rs",
+    "line": 772
+   },
+   {
+    "method": "Lower::expr_uncached",
+    "file": "crates/sem-core/src/parser/calls/rust.rs",
+    "line": 1145
+   },
+   {
+    "method": "Lower::expr_uncached",
+    "file": "crates/sem-core/src/parser/calls/rust.rs",
+    "line": 1168
+   },
+   {
+    "method": "Lower::expr_uncached",
+    "file": "crates/sem-core/src/parser/calls/rust.rs",
+    "line": 1172
+   },
+   {
+    "method": "Lower::expr_uncached",
+    "file": "crates/sem-core/src/parser/calls/rust.rs",
+    "line": 1178
+   },
+   {
+    "method": "Lower::expr_uncached",
+    "file": "crates/sem-core/src/parser/calls/rust.rs",
+    "line": 1182
+   },
+   {
+    "method": "Lower::expr_uncached",
+    "file": "crates/sem-core/src/parser/calls/rust.rs",
+    "line": 1189
+   },
+   {
+    "method": "Lower::expr_uncached",
+    "file": "crates/sem-core/src/parser/calls/rust.rs",
+    "line": 1208
+   },
+   {
+    "method": "Lower::expr_uncached",
+    "file": "crates/sem-core/src/parser/calls/rust.rs",
+    "line": 1216
+   },
+   {
+    "method": "Lower::expr_uncached",
+    "file": "crates/sem-core/src/parser/calls/rust.rs",
+    "line": 1222
+   },
+   {
+    "method": "Lower::expr_uncached",
+    "file": "crates/sem-core/src/parser/calls/rust.rs",
+    "line": 1226
+   },
+   {
+    "method": "Lower::expr_uncached",
+    "file": "crates/sem-core/src/parser/calls/rust.rs",
+    "line": 1239
+   },
+   {
+    "method": "Lower::expr_uncached",
+    "file": "crates/sem-core/src/parser/calls/rust.rs",
+    "line": 1251
+   },
+   {
+    "method": "Lower::call_expr",
+    "file": "crates/sem-core/src/parser/calls/rust.rs",
+    "line": 1291
+   },
+   {
+    "method": "Lower::call_expr",
+    "file": "crates/sem-core/src/parser/calls/rust.rs",
+    "line": 1303
+   }
+  ],
+  "c1_07": [
+   {
+    "method": "generic::go",
+    "file": "crates/sem-cli/src/commands/check/generic.rs",
+    "line": 147
+   },
+   {
+    "method": "lint::eslint",
+    "file": "crates/sem-cli/src/commands/check/lint.rs",
+    "line": 213
+   },
+   {
+    "method": "tests::run",
+    "file": "crates/sem-cli/src/commands/check/tests.rs",
+    "line": 284
+   },
+   {
+    "method": "ts::tsc",
+    "file": "crates/sem-cli/src/commands/check/ts.rs",
+    "line": 76
+   },
+   {
+    "method": "util::helper",
+    "file": "crates/sem-cli/src/commands/check/util.rs",
+    "line": 149
+   }
+  ],
+  "c1_08": [
+   {
+    "method": "grep::search_one",
+    "file": "crates/sem-cli/src/commands/grep.rs",
+    "line": 148
+   },
+   {
+    "method": "index_probe::trigram_oracle",
+    "file": "crates/sem-core/examples/index_probe.rs",
+    "line": 715
+   },
+   {
+    "method": "index_probe::grep_mode",
+    "file": "crates/sem-core/examples/index_probe.rs",
+    "line": 983
+   },
+   {
+    "method": "index_probe::lookup_mode",
+    "file": "crates/sem-core/examples/index_probe.rs",
+    "line": 1020
+   },
+   {
+    "method": "index_probe::refs_mode",
+    "file": "crates/sem-core/examples/index_probe.rs",
+    "line": 1065
+   },
+   {
+    "method": "grep::search",
+    "file": "crates/sem-core/src/index/grep.rs",
+    "line": 130
+   },
+   {
+    "method": "grep::candidate_files",
+    "file": "crates/sem-core/src/index/grep.rs",
+    "line": 212
+   },
+   {
+    "method": "tests::an_empty_graph_produces_a_valid_empty_index",
+    "file": "crates/sem-core/src/index/mod.rs",
+    "line": 476
+   },
+   {
+    "method": "tests::file_fingerprints_are_carried_for_files_with_no_entities",
+    "file": "crates/sem-core/src/index/mod.rs",
+    "line": 495
+   }
+  ],
+  "c1_09": [
+   {
+    "method": "fast_extractor::identity_salt",
+    "file": "crates/sem-core/src/parser/fast_extractor.rs",
+    "line": 237
+   },
+   {
+    "method": "tests::identity_of_a_set_joins_its_members",
+    "file": "crates/sem-core/src/parser/fast_extractor.rs",
+    "line": 325
+   },
+   {
+    "method": "tests::an_empty_set_has_an_empty_identity",
+    "file": "crates/sem-core/src/parser/fast_extractor.rs",
+    "line": 333
+   }
+  ],
+  "c1_10": [
+   {
+    "method": "CloudClient::resolve_repo",
+    "file": "crates/sem-cli/src/commands/cloud.rs",
+    "line": 835
+   },
+   {
+    "method": "CloudClient::register_repo",
+    "file": "crates/sem-cli/src/commands/cloud.rs",
+    "line": 871
+   },
+   {
+    "method": "CloudClient::list_repos",
+    "file": "crates/sem-cli/src/commands/cloud.rs",
+    "line": 895
+   },
+   {
+    "method": "CloudClient::forget_repo",
+    "file": "crates/sem-cli/src/commands/cloud.rs",
+    "line": 910
+   },
+   {
+    "method": "CloudClient::impact",
+    "file": "crates/sem-cli/src/commands/cloud.rs",
+    "line": 976
+   },
+   {
+    "method": "CloudClient::context",
+    "file": "crates/sem-cli/src/commands/cloud.rs",
+    "line": 995
+   },
+   {
+    "method": "CloudClient::entities",
+    "file": "crates/sem-cli/src/commands/cloud.rs",
+    "line": 1019
+   },
+   {
+    "method": "CloudClient::history",
+    "file": "crates/sem-cli/src/commands/cloud.rs",
+    "line": 1043
+   },
+   {
+    "method": "CloudClient::upload_diff_snapshot",
+    "file": "crates/sem-cli/src/commands/cloud.rs",
+    "line": 1069
+   },
+   {
+    "method": "CloudClient::put_diff_relations",
+    "file": "crates/sem-cli/src/commands/cloud.rs",
+    "line": 1097
+   },
+   {
+    "method": "CloudClient::cross_deps",
+    "file": "crates/sem-cli/src/commands/cloud.rs",
+    "line": 1124
+   },
+   {
+    "method": "CloudClient::query_facts",
+    "file": "crates/sem-cli/src/commands/cloud.rs",
+    "line": 1145
+   },
+   {
+    "method": "CloudClient::download_facts",
+    "file": "crates/sem-cli/src/commands/cloud.rs",
+    "line": 1161
+   },
+   {
+    "method": "CloudClient::put_facts",
+    "file": "crates/sem-cli/src/commands/cloud.rs",
+    "line": 1178
+   }
+  ],
+  "c1_11": [
+   {
+    "method": "telemetry::current_install_id",
+    "file": "crates/sem-cli/src/telemetry.rs",
+    "line": 195
+   },
+   {
+    "method": "telemetry::record",
+    "file": "crates/sem-cli/src/telemetry.rs",
+    "line": 261
+   },
+   {
+    "method": "telemetry::record",
+    "file": "crates/sem-cli/src/telemetry.rs",
+    "line": 277
+   },
+   {
+    "method": "telemetry::flush",
+    "file": "crates/sem-cli/src/telemetry.rs",
+    "line": 343
+   }
+  ],
+  "c1_12": [
+   {
+    "method": "SvelteLowerer::lower_script",
+    "file": "crates/sem-core/src/parser/plugins/svelte.rs",
+    "line": 302
+   },
+   {
+    "method": "SvelteLowerer::lower_style",
+    "file": "crates/sem-core/src/parser/plugins/svelte.rs",
+    "line": 335
+   },
+   {
+    "method": "SvelteLowerer::lower_else_if_chain",
+    "file": "crates/sem-core/src/parser/plugins/svelte.rs",
+    "line": 448
+   },
+   {
+    "method": "SvelteLowerer::push_node_entity",
+    "file": "crates/sem-core/src/parser/plugins/svelte.rs",
+    "line": 543
+   }
+  ]
+ }
+}
