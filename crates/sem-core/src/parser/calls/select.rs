@@ -422,12 +422,23 @@ impl<'t, 'a> Resolver<'t, 'a> {
         Pick::External(None)
     }
 
-    /// Methods declared by the given traits (or their supertraits).
+    /// Methods declared by the given traits (or their supertraits). A name
+    /// qualified by its trait (ABAP's `zif_x~m`, see [`Lang::member_key`])
+    /// is that trait's member only.
     fn trait_member(&self, traits: &[(u32, u32)], name: &str, recv: Option<&Ty>) -> Pick {
+        let key = self.lang.member_key(name);
+        let qualifier = &name[..name.len() - key.len()];
         let mut hits: Vec<(u32, u32)> = Vec::new();
         for (f, t) in self.impls.trait_closure(traits) {
+            let own = &self.files[f as usize].traits[t as usize].name;
+            let ours = qualifier
+                .strip_prefix(&**own)
+                .is_some_and(|sep| sep.len() == 1);
+            if !qualifier.is_empty() && !ours {
+                continue;
+            }
             for &fi in &self.impls.trait_members[f as usize][t as usize] {
-                if &*self.files[f as usize].fns[fi as usize].name == name {
+                if &*self.files[f as usize].fns[fi as usize].name == key {
                     hits.push((f, fi));
                 }
             }
@@ -468,12 +479,25 @@ impl<'t, 'a> Resolver<'t, 'a> {
                         return Pick::fns(hits, Some(t.clone()));
                     }
                 }
-                // provided (default) methods of the repo traits the type implements
+                // another name of one of its methods (ABAP `ALIASES`)
+                let decl = &self.files[*f as usize].types[*ty as usize];
+                if let Some((_, target)) = decl.aliases.iter().find(|(a, _)| &**a == name) {
+                    return self.method(t, target, depth + 1);
+                }
+                // a base class's method comes before a trait's declaration:
+                // a type with both (ABAP) implements the trait's by its
+                // qualified name, and a bare name is the base's
+                if let Some(p) = self.inherited(*f, *ty, t, name, depth) {
+                    return p;
+                }
+                // provided (default) methods of the repo traits the type
+                // implements, by a name it has them by
                 let implemented: Vec<(u32, u32)> = traits
                     .iter()
                     .filter_map(|k| self.impls.impl_trait.get(k).copied())
                     .collect();
-                if !implemented.is_empty() {
+                let qualified = name != self.lang.member_key(name);
+                if !implemented.is_empty() && (qualified || !self.lang.qualified_trait_methods()) {
                     let p = self.trait_member(&implemented, name, Some(t));
                     if !matches!(p, Pick::External(_)) {
                         return p;
@@ -481,9 +505,6 @@ impl<'t, 'a> Resolver<'t, 'a> {
                 }
                 if let Some(target) = self.impls.deref_target(self, t) {
                     return self.through_deref(self.method(&target, name, depth + 1));
-                }
-                if let Some(p) = self.inherited(*f, *ty, t, name, depth) {
-                    return p;
                 }
                 if self.blanket_has(name) {
                     return Pick::Unknown("a blanket impl may apply");

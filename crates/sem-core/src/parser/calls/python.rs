@@ -518,6 +518,7 @@ impl<'a> Lower<'a> {
             variants: Vec::new(),
             embeds,
             field_inits: Vec::new(),
+            aliases: Vec::new(),
         });
         let imp = self.f.impls.len() as u32;
         self.f.impls.push(ImplDecl {
@@ -682,6 +683,7 @@ impl<'a> Lower<'a> {
             has_self,
             enclosing: self.funcs.last().copied(),
             ret,
+            shadows: false,
         });
         // annotations and defaults
         for part in ["parameters", "return_type"] {

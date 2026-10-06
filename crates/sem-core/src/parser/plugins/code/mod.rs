@@ -2079,6 +2079,8 @@ return M
                 ("interface", "zif_fx_order", None),
                 ("type", "ty_amount", Some("zif_fx_order")),
                 ("constant", "c_status_open", Some("zif_fx_order")),
+                ("method", "add_item", Some("zif_fx_order")),
+                ("method", "get_total", Some("zif_fx_order")),
             ])
         );
     }
@@ -2385,6 +2387,8 @@ return M
                 abap_row("interface", "zif_fx_order", 1, 14),
                 abap_row("type", "ty_amount", 3, 3),
                 abap_row("constant", "c_status_open", 5, 5),
+                abap_row("method", "add_item", 7, 9),
+                abap_row("method", "get_total", 11, 12),
             ]
         );
     }
@@ -2399,14 +2403,22 @@ return M
         let code = "INTERFACE zif_demo\n  PUBLIC .\n\n  CONSTANTS c_label TYPE string VALUE 'x' ##NO_TEXT.\n\n  METHODS run.\nENDINTERFACE.\n";
         assert_eq!(
             abap_rows(code, "zif_demo.intf.abap"),
-            vec![abap_row("interface", "zif_demo", 1, 7), abap_row("constant", "c_label", 4, 4)]
+            vec![
+                abap_row("interface", "zif_demo", 1, 7),
+                abap_row("constant", "c_label", 4, 4),
+                abap_row("method", "run", 6, 6),
+            ]
         );
 
         // The same without the pragma parses cleanly and keeps its name.
         let code = "INTERFACE zif_demo\n  PUBLIC .\n\n  CONSTANTS c_label TYPE string VALUE 'x'.\n\n  METHODS run.\nENDINTERFACE.\n";
         assert_eq!(
             abap_rows(code, "zif_demo.intf.abap"),
-            vec![abap_row("interface", "zif_demo", 1, 7), abap_row("constant", "c_label", 4, 4)]
+            vec![
+                abap_row("interface", "zif_demo", 1, 7),
+                abap_row("constant", "c_label", 4, 4),
+                abap_row("method", "run", 6, 6),
+            ]
         );
     }
 
@@ -4380,11 +4392,10 @@ ENDCLASS.
     #[cfg(feature = "lang-abap")]
     fn abap_fixture_2_2_cast() {
         // `CAST zif_fx_order( lo )` is a reference to the interface: the call
-        // reaches its declaration of `get_total`, which has no entity of its
-        // own until story 2.3 and so lands on the interface. `CAST zcl_fx_order`
-        // reaches the class's method.
+        // reaches its declaration of `get_total`, an entity since story 2.3.
+        // `CAST zcl_fx_order` reaches the class's method.
         let (sites, _) = abap_fixture_2_2_calls();
-        assert_eq!(abap_answers(&sites, ABAP_TYPES, 31), vec!["zif_fx_order"]);
+        assert_eq!(abap_answers(&sites, ABAP_TYPES, 31), vec!["zif_fx_order.get_total"]);
         assert_eq!(abap_answers(&sites, ABAP_TYPES, 32), vec!["zcl_fx_order.describe"]);
     }
 
@@ -4486,6 +4497,286 @@ ENDCLASS.
                 && (to.ends_with(".lcl_helper") || to.ends_with(".tag"))),
             "got: {edges:?}"
         );
+    }
+
+    // Spec 2.3: interface and inheritance dispatch, and interface method entities.
+
+    /// The story 2.1 fixture with the story 2.3 objects: an interface that
+    /// includes `zif_fx_order`, a second implementation of it with an alias,
+    /// and the callers.
+    #[cfg(feature = "lang-abap")]
+    const ABAP_FIXTURE_2_3_FILES: &[&str] = &[
+        "zif_fx_order.intf.abap",
+        "zcl_fx_order.clas.abap",
+        "zcl_fx_order.clas.locals_def.abap",
+        "zcl_fx_order.clas.locals_imp.abap",
+        "zcl_fx_order.clas.testclasses.abap",
+        "zcl_fx_order_sub.clas.abap",
+        "zcl_fx_user.clas.abap",
+        "zcl_fx_other.clas.abap",
+        "zcl_fx_other.clas.locals_imp.abap",
+        "zcl_fx_other.clas.testclasses.abap",
+        "zcl_fx_calls.clas.abap",
+        "zfx_report.prog.abap",
+        "zfx_fg.fugr.zfx_fm.abap",
+        "zfx_fg.fugr.lzfx_fgf01.abap",
+        "zif_fx_audit.intf.abap",
+        "zcl_fx_order_alt.clas.abap",
+        "zcl_fx_dispatch.clas.abap",
+    ];
+
+    #[cfg(feature = "lang-abap")]
+    const ABAP_DISPATCH: &str = "zcl_fx_dispatch.clas.abap";
+
+    #[cfg(feature = "lang-abap")]
+    const ABAP_ALT: &str = "zcl_fx_order_alt.clas.abap";
+
+    /// Every edge of `sources`' graph as (from, to, kind), by `abap_label`.
+    #[cfg(feature = "lang-abap")]
+    fn abap_typed_edges(sources: &[(&str, String)]) -> Vec<(String, String, &'static str)> {
+        let graph = abap_graph(sources);
+        let mut edges: Vec<(String, String, &'static str)> = graph
+            .edges
+            .iter()
+            .map(|edge| {
+                (
+                    abap_label(&graph, edge.from_entity.as_str()),
+                    abap_label(&graph, edge.to_entity.as_str()),
+                    edge.ref_type.as_str(),
+                )
+            })
+            .collect();
+        edges.sort();
+        edges
+    }
+
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_3_sources() -> Vec<(&'static str, String)> {
+        ABAP_FIXTURE_2_3_FILES
+            .iter()
+            .map(|file| (*file, abap_fixture_text(file)))
+            .collect()
+    }
+
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_3_edges() -> Vec<(String, String, &'static str)> {
+        abap_typed_edges(&abap_fixture_2_3_sources())
+    }
+
+    /// The dispatch edges of `edges` from `from`, by target.
+    #[cfg(feature = "lang-abap")]
+    fn abap_dispatch_from<'e>(edges: &'e [(String, String, &'static str)], from: &str) -> Vec<&'e str> {
+        edges
+            .iter()
+            .filter(|(f, _, kind)| f == from && *kind == "dispatch")
+            .map(|(_, to, _)| to.as_str())
+            .collect()
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_3_interface_method_entities() {
+        // An interface's `METHODS` declare its methods: each is a `method`
+        // entity under the interface, spanning its declaration, so a changed
+        // signature is that method changing. `test_abap_fixture_intf` and
+        // `abap_fixture_1_3_interface` hold zif_fx_order's full list.
+        let rows = abap_fixture_rows("zif_fx_order.intf.abap");
+        assert!(rows.contains(&abap_row("method", "add_item", 7, 9)), "got: {rows:?}");
+        assert!(rows.contains(&abap_row("method", "get_total", 11, 12)), "got: {rows:?}");
+        let entities = abap_fixture_entities("zif_fx_order.intf.abap");
+        for (t, name, parent) in &entities {
+            if t == "method" {
+                assert_eq!(parent.as_deref(), Some("zif_fx_order"), "{name}");
+            }
+        }
+        // A class's `METHODS` stay declarations of the methods its
+        // implementation defines: no entity of their own.
+        let class = abap_fixture_entities("zcl_fx_dispatch.clas.abap");
+        let methods: Vec<&str> =
+            class.iter().filter(|(t, _, _)| t == "method").map(|(_, n, _)| n.as_str()).collect();
+        assert_eq!(
+            methods,
+            vec!["through_interface", "through_base", "through_alias", "through_outer"]
+        );
+        // A call through the interface lands on the method, not the interface.
+        let edges = abap_fixture_2_3_edges();
+        assert!(
+            edges.contains(&abap_typed_edge("zcl_fx_dispatch.through_interface", "zif_fx_order.get_total", "calls")),
+            "got: {edges:?}"
+        );
+        assert!(
+            !edges.iter().any(|(f, t, k)| f == "zcl_fx_dispatch.through_interface" && t == "zif_fx_order" && *k == "calls"),
+            "got: {edges:?}"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_3_chained_methods() {
+        // `METHODS: audit ..., log ....` gives one entity per name: the first
+        // from the keyword to its comma, the second from its name to the period.
+        assert_eq!(
+            abap_fixture_rows("zif_fx_audit.intf.abap"),
+            vec![
+                abap_row("interface", "zif_fx_audit", 2, 9),
+                abap_row("method", "audit", 6, 6),
+                abap_row("method", "log", 7, 7),
+            ]
+        );
+        let code = abap_fixture_text("zif_fx_audit.intf.abap");
+        let entities = CodeParserPlugin.extract_entities(&code, "zif_fx_audit.intf.abap");
+        let content = |name: &str| {
+            entities.iter().find(|e| e.name == name).map(|e| e.content.clone()).unwrap()
+        };
+        assert_eq!(content("audit"), "METHODS: audit IMPORTING iv_note TYPE string,");
+        assert_eq!(content("log"), "log RETURNING VALUE(rv_log) TYPE string.");
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_3_interface_call_dispatches() {
+        // `lif->get_total( )`, `lif TYPE REF TO zif_fx_order`: a call of the
+        // interface's declaration, which dispatches to each class's
+        // `zif_fx_order~get_total`, zcl_fx_order_alt's through zif_fx_audit.
+        let (sites, _) = abap_calls(&abap_fixture_2_3_sources());
+        assert_eq!(abap_answers(&sites, ABAP_DISPATCH, 15), vec!["zif_fx_order.get_total"]);
+        let edges = abap_fixture_2_3_edges();
+        assert!(
+            edges.contains(&abap_typed_edge("zcl_fx_dispatch.through_interface", "zif_fx_order.get_total", "calls")),
+            "got: {edges:?}"
+        );
+        assert_eq!(
+            abap_dispatch_from(&edges, "zif_fx_order.get_total"),
+            vec!["zcl_fx_order.zif_fx_order~get_total", "zcl_fx_order_alt.zif_fx_order~get_total"]
+        );
+        assert_eq!(
+            abap_dispatch_from(&edges, "zif_fx_order.add_item"),
+            vec!["zcl_fx_order.zif_fx_order~add_item", "zcl_fx_order_alt.zif_fx_order~add_item"]
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_3_base_call_dispatches() {
+        // `lo_base->describe( )`, `lo_base TYPE REF TO zcl_fx_order`: a call of
+        // the base's method, which dispatches to each `REDEFINITION`.
+        let (sites, _) = abap_calls(&abap_fixture_2_3_sources());
+        assert_eq!(abap_answers(&sites, ABAP_DISPATCH, 19), vec!["zcl_fx_order.describe"]);
+        let edges = abap_fixture_2_3_edges();
+        assert!(
+            edges.contains(&abap_typed_edge("zcl_fx_dispatch.through_base", "zcl_fx_order.describe", "calls")),
+            "got: {edges:?}"
+        );
+        assert_eq!(
+            abap_dispatch_from(&edges, "zcl_fx_order.describe"),
+            vec!["zcl_fx_calls.describe", "zcl_fx_order_sub.describe"]
+        );
+        // `super->describe( )` in a redefinition is the base's, called.
+        assert!(
+            edges.contains(&abap_typed_edge("zcl_fx_order_sub.describe", "zcl_fx_order.describe", "calls")),
+            "got: {edges:?}"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_3_redefinition_pairs() {
+        // Only a `REDEFINITION` overrides. A subclass's method of the name of
+        // a private base method is its own (ABAP allows it), and a
+        // constructor never overrides: neither is reached from the base's.
+        let base = "CLASS zcl_fx_base DEFINITION PUBLIC.\n  PUBLIC SECTION.\n    METHODS: constructor, run.\n  PRIVATE SECTION.\n    METHODS helper.\nENDCLASS.\nCLASS zcl_fx_base IMPLEMENTATION.\n  METHOD constructor.\n  ENDMETHOD.\n  METHOD run.\n    helper( ).\n  ENDMETHOD.\n  METHOD helper.\n  ENDMETHOD.\nENDCLASS.\n";
+        let sub = "CLASS zcl_fx_derived DEFINITION PUBLIC INHERITING FROM zcl_fx_base.\n  PUBLIC SECTION.\n    METHODS: constructor, run REDEFINITION.\n  PRIVATE SECTION.\n    METHODS helper.\nENDCLASS.\nCLASS zcl_fx_derived IMPLEMENTATION.\n  METHOD constructor.\n    super->constructor( ).\n  ENDMETHOD.\n  METHOD run.\n    helper( ).\n  ENDMETHOD.\n  METHOD helper.\n  ENDMETHOD.\nENDCLASS.\n";
+        let edges = abap_typed_edges(&[
+            ("zcl_fx_base.clas.abap", base.to_string()),
+            ("zcl_fx_derived.clas.abap", sub.to_string()),
+        ]);
+        let dispatch: Vec<(&str, &str)> = edges
+            .iter()
+            .filter(|(_, _, kind)| *kind == "dispatch")
+            .map(|(f, t, _)| (f.as_str(), t.as_str()))
+            .collect();
+        assert_eq!(dispatch, vec![("zcl_fx_base.run", "zcl_fx_derived.run")]);
+        // Each `helper( )` is its own class's, and `super->constructor( )`
+        // the base's.
+        for (from, to) in [
+            ("zcl_fx_base.run", "zcl_fx_base.helper"),
+            ("zcl_fx_derived.run", "zcl_fx_derived.helper"),
+            ("zcl_fx_derived.constructor", "zcl_fx_base.constructor"),
+        ] {
+            assert!(edges.contains(&abap_typed_edge(from, to, "calls")), "{from}: {edges:?}");
+        }
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_3_alias_resolves() {
+        // `ALIASES total FOR zif_fx_order~get_total`: `lo_alt->total( )` from
+        // another class, `total( )` with no receiver and `me->total( )` in the
+        // class itself reach its `zif_fx_order~get_total`.
+        let (sites, _) = abap_calls(&abap_fixture_2_3_sources());
+        let target = "zcl_fx_order_alt.zif_fx_order~get_total";
+        assert_eq!(abap_answers(&sites, ABAP_DISPATCH, 23), vec![target]);
+        assert_eq!(abap_answers(&sites, ABAP_ALT, 24), vec![target]);
+        assert_eq!(abap_answers(&sites, ABAP_ALT, 28), vec![target]);
+        let edges = abap_fixture_2_3_edges();
+        for from in [
+            "zcl_fx_dispatch.through_alias",
+            "zcl_fx_order_alt.zif_fx_audit~audit",
+            "zcl_fx_order_alt.zif_fx_audit~log",
+        ] {
+            assert!(edges.contains(&abap_typed_edge(from, target, "calls")), "{from}: {edges:?}");
+        }
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_3_interface_includes_interface() {
+        // `INTERFACES zif_fx_order` in zif_fx_audit: a `REF TO zif_fx_audit`
+        // has zif_fx_order's methods by their full name, and its own by theirs.
+        // zcl_fx_order_alt implements zif_fx_audit only, and its
+        // `zif_fx_order~get_total` is zif_fx_order's implementation.
+        let (sites, _) = abap_calls(&abap_fixture_2_3_sources());
+        assert_eq!(abap_answers(&sites, ABAP_DISPATCH, 27), vec!["zif_fx_order.get_total"]);
+        assert_eq!(abap_answers(&sites, ABAP_DISPATCH, 28), vec!["zif_fx_audit.audit"]);
+        let edges = abap_fixture_2_3_edges();
+        assert_eq!(
+            abap_dispatch_from(&edges, "zif_fx_audit.audit"),
+            vec!["zcl_fx_order_alt.zif_fx_audit~audit"]
+        );
+        assert!(
+            abap_dispatch_from(&edges, "zif_fx_order.get_total")
+                .contains(&"zcl_fx_order_alt.zif_fx_order~get_total"),
+            "got: {edges:?}"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_3_impact_through_dispatch() {
+        // Changing a redefinition reaches the callers of the base method, and
+        // changing an implementation of an interface method the callers of
+        // the declaration, through the dispatch edge.
+        let graph = abap_graph(&abap_fixture_2_3_sources());
+        let impact = |file: &str, name: &str| -> Vec<String> {
+            let id = graph
+                .entities
+                .values()
+                .find(|e| e.file_path == file && e.name == name)
+                .map(|e| e.id.clone())
+                .unwrap_or_else(|| panic!("{file} {name}"));
+            let mut labels: Vec<String> =
+                graph.impact_analysis(&id).iter().map(|e| abap_label(&graph, &e.id)).collect();
+            labels.sort();
+            labels
+        };
+        let sub = impact("zcl_fx_order_sub.clas.abap", "describe");
+        for caller in ["zcl_fx_order.describe", "zcl_fx_dispatch.through_base"] {
+            assert!(sub.contains(&caller.to_string()), "{caller}: {sub:?}");
+        }
+        let alt = impact(ABAP_ALT, "zif_fx_order~get_total");
+        for caller in ["zif_fx_order.get_total", "zcl_fx_dispatch.through_interface", "zcl_fx_dispatch.through_outer"] {
+            assert!(alt.contains(&caller.to_string()), "{caller}: {alt:?}");
+        }
     }
 
     #[test]

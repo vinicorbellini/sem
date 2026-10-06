@@ -30,6 +30,9 @@
 //! they can be counted apart from the ones the grammar gives. A grammar method
 //! cut back to its `ENDMETHOD` is still the grammar's, and carries nothing.
 //!
+//! An interface's `METHODS` are read off the same statements, one `method`
+//! per name of a chain (`chain_parts`), as its declarations are the methods.
+//!
 //! This module exists only for the grammar's gaps. Delete it once the grammar
 //! has nodes for forms, dynpro modules, macro definitions and `TYPES`, and
 //! recovers a method without losing the class around it (asked of
@@ -57,7 +60,9 @@ const METADATA_SOURCE: (&str, &str) = ("source", "abap-fallback");
 /// definition (a program's or an interface's, or a local type in a body) is
 /// not an entity, the same as `DATA` there. A method nests under the
 /// `CLASS ... IMPLEMENTATION` it is written in; a `METHOD` outside one is not
-/// an entity.
+/// an entity. An interface's `METHODS` and `CLASS-METHODS` declare its
+/// methods, one `method` entity per name of a chain, under the interface:
+/// they have no body, so the declaration is the method.
 pub(super) fn extract_abap_fallback_entities(
     file_path: &str,
     source: &[u8],
@@ -84,6 +89,7 @@ pub(super) fn extract_abap_fallback_entities(
     let mut class_blocks: Vec<ClassBlock> = Vec::new();
     let mut open_class: Option<ClassBlock> = None;
     let mut open_method: Option<OpenMethod> = None;
+    let mut in_interface = false;
 
     for statement in statements(&code) {
         let Some(head) = statement.head(&code) else {
@@ -217,6 +223,33 @@ pub(super) fn extract_abap_fallback_entities(
                         keyword_byte: method.keyword_byte,
                         end_byte: statement.end_byte(),
                     });
+                }
+            }
+            "INTERFACE" => {
+                let kind = head.kind.as_ref().map(|k| k.text.to_ascii_uppercase());
+                in_interface = !matches!(kind.as_deref(), Some("DEFERRED" | "LOAD"));
+            }
+            "ENDINTERFACE" => in_interface = false,
+            "METHODS" | "CLASS-METHODS" if in_interface => {
+                let Some(interface_id) = innermost_class(&classes, head.start_byte) else {
+                    continue;
+                };
+                for part in chain_parts(&statement, &code) {
+                    let name = part.tokens[0];
+                    let name = Word {
+                        text: name.text(&code).to_string(),
+                        start_byte: name.start_byte,
+                        end_byte: name.end_byte,
+                    };
+                    found.push(text_entity(
+                        file_path,
+                        source,
+                        "method",
+                        name,
+                        Some(interface_id),
+                        part.start_byte,
+                        part.end_byte,
+                    ));
                 }
             }
             "TYPES" => {
@@ -512,6 +545,48 @@ pub(crate) fn statements(code: &str) -> Vec<Statement> {
         });
     }
     statements
+}
+
+/// One declaration of a statement, chained (`METHODS: a ..., b ....`) or
+/// not: its tokens, from the name it declares, and its text, from the
+/// keyword for the first and from the name for the others, to the `,` or the
+/// `.` after it.
+pub(crate) struct ChainPart<'s> {
+    pub(crate) tokens: &'s [Token],
+    pub(crate) start_byte: usize,
+    pub(crate) end_byte: usize,
+}
+
+/// Split a declaration statement at its chain's `:` and `,` into one part per
+/// name it declares. A statement with no chain is one part.
+pub(crate) fn chain_parts<'s>(statement: &'s Statement, code: &str) -> Vec<ChainPart<'s>> {
+    let tokens = &statement.tokens;
+    let Some(keyword) = tokens.first() else {
+        return Vec::new();
+    };
+    let mut parts = Vec::new();
+    let mut from = 1;
+    let mut start_byte = keyword.start_byte;
+    for i in 1..=tokens.len() {
+        let end_byte = match tokens.get(i) {
+            Some(t) if matches!(t.text(code), ":" | ",") => t.end_byte,
+            Some(_) => continue,
+            None => statement.end_byte(),
+        };
+        if from < i {
+            parts.push(ChainPart {
+                tokens: &tokens[from..i],
+                start_byte,
+                end_byte,
+            });
+        }
+        from = i + 1;
+        // the first part starts at the keyword, past a `:` after it
+        if let (Some(next), false) = (tokens.get(from), parts.is_empty()) {
+            start_byte = next.start_byte;
+        }
+    }
+    parts
 }
 
 /// The entities of one `TYPES` (`type`) or `DATA` (`variable`) statement: one

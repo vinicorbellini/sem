@@ -260,6 +260,7 @@ impl<'a> Lower<'a> {
                                 has_self: true,
                                 enclosing: None,
                                 ret,
+                                shadows: false,
                             });
                         }
                         "type_elem" | "constraint_elem" => {
@@ -320,6 +321,7 @@ impl<'a> Lower<'a> {
                     variants: Vec::new(),
                     embeds,
                     field_inits: Vec::new(),
+                    aliases: Vec::new(),
                 });
             }
             _ => {
@@ -340,6 +342,7 @@ impl<'a> Lower<'a> {
                     variants: Vec::new(),
                     embeds: Vec::new(),
                     field_inits: Vec::new(),
+                    aliases: Vec::new(),
                 });
             }
         }
@@ -500,6 +503,7 @@ impl<'a> Lower<'a> {
             has_self,
             enclosing: None,
             ret,
+            shadows: false,
         });
         for part in ["receiver", "parameters", "result"] {
             if let Some(p) = n.child_by_field_name(part) {
