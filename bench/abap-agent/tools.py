@@ -4,6 +4,8 @@ grep arm: Claude Code's built-in Bash, Read, Grep and Glob (plus Edit and Write 
 sem arm:  the same, plus the tools `sem mcp` lists (sem_find, sem_impact, sem_certify and
           the rest of LISTED_TOOLS in crates/sem-mcp/src/server.rs), attached with
           --mcp-config as a standalone stdio server (SEM_MCP_NO_SHARED=1, docs/shared-mcp.md).
+cli arm:  the grep arm's tools, with the sem binary's directory first on PATH (and SEM_ENV) so the
+          agent can run `sem find` through Bash; no MCP server (Gate 2d).
 
 Claude Code runs the agent loop and the tools. This module builds the command line, the
 MCP config and the environment for one run, and reads the run's stream-json transcript
@@ -119,7 +121,10 @@ def pin_transpile_libs(root: Path, libs_dir: Path, libs_file: Path = LIBS_FILE) 
 
 
 def arm_tools(arm: str, writes: bool) -> tuple[list[str], list[str]]:
-    """(--tools, --allowedTools) for an arm. --tools decides which built-in tools exist at all."""
+    """(--tools, --allowedTools) for an arm. --tools decides which built-in tools exist at all.
+
+    The cli arm gets exactly the grep arm's tools: sem reaches it through Bash and PATH, not through a tool.
+    """
     builtin = READ_TOOLS + (WRITE_TOOLS if writes else [])
     allowed = builtin + ([f"mcp__{MCP_SERVER}"] if arm == "sem" else [])
     return builtin, allowed
@@ -139,9 +144,16 @@ def mcp_config(sem_binary: str, workspace: Path, log_path: Path, mcp_tools: str 
 
 
 def claude_command(prompt: str, model: str, effort: str, max_turns: int, arm: str, writes: bool,
-                   session_id: str, mcp_config_path: Path | None, budget_usd: float | None) -> list[str]:
+                   session_id: str, mcp_config_path: Path | None, budget_usd: float | None,
+                   sem_binary: str | None = None) -> list[str]:
+    """The `claude -p` command line. The cli arm runs it through `env` with sem's directory first on PATH."""
     builtin, allowed = arm_tools(arm, writes)
-    cmd = [
+    cmd = []
+    if arm == "cli":
+        sem_dir = str(Path(sem_binary).resolve().parent)
+        cmd += ["env", f"PATH={sem_dir}{os.pathsep}{os.environ.get('PATH', '')}",
+                *(f"{k}={v}" for k, v in SEM_ENV.items())]
+    cmd += [
         CLAUDE, "-p", prompt,
         "--output-format", "stream-json", "--verbose",   # stream-json is the only output with tool calls
         "--model", model, "--effort", effort, "--max-turns", str(max_turns),
@@ -180,6 +192,7 @@ class RunStats:
     files_read: set[str] = field(default_factory=set)
     bytes_read: int = 0  # bytes of tool output returned to the model, all tools
     test_classes: set[tuple[str, str]] = field(default_factory=set)  # (object, local class) that ran
+    sem_cli_calls: int = 0   # Bash calls whose command starts with "sem " (the cli arm's sem calls)
     init: dict = field(default_factory=dict)     # the system/init event: tools, mcp_servers, model
     result: dict = field(default_factory=dict)   # the final result event
     usage_by_message: dict[str, dict] = field(default_factory=dict)  # fallback when there is no result
@@ -228,6 +241,8 @@ def read_transcript(lines, workspace: Path) -> RunStats:
                 pending[block.get("id")] = name
                 stats.tool_calls += 1
                 stats.calls_by_tool[name] = stats.calls_by_tool.get(name, 0) + 1
+                if name == "Bash" and str(block.get("input", {}).get("command", "")).lstrip().startswith("sem "):
+                    stats.sem_cli_calls += 1
                 if name == "Read" and block.get("input", {}).get("file_path"):
                     path = Path(block["input"]["file_path"])
                     path = path if path.is_absolute() else workspace / path

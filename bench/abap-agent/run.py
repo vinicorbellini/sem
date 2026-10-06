@@ -3,7 +3,8 @@
 
 Paired agent runs on a pinned commit of abapGit: same model, same prompt, both through
 headless Claude Code (`claude -p`). One arm gets the built-in Bash, Read, Grep and Glob
-("grep"), the other those plus the tools of `sem mcp` attached with --mcp-config ("sem").
+("grep"), the other those plus the tools of `sem mcp` attached with --mcp-config ("sem"). A third arm, "cli"
+(Gate 2d), has the grep arm's tools and the sem binary on PATH, to run `sem find` through Bash.
 Task classes: B1 where-used, B1A where-used on ambiguous names, B2 change-and-verify, B3 review, and C1 where-used
 on a Rust repository (the control; a task file's `repo` names the repository). Every run gets a fresh checkout and
 appends one row to results.csv.
@@ -38,8 +39,8 @@ EFFORT = "high"            # set explicitly: the default differs by model
 MAX_TURNS = 40             # claude --max-turns: a safety bound, not a target
 RUN_TIMEOUT_S = {"B1": 1800, "B1A": 1800, "B2": 3600, "B3": 1800, "C1": 1800}   # wall clock per run; the process group is killed
 REPS = 3
-CHECKPOINTS = ("baseline", "gate1", "gate2", "gate2b", "gate2c", "control")
-ARMS = ("grep", "sem")
+CHECKPOINTS = ("baseline", "gate1", "gate2", "gate2b", "gate2c", "control", "gate2d")
+ARMS = ("grep", "sem")     # --arm both; `--arm cli` runs the cli arm alone
 CLASSES = ("B1", "B1A", "B2", "B3", "C1")
 SCORED_AS_B1 = ("B1", "B1A", "C1")   # where-used: score_b1 against the task file's ground_truth
 
@@ -103,7 +104,18 @@ BRIEF_SEM_FIND_ONLY = (
     "and then only to check the possible callers it names, not to search the code base again. When sem_find "
     "reports the line of each call, use those lines; otherwise read the calling method's range for the line."
 )
-BRIEFS = {"1": BRIEF, "sem-first": BRIEF_SEM_FIRST, "sem-find-only": BRIEF_SEM_FIND_ONLY}   # the `brief` column's values; "0" is no briefing
+# --brief cli: for the cli arm (--arm cli, Gate 2d), which has no sem tool but `sem` on PATH; BRIEF_SEM_FIRST's
+# where-used advice, as a command run through Bash.
+BRIEF_CLI = (
+    "Besides the usual tools you have the sem command line on PATH for this code base. "
+    "For where-used questions (who calls a method) run `sem find NAME --callers --file FILE` in Bash first, "
+    "passing the bare method name as NAME and the defining file the task names as FILE (an interface method zif_x~m "
+    "is the entity m in the interface's file), and use its resolved callers and their call lines as the caller list. "
+    "Use Grep only if sem fails or says INCOMPLETE, "
+    "and then only to check the possible callers it names, not to search the code base again."
+)
+BRIEFS = {"1": BRIEF, "sem-first": BRIEF_SEM_FIRST, "sem-find-only": BRIEF_SEM_FIND_ONLY,
+          "cli": BRIEF_CLI}   # the `brief` column's values; "0" is no briefing
 
 CSV_COLUMNS = [
     "timestamp", "checkpoint", "build", "sem_version", "abapgit_commit", "model", "arm", "brief",
@@ -374,6 +386,16 @@ def append_jsonl(path: Path, record: dict):
         f.write(json.dumps(record, default=str) + "\n")
 
 
+def check_sem_cli(sem_binary: Path, workspace: Path, task: dict) -> list[str]:
+    """--dry-run, cli arm: the command BRIEF_CLI names, run once in the checkout (a cold index)."""
+    target = task.get("method") or task.get("target")
+    method = target.replace("=>", "->").split("->")[-1].split("~")[-1].split("::")[-1]
+    cmd = [str(sem_binary), "find", method, "--callers", "--file", task["defined_in"]]
+    start = time.time()
+    r = subprocess.run(cmd, cwd=workspace, capture_output=True, text=True, env={**os.environ, **tools.SEM_ENV})
+    return [f"{' '.join(cmd[1:])}: exit {r.returncode}, {len(r.stdout.encode())} bytes, {time.time() - start:.1f}s"]
+
+
 def check_sem_mcp(sem_binary: Path, workspace: Path, log_path: Path, spec: dict, task: dict,
                   mcp_tools: str | None = None) -> list[str]:
     """--dry-run: start `sem mcp` as the MCP config does, list its tools and call sem_find once."""
@@ -413,7 +435,7 @@ def check_sem_mcp(sem_binary: Path, workspace: Path, log_path: Path, spec: dict,
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--checkpoint", choices=CHECKPOINTS, help="Which checkpoint these runs measure.")
-    parser.add_argument("--arm", choices=("grep", "sem", "both"), default="both")
+    parser.add_argument("--arm", choices=("grep", "sem", "cli", "both"), default="both")
     parser.add_argument("--class", dest="task_class", choices=(*CLASSES, "all"), default="all")
     parser.add_argument("--model", default=MODEL)
     parser.add_argument("--reps", type=int, default=REPS)
@@ -421,7 +443,7 @@ def main():
     parser.add_argument("--brief", nargs="?", const="1", choices=tuple(BRIEFS),
                         help="Add a sem briefing paragraph to the sem arm's prompt; the grep arm is unchanged. "
                              "Plain --brief is BRIEF, `sem-first` is BRIEF_SEM_FIRST, `sem-find-only` is "
-                             "BRIEF_SEM_FIND_ONLY (with --mcp-tools sem_find). "
+                             "BRIEF_SEM_FIND_ONLY (with --mcp-tools sem_find), `cli` is BRIEF_CLI (with --arm cli). "
                              "Recorded in the `brief` column: never mix briefings or briefed and unbriefed rows.")
     parser.add_argument("--mcp-tools", metavar="NAMES",
                         help="Comma-separated tools the sem arm's server lists (SEM_MCP_TOOLS), e.g. sem_find; "
@@ -440,6 +462,8 @@ def main():
         parser.error("--checkpoint is required for a real run")
     if args.brief == "sem-find-only" and args.mcp_tools != "sem_find":
         parser.error("--brief sem-find-only names sem_find alone: pass --mcp-tools sem_find")
+    if (args.brief == "cli") != (args.arm == "cli"):
+        parser.error("--arm cli runs with --brief cli, and --brief cli is for --arm cli alone")
     if not args.dry_run and not shutil.which(tools.CLAUDE):
         print("Claude Code not found: `claude` must be on PATH and logged in.")
         sys.exit(1)
@@ -501,7 +525,7 @@ def main():
         for arm in order:
             if not args.dry_run and not budget.allows_run():
                 break
-            brief = args.brief if arm == "sem" else None
+            brief = args.brief if arm in ("sem", "cli") else None
             mcp_tools = args.mcp_tools if arm == "sem" else None
             run_id = f"{checkpoint}-{args.model}-{arm}{'-brief' if brief == '1' else f'-{brief}' if brief else ''}-{task['id']}-r{rep}"
             print(f"── {task['id']} [{arm}] rep {rep} ──")
@@ -516,7 +540,8 @@ def main():
             session_id = str(uuid.uuid4())
             cmd = tools.claude_command(prompt, args.model, EFFORT, MAX_TURNS, arm, writes=(task_class == "B2"),
                                        session_id=session_id, mcp_config_path=mcp_path,
-                                       budget_usd=None if args.dry_run else budget.remaining())
+                                       budget_usd=None if args.dry_run else budget.remaining(),
+                                       sem_binary=str(sem_binary))
             transcript = work_dir / "transcripts" / f"{run_id}.jsonl"
             timeout_s = RUN_TIMEOUT_S[task_class]
 
@@ -529,6 +554,9 @@ def main():
                 print("  prompt:\n    " + prompt.replace("\n", "\n    "))
                 if arm == "sem":
                     for line in check_sem_mcp(sem_binary, workspace, sem_log, spec, task, mcp_tools):
+                        print(f"  tool check: {line}")
+                if arm == "cli":
+                    for line in check_sem_cli(sem_binary, workspace, task):
                         print(f"  tool check: {line}")
                 agent = {"stop_reason": None, "final_text": "", "error": None}
                 stats = tools.RunStats()
@@ -581,7 +609,7 @@ def main():
                 "mcp_servers": mcp_status, "model_usage": stats.result.get("modelUsage"),
                 "permission_denials": stats.result.get("permission_denials"),
                 "list_price_usd": check, "transcript": str(transcript),
-                "calls_by_tool": stats.calls_by_tool, "files_read_list": sorted(stats.files_read),
+                "calls_by_tool": stats.calls_by_tool, "sem_cli_calls": stats.sem_cli_calls, "files_read_list": sorted(stats.files_read),
                 "test_classes_list": sorted(stats.test_classes), "score": result})
             summary.setdefault((task_class, arm), []).append(row)
             print(f"  score {row['success_score']} | tests_passed {row['tests_passed']} | "

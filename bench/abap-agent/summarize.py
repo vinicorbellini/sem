@@ -9,6 +9,7 @@ Usage:
     python3 bench/abap-agent/summarize.py --checkpoint gate2c --brief sem-find-only
     python3 bench/abap-agent/summarize.py --checkpoint gate2
     python3 bench/abap-agent/summarize.py --checkpoint control --brief sem-first
+    python3 bench/abap-agent/summarize.py --checkpoint gate2d --brief cli --grep-from gate2c
 """
 
 import argparse
@@ -24,12 +25,15 @@ CLASSES = ("B1", "B1A", "B2", "B3", "C1")
 
 
 def load_rows(checkpoint: str) -> list[dict]:
-    """Rows of the checkpoint, dry runs out, with `sem_calls` (sem_* entries of calls_by_tool) from results.jsonl."""
+    """Rows of the checkpoint, dry runs out, with `sem_calls` from results.jsonl.
+
+    sem arm: the sem_* entries of calls_by_tool. cli arm: `sem_cli_calls`, the Bash calls whose command starts with "sem ".
+    """
     sem_calls = {}
     with open(RESULTS_JSONL) as f:
         for line in f:
             r = json.loads(line)
-            sem_calls[(r["timestamp"], r["arm"], r["task_id"], str(r["rep"]))] = sum(
+            sem_calls[(r["timestamp"], r["arm"], r["task_id"], str(r["rep"]))] = r.get("sem_cli_calls") if r["arm"] == "cli" else sum(
                 n for tool, n in (r.get("calls_by_tool") or {}).items() if tool.startswith("mcp__sem__") or tool.startswith("sem_"))
     with open(RESULTS_CSV, newline="") as f:
         rows = [r for r in csv.DictReader(f) if r["checkpoint"] == checkpoint and r["dry_run"] != "1"]
@@ -98,8 +102,8 @@ def verdict(checkpoint: str, by: dict) -> list[str]:
         return (g, s) if g and s else (None, None)
 
     lines = []
-    if checkpoint == "gate2c":
-        # Reporting only (README: "Gate 2c, slim server"): Gate 2b's B1A criterion, for reference.
+    if checkpoint in ("gate2c", "gate2d"):
+        # Reporting only (README: "Gate 2c, slim server", "Gate 2d, CLI arm"): Gate 2b's B1A criterion, for reference.
         g, s = pair("B1A")
         if g:
             ratio = s["read"] / g["read"]
@@ -156,15 +160,18 @@ def verdict(checkpoint: str, by: dict) -> list[str]:
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--checkpoint", required=True, help="Which checkpoint to summarise, e.g. gate2b.")
-    parser.add_argument("--brief", help="Which `brief` value the sem arm's rows carry (0, 1, sem-first or sem-find-only). "
+    parser.add_argument("--brief", help="Which `brief` value the sem arm's rows carry (0, 1, sem-first, sem-find-only or cli). "
                                         "Default: the one the checkpoint's sem rows have; an error when it has several.")
+    parser.add_argument("--grep-from", metavar="CHECKPOINT",
+                        help="Compare against this checkpoint's grep rows (same classes, tasks and model as the "
+                             "sem or cli rows) instead of the checkpoint's own, e.g. gate2c for gate2d.")
     args = parser.parse_args()
 
     rows = load_rows(args.checkpoint)
     if not rows:
         print(f"No rows for checkpoint {args.checkpoint} in {RESULTS_CSV.name}")
         sys.exit(1)
-    briefs = sorted({r["brief"] for r in rows if r["arm"] == "sem"})
+    briefs = sorted({r["brief"] for r in rows if r["arm"] in ("sem", "cli")})
     if args.brief is None:
         if len(briefs) > 1:
             print(f"Checkpoint {args.checkpoint} has sem rows with brief {briefs}: pass --brief, never mix them.")
@@ -172,19 +179,28 @@ def main():
         args.brief = briefs[0] if briefs else "0"
     # The grep arm's prompt never changes, so its rows carry brief 0 whatever the sem arm got.
     rows = [r for r in rows if r["arm"] == "grep" or r["brief"] == args.brief]
-    label = {"0": "sem", "1": "sem (brief)"}.get(args.brief, f"sem ({args.brief})")
+    label = {"0": "sem", "1": "sem (brief)", "cli": "cli"}.get(args.brief, f"sem ({args.brief})")
+    grep_note = ""
+    if args.grep_from:
+        other = [r for r in rows if r["arm"] != "grep"]
+        keys = {(r["task_class"], r["task_id"], r["model"]) for r in other}
+        grep = [r for r in load_rows(args.grep_from) if r["arm"] == "grep" and (r["task_class"], r["task_id"], r["model"]) in keys]
+        rows = other + grep
+        grep_note = (f" The grep rows are checkpoint `{args.grep_from}`'s ({len(grep)} rows on the same tasks and model), "
+                     f"not re-run.")
 
     by = {}
     for c in CLASSES:
         for arm in ("grep", "sem"):
-            sub = [r for r in rows if r["task_class"] == c and r["arm"] == arm]
+            sub = [r for r in rows if r["task_class"] == c and (r["arm"] == arm or arm == "sem" and r["arm"] == "cli")]
             if sub:
                 by[(c, arm)] = stats(sub)
 
     mcp_tools = sorted({r["mcp_tools"] for r in rows if r["arm"] == "sem"})
-    print(f"Checkpoint `{args.checkpoint}`, sem arm `brief` = {args.brief}"
+    print(f"Checkpoint `{args.checkpoint}`, {label.split(' ')[0]} arm `brief` = {args.brief}"
           + (f", `mcp_tools` = {', '.join(t or 'all' for t in mcp_tools)}" if any(mcp_tools) else "")
-          + ". Per-run means, except cost (summed); deltas are the sem arm against the grep arm.\n")
+          + f". Per-run means, except cost (summed); deltas are the {label.split(' ')[0]} arm against the grep arm."
+          + grep_note + "\n")
     print("| Class | Arm | Runs | Success | Precision | Tokens read | Output tokens | Cost (USD) | Wall time (s) | Tool calls | sem calls |")
     print("|---|---|---|---|---|---|---|---|---|---|---|")
     for c in CLASSES:
@@ -194,7 +210,9 @@ def main():
             print(table_row(c, label, by[(c, "sem")], by.get((c, "grep"))))
     print("\nTokens read = input + cache read + cache write. Success is the score stored in results.csv "
           "(B2: runs with tests_passed). The README's Gate 2 table uses rescored B1 `b1_04` and B3 `b3_03` rows; "
-          "these stored scores differ for them (see \"Scorer fixes\").\n")
+          "these stored scores differ for them (see \"Scorer fixes\")."
+          + (" sem calls for the cli arm: Bash calls whose command starts with `sem ` (`sem_cli_calls`)." if args.brief == "cli" else "")
+          + "\n")
     print("Adoption rule:\n")
     print("\n".join(verdict(args.checkpoint, {(c, "sem" if a == "sem" else "grep"): v for (c, a), v in by.items()})))
 
