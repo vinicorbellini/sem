@@ -277,7 +277,7 @@ python3 bench/abap-agent/run.py --checkpoint gate1 --class B1 --task b1_03 --rep
 | Flag | Meaning |
 |---|---|
 | `--checkpoint baseline\|gate1\|gate2\|gate2b\|gate2c\|control` | Written to every row; required for a real run. |
-| `--arm grep\|sem\|both` | Which arms to run (default both). |
+| `--arm grep\|sem\|cli\|both` | Which arms to run (default both, grep and sem). `cli` (Gate 2d) is the grep arm's tools with `sem` on PATH, run alone with `--brief cli`; see "Gate 2d, CLI arm". |
 | `--class B1\|B1A\|B2\|B3\|C1\|all` | Which task classes (default all); `--task b2_04` (repeatable) narrows to single tasks. A class whose task file is absent is skipped with one line. |
 | `--model` | Passed to `claude --model` (default `claude-sonnet-5-5`). |
 | `--reps` | Repetitions per task per arm (default 3). |
@@ -371,12 +371,12 @@ commit results with `git add -f bench/abap-agent/results.csv bench/abap-agent/re
 | Column | Meaning |
 |---|---|
 | `timestamp` | UTC, when the run finished. |
-| `checkpoint` | `baseline`, `gate1`, `gate2`, `gate2b`, `gate2c` or `control` (`dry-run` for dry runs). |
+| `checkpoint` | `baseline`, `gate1`, `gate2`, `gate2b`, `gate2c`, `control` or `gate2d` (`dry-run` for dry runs). |
 | `build` | sem commit measured: `git rev-parse HEAD` of this repo, `-dirty` if `crates/` has uncommitted changes. Build the binary from that commit. |
 | `sem_version` | `sem --version` of the binary that served MCP. |
 | `abapgit_commit` | Pinned abapGit commit. On C1 rows, the commit of the task file's `repo` (`dc2cc4d7173d`, sem at upstream's merge-base); the column keeps its name. |
 | `model`, `arm`, `task_class`, `task_id`, `rep` | Which run. |
-| `brief` | Which sem briefing the run's prompt carried (sem arm only): `1` for `--brief`, `sem-first` for `--brief sem-first`, `sem-find-only` for `--brief sem-find-only`, else `0`. Baseline rows and every grep row are 0. Compare only rows with the same `brief`. |
+| `brief` | Which sem briefing the run's prompt carried (sem arm only): `1` for `--brief`, `sem-first` for `--brief sem-first`, `sem-find-only` for `--brief sem-find-only`, `cli` for the cli arm's `--brief cli`, else `0`. Baseline rows and every grep row are 0. Compare only rows with the same `brief`. |
 | `dry_run` | 1 for `--dry-run` rows. |
 | `input_tokens` | Uncached input tokens, summed over the run's requests (`usage.input_tokens`). |
 | `output_tokens` | Output tokens, thinking included (`usage.output_tokens`). |
@@ -837,6 +837,118 @@ its INCOMPLETE answers is inferred from the call counts above, not measured. Two
 and `sem_find` cannot pick between two same-named methods of different types in one file by `file` alone. Neither
 moved a score. **The adoption verdict is unchanged: drop**, as Gate 2b decided; this control is reporting only and
 decides nothing.
+
+## Gate 2d, CLI arm (reporting only)
+
+Gate 2b, Gate 2c and the control put the sem arm's extra tokens on the MCP tool schemas and server instructions,
+re-read on every turn: 4.5k tokens per request with eight tools, 1.6k with `sem_find` alone. The command line costs
+nothing per turn, because the agent already has Bash. Gate 2d asks whether a `cli` arm, the grep arm's tools plus
+`sem` on PATH and a one-paragraph briefing, reads fewer tokens than grep at equal success on B1A. It is a reporting
+experiment: Gate 2b's verdict, drop, stands whatever this shows, and there is still no third re-run.
+
+`--arm cli` gets exactly the grep arm's `--tools` and `--allowedTools` and no `--mcp-config`. Its `claude` runs
+through `env` with the sem binary's directory first on PATH and `SEM_ENV` set (telemetry, update checks, cloud and
+network off, as for `sem mcp`). `--brief cli` (`BRIEF_CLI`) is the only prompt change, to the cli arm only:
+
+> Besides the usual tools you have the sem command line on PATH for this code base. For where-used questions (who calls a method) run `sem find NAME --callers --file FILE` in Bash first, passing the bare method name as NAME and the defining file the task names as FILE (an interface method zif_x~m is the entity m in the interface's file), and use its resolved callers and their call lines as the caller list. Use Grep only if sem fails or says INCOMPLETE, and then only to check the possible callers it names, not to search the code base again.
+
+The grep arm was not re-run: the comparison is against Gate 2c's grep rows, the same 12 targets, 36 runs, the same
+day, model and Claude Code (`summarize.py --grep-from gate2c`).
+
+| Setting | Value |
+|---|---|
+| Checkpoint | `gate2d` |
+| Arm | `--arm cli --brief cli` |
+| Grep side | Gate 2c's grep rows (36), not re-run |
+| Repetitions | 3 per task |
+| Classes | B1A |
+| Model, effort | `claude-sonnet-5-5`, high, Claude Code 2.1.291 |
+| sem | `/home/user/sem/crates/target/release/sem`, built from this branch at `767f67e` (the `sem_find` callers fixes, as in Gate 2b and the control; `sem 0.27.0`) |
+| Cap | 3.5 USD |
+
+```sh
+python3 bench/abap-agent/run.py --checkpoint gate2d --brief cli --arm cli --class B1A --reps 3 --cap-usd 3.5 \
+  --sem-binary /home/user/sem/crates/target/release/sem --work-dir /tmp/sem-bench-gate2d
+python3 bench/abap-agent/summarize.py --checkpoint gate2d --brief cli --grep-from gate2c
+```
+
+The run went in four invocations of that command, by `--task`, each with the rest of the 3.5 USD as `--cap-usd`.
+The rows' `build` column says `93ea20e89789`, the harness commit that added the arm, not the binary's.
+
+**The incantation.** On the pinned abapGit checkout, with the release binary, `sem find NAME --callers --file FILE`
+with the bare name and the defining file (the interface file for `b1a_01`). `--file` is not in `sem find --help`,
+which names `--in`; the two printed byte-identical output on all three targets. Output in bytes:
+
+| Target | Default (text) | `--json` | `--limit 10` | `--limit 0` | `--limit 500` |
+|---|---|---|---|---|---|
+| `b1a_01` `is_active`, interface | 4,974 | 33,966 | 2,841 | 1,097 | 21,633 |
+| `b1a_05` `list`, short name | 4,522 | 7,164 | 2,494 | 917 | 4,522 |
+| `b1a_10` `normalize`, multi | 4,854 | 8,664 | 3,228 | 595 | 4,854 |
+
+`--json` is 1.6 to 7 times larger. `--limit` applies to the resolved callers and to the possible callers alike:
+`--limit 0` keeps only the INCOMPLETE summary, and `--limit 10` drops 9 of `b1a_10`'s 19 resolved callers, the
+answer itself. The default (25 per list) is the smallest form that keeps the answer, so the briefing names no flag.
+All three answers say INCOMPLETE, as `sem_find` does over MCP, and they are the same text at the same size (Gate 2c:
+about 4.9k characters).
+
+**The index.** `sem find` on an unindexed checkout prints nothing extra: it builds the index and answers, 2.2 to
+3.3 s on a fresh clone of the pinned commit (5.0 s on the first try), then 0.2 s warm. It writes
+nothing into the checkout; the index goes to `~/.cache/sem/repos/<hash of the checkout's path>` (`cache.db` and
+`index.sem`, about 32 MB), so every run's checkout, at its own path, gets its own index, as the MCP arm's server
+does. Well under 20 s, so nothing is pre-built: the cold index is in the cli arm's wall time, as it is in the sem arm's.
+
+**Results.** 36 of 36 planned runs, **2.38 USD** by Claude Code's figure. No run hit an error, the turn bound or the
+timeout. Per-run means, except cost (summed); deltas are the cli arm against Gate 2c's grep arm
+(`summarize.py --checkpoint gate2d --brief cli --grep-from gate2c`), with Gate 2c's sem arm for comparison:
+
+| Class | Arm | Runs | Success | Precision | Tokens read | Output tokens | Cost (USD) | Wall time (s) | Tool calls | sem calls |
+|---|---|---|---|---|---|---|---|---|---|---|
+| B1A | grep (Gate 2c) | 36 | 1.000 | 1.000 | 53,192 | 2,495 | 2.67 | 22.9 | 5.0 | - |
+| B1A | cli | 36 | 1.000 | 1.000 | 51,460 (-3%) | 2,117 (-15%) | 2.38 (-11%) | 23.6 (+3%) | 4.0 (-21%) | 1.14 |
+| B1A | Gate 2c sem (sem-find-only) | 36 | 1.000 | 1.000 | 63,054 (+19%) | 2,162 (-13%) | 2.63 (-2%) | 26.2 (+14%) | 4.8 (-4%) | 1.03 |
+
+sem calls for the cli arm are the `Bash` calls whose command starts with `sem ` (`sem_cli_calls` in `results.jsonl`).
+
+Tokens read per task, grep vs cli (mean of 3): b1a_01 59,753 / 75,698 (+27%), b1a_02 62,428 / 69,561 (+11%), b1a_03
+41,446 / 53,068 (+28%), b1a_04 24,455 / 24,311 (-1%), b1a_05 62,920 / 49,128 (-22%), b1a_06 39,339 / 36,337 (-8%),
+b1a_07 49,942 / 53,222 (+7%), b1a_08 67,459 / 53,049 (-21%), b1a_09 32,431 / 27,262 (-16%), b1a_10 83,049 / 42,885
+(-48%), b1a_11 70,939 / 41,939 (-41%), b1a_12 44,145 / 91,061 (+106%). Turns: 4.97 cli, 6.00 grep, 5.78 Gate 2c sem.
+
+**First-call context** (the first assistant message's `cache_creation + cache_read + input` tokens, mean over the 36
+runs of each arm, from the transcripts):
+
+| Arm | First call | Minus grep |
+|---|---|---|
+| grep (Gate 2c) | 6,253 (6,208 to 6,372) | - |
+| cli | 6,425 (6,380 to 6,544) | 172 |
+| Gate 2c sem, `sem_find` alone | 7,868 | 1,615 |
+| Gate 2b sem, eight tools | 10,741 | 4,491 |
+
+The cli arm's 172 tokens are the briefing paragraph (543 characters). The schema and server-instruction cost is gone.
+
+**What the agent did.** Every cli run ran the briefed command first, word for word (`sem find NAME --callers --file
+FILE`, no flag), and all 36 answers said INCOMPLETE, as over MCP in Gate 2b and 2c; the first answer averaged 4,738
+bytes (1,849 for `parse_line` to 5,740 for `to_abap`). Four runs (`b1a_08` three times, `b1a_12` once) ran it a
+second or third time with `--limit 100` piped through `grep -v` or `tail`, 41 sem calls in all; three of those
+pipes cut the INCOMPLETE line, so no answer was complete. The agent then checked with `grep` inside Bash, not with
+the Grep tool: 2.75 other Bash calls, 0.08 Grep and no Read per run, against 2.28 Bash, 2.53 Grep and 0.19 Read in
+the grep arm. That check was not limited to the possible callers sem named: 33 of 36 runs ran a recursive grep over
+`src/` (about 1.9 per run, by a pattern match on the commands; the grep arm 2.3, Gate 2c's sem arm 2.0). On
+`b1a_04` (every run) and `b1a_09` (two runs of three) the answer plus one Bash check was enough, in 3 turns. 33 of 36 final answers mention sem.
+
+**Against Gate 2b's B1A criterion**, for reference only: success 1.000 against 1.000, tokens read 97% of the grep
+arm's (needs 85% or less). Not met. **The adoption verdict is unchanged: drop.**
+
+**Reading.** The CLI removes the per-turn cost that Gate 2b and 2c measured: the cli arm's first request is 172
+tokens over grep's, against 1.6k for the one-tool server and 4.5k for the full one. With it gone, sem is no longer
+behind: at the same success the cli arm read 3% fewer tokens than grep, cost 11% less, and finished in one turn
+fewer (5.0 against 6.0), the first sem configuration on B1A to read fewer tokens than grep. It is not the 15% saving
+Gate 2b asked for, and the per-task spread (-48% to +106%) is wider than the mean difference. What is left is the
+answer itself: every answer is INCOMPLETE on these targets, so the agent still checks, mostly by a recursive grep it
+was told not to run, and the 4.7k-byte answer stays in the context of every later turn. On the targets where the
+resolved callers are most of the answer (`b1a_10`, `b1a_11`, 19 callers each) the cli arm read 41 to 48% less; on
+the interface and `is_empty` targets, where sem lists many possible callers, it read more. The lever this run
+identifies is the same as Gate 2c's last one, a complete verdict on more targets, not a cheaper transport.
 
 ## Known issues
 
