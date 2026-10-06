@@ -2628,6 +2628,202 @@ ENDCLASS.
         assert!(names.contains(&"ty_ok"), "{sources:?}");
     }
 
+    // Story 2.7, T2-C: a chained `DATA:` or `CLASS-DATA:` is one `variable`
+    // per name, as a chained `TYPES:` is one `type` per name.
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_7_chained_data_one_entity_each() {
+        // `DATA: mv_id ..., mv_name ...` is two variables, each with its own
+        // line and text, from the grammar (the section holds one
+        // `variable_declaration` per part), under the class. The `DATA:` chain
+        // in `describe` is locals, not entities.
+        let rows = abap_fixture_rows("zcl_fx_chain.clas.abap");
+        for row in [
+            abap_row("variable", "mv_id", 5, 5),
+            abap_row("variable", "mv_name", 6, 6),
+            abap_row("variable", "mv_note", 15, 15),
+        ] {
+            assert!(rows.contains(&row), "{row:?} not in {rows:?}");
+        }
+        assert!(!rows.iter().any(|r| r.1 == "lv_a" || r.1 == "lv_b"), "{rows:?}");
+
+        let code = abap_fixture_text("zcl_fx_chain.clas.abap");
+        let entities = CodeParserPlugin.extract_entities(&code, "zcl_fx_chain.clas.abap");
+        let by_name = |n: &str| entities.iter().find(|e| e.name == n).unwrap();
+        assert_eq!(by_name("mv_id").content.trim(), "mv_id   TYPE ty_id");
+        assert_eq!(by_name("mv_name").content.trim(), "mv_name TYPE ty_name");
+        for name in ["mv_id", "mv_name", "mv_note"] {
+            let e = by_name(name);
+            assert_eq!(e.parent_id.as_deref(), Some("zcl_fx_chain.clas.abap::class::zcl_fx_chain"));
+            assert!(e.metadata.is_none(), "{name}: {:?}", e.metadata);
+        }
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_7_chained_class_data() {
+        // `CLASS-DATA:` likewise, and a `BEGIN OF ... END OF` block in the chain
+        // is one variable named after the structure; its components are not
+        // entities.
+        let rows = abap_fixture_rows("zcl_fx_chain.clas.abap");
+        let variables: Vec<_> = rows.iter().filter(|r| r.0 == "variable").cloned().collect();
+        assert_eq!(
+            variables,
+            vec![
+                abap_row("variable", "mv_id", 5, 5),
+                abap_row("variable", "mv_name", 6, 6),
+                abap_row("variable", "gv_count", 7, 7),
+                abap_row("variable", "gs_last", 8, 11),
+                abap_row("variable", "gv_total", 12, 12),
+                abap_row("variable", "mv_note", 15, 15),
+            ]
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_7_chained_data_member_added() {
+        // Adding a member to a chain adds one entity and changes no other: the
+        // ids, texts and hashes of every other variable, type and method are
+        // the same (the class's own text changes, as it holds the chain).
+        let code = abap_fixture_text("zcl_fx_chain.clas.abap");
+        let added = code.replace(
+            "    DATA: mv_id   TYPE ty_id,\n",
+            "    DATA: mv_id   TYPE ty_id,\n          mv_extra TYPE i,\n",
+        );
+        assert_ne!(code, added);
+        let members = |code: &str| -> Vec<(String, String, Option<String>)> {
+            CodeParserPlugin
+                .extract_entities(code, "zcl_fx_chain.clas.abap")
+                .into_iter()
+                .filter(|e| e.entity_type != "class")
+                .map(|e| (e.id, e.content_hash, e.structural_hash))
+                .collect()
+        };
+        let before = members(&code);
+        let mut after = members(&added);
+        let extra = after
+            .iter()
+            .position(|(id, _, _)| id == "zcl_fx_chain.clas.abap::class::zcl_fx_chain::mv_extra")
+            .expect("mv_extra is an entity");
+        after.remove(extra);
+        assert_eq!(before, after);
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_7_chained_types_already_split() {
+        // The chained `TYPES:` next to the chains above was split before T2-C
+        // (`abap_chained_types_come_from_the_grammar`) and still is: one `type`
+        // per name, from the grammar.
+        let rows = abap_fixture_rows("zcl_fx_chain.clas.abap");
+        assert!(rows.contains(&abap_row("type", "ty_id", 3, 3)), "{rows:?}");
+        assert!(rows.contains(&abap_row("type", "ty_name", 4, 4)), "{rows:?}");
+        assert_eq!(
+            abap_decl_sources(&abap_fixture_text("zcl_fx_chain.clas.abap"), "zcl_fx_chain.clas.abap", "type"),
+            ["ty_id", "ty_name"].map(|n| (n.to_string(), None))
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_7_interface_data() {
+        // An interface's `DATA` and `CLASS-DATA`, single or chained, are
+        // variables of the interface, one per name (they were not entities).
+        let code = "\
+INTERFACE zif_d PUBLIC.
+  DATA: mv_a TYPE i,
+        mv_b TYPE string.
+  CLASS-DATA gv_c TYPE i.
+  METHODS run.
+ENDINTERFACE.
+";
+        let entities = CodeParserPlugin.extract_entities(code, "zif_d.intf.abap");
+        let variables: Vec<_> = abap_rows(code, "zif_d.intf.abap")
+            .into_iter()
+            .filter(|r| r.0 == "variable")
+            .collect();
+        assert_eq!(
+            variables,
+            vec![
+                abap_row("variable", "mv_a", 2, 2),
+                abap_row("variable", "mv_b", 3, 3),
+                abap_row("variable", "gv_c", 4, 4),
+            ]
+        );
+        for e in entities.iter().filter(|e| e.entity_type == "variable") {
+            assert_eq!(e.parent_id.as_deref(), Some("zif_d.intf.abap::interface::zif_d"));
+        }
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_7_chained_data_from_the_fallback() {
+        // Two stray statements before the class, cut down from abapGit's
+        // zcl_abapgit_ajson.clas.locals_imp (where they close a method of the
+        // class before), cost the grammar the class whole, definition and
+        // implementation. The fallback recovers the class from its methods, and
+        // now its attributes too: one variable per name of the `DATA:` chain,
+        // one for the `BEGIN OF` block, tagged, under the recovered class.
+        let code = "\
+          READ TABLE mt_stack INDEX 1 INTO lr_stack_top.
+          lo_value ?= lo_node.
+CLASS lcl_json_serializer DEFINITION FINAL CREATE PRIVATE.
+  PUBLIC SECTION.
+  PRIVATE SECTION.
+    CLASS-DATA gv_comma_with_lf TYPE string.
+    DATA: mt_buffer TYPE string_table,
+          BEGIN OF ms_state,
+            level TYPE i,
+          END OF ms_state,
+          mv_level TYPE i.
+ENDCLASS.
+CLASS lcl_json_serializer IMPLEMENTATION.
+  METHOD _stringify.
+  ENDMETHOD.
+ENDCLASS.
+";
+        let file = "zcl_p.clas.locals_imp.abap";
+        assert_eq!(
+            abap_decl_sources(code, file, "variable"),
+            ["gv_comma_with_lf", "mt_buffer", "ms_state", "mv_level"]
+                .map(|n| (n.to_string(), Some("abap-fallback".to_string())))
+        );
+        let rows = abap_rows(code, file);
+        for row in [
+            abap_row("variable", "mt_buffer", 7, 7),
+            abap_row("variable", "ms_state", 8, 10),
+            abap_row("variable", "mv_level", 11, 11),
+        ] {
+            assert!(rows.contains(&row), "{row:?} not in {rows:?}");
+        }
+        let entities = CodeParserPlugin.extract_entities(code, file);
+        let class = entities
+            .iter()
+            .find(|e| e.entity_type == "class" && e.name == "lcl_json_serializer")
+            .expect("the class is recovered");
+        for e in entities.iter().filter(|e| e.entity_type == "variable") {
+            assert_eq!(e.parent_id.as_ref(), Some(&class.id), "{}", e.name);
+        }
+
+        // A definition the fallback cannot hang anything on (the grammar keeps
+        // the implementation as the class, so the definition is not recovered)
+        // gives no variable rather than one under a parent that does not exist.
+        let kept = code.replace("          READ TABLE mt_stack INDEX 1 INTO lr_stack_top.\n", "");
+        let entities = CodeParserPlugin.extract_entities(&kept, file);
+        let ids: Vec<&str> = entities.iter().map(|e| e.id.as_str()).collect();
+        for e in &entities {
+            if let Some(parent) = &e.parent_id {
+                assert!(
+                    ids.contains(&parent.as_str()) || !parent.starts_with(file),
+                    "{} has no parent {parent}",
+                    e.name
+                );
+            }
+        }
+    }
+
     #[test]
     #[cfg(feature = "lang-abap")]
     fn abap_fixture_1_3_macro() {

@@ -16,7 +16,7 @@ Story 1.1 is case-insensitive names, 1.2 comment and string stripping, 1.3 the
 full entity set, 1.4 one entity per class, 1.5 abapGit layout, 1.6 parse-error
 tolerance, 1.7 test detection, 1.10 METHOD blocks the grammar loses, 2.0 names
 across files, 2.4 includes and function groups, 2.1 static calls, 2.2 receiver
-types, 2.3 inheritance and interfaces.
+types, 2.3 inheritance and interfaces, 2.7 chained declarations (T2-C).
 
 | Fixture file | Tests that read it | Story |
 |--------------|--------------------|-------|
@@ -76,6 +76,7 @@ types, 2.3 inheritance and interfaces.
 | `zfx_fg.fugr.lzfx_fgf01.abap` | `test_abap_fixture_fugr_form_include`, `abap_fixture_1_3_form` | 1.3 |
 | | `abap_fixture_2_1_perform` (the form, in the same function group) | 2.1 |
 | `zfx_fg.fugr.lzfx_fgo01.abap` | `test_abap_fixture_fugr_pbo_include`, `abap_fixture_1_3_module` | 1.3 |
+| `zcl_fx_chain.clas.abap` | `abap_fixture_2_7_chained_data_one_entity_each` (`DATA: mv_id ..., mv_name ...`), `_chained_class_data` (`CLASS-DATA:` with a `BEGIN OF` block), `_chained_data_member_added` (a copy with one more member), `_chained_types_already_split` (`TYPES: ty_id ..., ty_name ...`) | 2.7 |
 | every file in this directory | `test_abap_fixture_layout` (envelopes, line cap, name shape) | 1.5 |
 
 The `.xml` files and the `tabl`, `dtel`, `doma` and `ttyp` objects are read only
@@ -98,3 +99,5 @@ by `test_abap_fixture_layout`.
 | `abap_fixture_2_2_param_type` (a form's `USING`, a function module's comment-block signature, an interface's and a base class's parameters in another file) | 2.2 |
 | `abap_fixture_2_2_untyped_stays_unknown` (a local class's `METHODS` in `locals_def` and its `METHOD` in `locals_imp`; `NEW #( )` with no target) | 2.2 |
 | `abap_fixture_2_3_redefinition_pairs` (only `REDEFINITION` overrides: not a method named like a private base method, nor a constructor) | 2.3 |
+| `abap_fixture_2_7_interface_data` (an interface's `DATA:` chain and `CLASS-DATA`) | 2.7 |
+| `abap_fixture_2_7_chained_data_from_the_fallback` (a class the grammar loses whole, cut down from abapGit's `zcl_abapgit_ajson` locals) | 2.7 |
