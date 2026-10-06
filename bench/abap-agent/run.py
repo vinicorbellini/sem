@@ -84,7 +84,7 @@ BRIEF = (
 BRIEF_SEM_FIRST = (
     "Besides the usual tools you have three sem tools for this code base: sem_find, sem_impact and "
     "sem_certify. For where-used questions (who calls a method) call sem_find with mode \"callers\" first "
-    "and use its answer as the caller list. Use Grep only if sem_find returns an error or says INCOMPLETE, "
+    "and use its answer as the caller list, passing file with the defining file the task names and the bare method name (an interface method zif_x~m is the entity m in the interface's file). Use Grep only if sem_find returns an error or says INCOMPLETE, "
     "and then only to check the possible callers it names, not to search the code base again. When sem_find "
     "reports the line of each call, use those lines; otherwise read the calling method's range for the line. "
     "For other questions, sem_impact lists what depends on an entity and which tests to run, and "
