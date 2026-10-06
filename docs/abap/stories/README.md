@@ -135,7 +135,7 @@ Tier 2 is done when all of these hold:
 1. All nine stories are done and merged on the `abap` branch.
 2. The precision check of spec 2.7 passes: pooled over the 30 methods, resolved
    callers have at least 90% precision and 80% recall against the where-used truth.
-   The result is in `docs/abap/precision-report.md`.
+   The result is in `docs/abap/census-gate2.md`.
 3. Every Tier 2 fixture test is green and none is ignored:
    `cd crates && cargo test -p sem-core abap_fixture_2` shows zero ignored and
    zero failed, and `cargo test -p sem-core abap` still passes with Tier 1's.

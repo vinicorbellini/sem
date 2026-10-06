@@ -24,7 +24,7 @@ the study needs first: one entity per name in a chained `DATA:`.
   `crates/sem-core/tests/fixtures/abap/precision/abapgit-whereused.json`, in the
   schema of `inside-sap/README.md`. When the sapcli export exists it is
   `inside-sap/whereused.json` and the test prefers it.
-- A short report, `docs/abap/precision-report.md`, lists every method under a
+- A short report, `docs/abap/census-gate2.md`, lists every method under a
   threshold. It gives the cause of each miss: a wrong edge, a missing edge or a
   truth error. It counts the misses by cause.
 - A chained `DATA: a TYPE i, b TYPE string.` gives one `variable` entity per
@@ -56,7 +56,7 @@ the study needs first: one entity per name in a chained `DATA:`.
   `README.md`.
 - `crates/sem-core/tests/fixtures/abap/inside-sap/whereused.json`: not written
   here. An agent with SAP access produces it.
-- `docs/abap/precision-report.md`: the written result.
+- `docs/abap/census-gate2.md`: the written result.
 
 ## Approach
 
@@ -112,7 +112,7 @@ SEM_ABAP_REPO=/tmp/claude-0/abapGit SEM_ABAP_PRECISION_ASSERT=1 \
 ```
 
 Run `git -C /tmp/claude-0/abapGit checkout b2b4e250747ecb4f8e2b1d79e332d2cf897d5fa0`
-first and `git status` clean. Commit `docs/abap/precision-report.md` with the
+first and `git status` clean. Commit `docs/abap/census-gate2.md` with the
 numbers.
 
 ## Out of scope
