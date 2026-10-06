@@ -799,3 +799,65 @@ fn mcp_abap_serves_find_impact_certify() {
     let text = tool_text(&client.call_tool("sem_certify", json!({"range": "HEAD~1..HEAD"})));
     assert!(text.contains("describe") && text.contains("zfx_dynamic.prog.abap"), "{text}");
 }
+
+#[test]
+fn mcp_callers_skip_a_same_named_test_and_carry_call_lines() {
+    // A test class whose test method is named like the global `create` it calls: callers of
+    // `create` answer for the global one and name the test, as the CLI does, with each
+    // caller's call lines
+    let repo = abap_repo();
+    std::fs::write(
+        repo.path().join("src/zcl_fx_spy.clas.testclasses.abap"),
+        "CLASS ltc_spy DEFINITION FINAL FOR TESTING\n  DURATION SHORT RISK LEVEL HARMLESS.\n  PRIVATE SECTION.\n    METHODS create FOR TESTING.\nENDCLASS.\n\nCLASS ltc_spy IMPLEMENTATION.\n  METHOD create.\n    cl_abap_unit_assert=>assert_bound( zcl_fx_order=>create( 3 ) ).\n  ENDMETHOD.\nENDCLASS.\n",
+    )
+    .unwrap();
+    git(repo.path(), &["add", "-A"]);
+    git(repo.path(), &["commit", "-q", "-m", "a test named create"]);
+    let mut client = McpClient::spawn(repo.path());
+
+    let mcp = json_text(
+        &mut client,
+        "sem_find",
+        json!({"query": "create", "mode": "callers", "format": "json"}),
+    );
+    assert_eq!(mcp["entity"]["file"], "src/zcl_fx_order.clas.abap", "{mcp}");
+    assert_eq!(
+        ids(&mcp["skipped"]),
+        ["src/zcl_fx_spy.clas.testclasses.abap::class::ltc_spy::create"],
+        "{mcp}"
+    );
+    let run = mcp["callers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["name"] == "run")
+        .expect("run calls create");
+    assert_eq!(run["call_lines"], json!([13]), "{run}");
+    let cli = cli_json(repo.path(), &["find", "create", "--callers", "--json"]);
+    assert_eq!(ids(&mcp["skipped"]), ids(&cli[0]["skipped"]));
+    for caller in cli[0]["related"].as_array().unwrap() {
+        let over_mcp = mcp["callers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["id"] == caller["id"])
+            .expect("same callers");
+        assert_eq!(over_mcp["call_lines"], caller["call_lines"], "{caller}");
+    }
+
+    let text = tool_text(&client.call_tool("sem_callers", json!({"query": "create"})));
+    assert!(
+        text.contains("\n  skipped 1 test definition of the same name: method create src/zcl_fx_spy.clas.testclasses.abap:8\n"),
+        "{text}"
+    );
+    assert!(
+        text.contains(
+            "  method run src/zcl_fx_user.clas.abap:12 (call at src/zcl_fx_user.clas.abap:13)\n"
+        ),
+        "{text}"
+    );
+
+    // two definitions that are not tests are still refused
+    let text = tool_error_text(&client.call_tool("sem_callers", json!({"query": "describe"})));
+    assert!(text.contains("matches 3 definitions"), "{text}");
+}

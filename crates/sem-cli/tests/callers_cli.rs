@@ -68,6 +68,40 @@ fn callers_unique_name_lists_direct_callers() {
 }
 
 #[test]
+fn callers_carry_the_lines_that_call() {
+    let repo = fixture_repo();
+    let output = run_sem(&repo, &["callers", "target_fn", "--json"]);
+    assert!(output.status.success());
+    let rows: Value = serde_json::from_slice(&output.stdout).expect("json");
+    let lines: Vec<(String, Value)> = rows[0]["related"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| {
+            (
+                r["name"].as_str().unwrap().to_string(),
+                r["call_lines"].clone(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        lines,
+        [
+            ("caller_a".to_string(), serde_json::json!([6])),
+            ("caller_b".to_string(), serde_json::json!([10]))
+        ],
+        "each caller at the line of its call"
+    );
+
+    let text = run_sem(&repo, &["callers", "target_fn"]);
+    let stdout = String::from_utf8_lossy(&text.stdout);
+    assert!(
+        stdout.contains("caller_a app.py:5 (call at app.py:6)"),
+        "text names the call line after the caller: {stdout}"
+    );
+}
+
+#[test]
 fn callers_limit_caps_the_rows_shown() {
     let repo = fixture_repo();
     let output = run_sem(&repo, &["callers", "target_fn", "--limit", "1", "--json"]);

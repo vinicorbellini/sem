@@ -4685,26 +4685,7 @@ impl EntityGraph {
         entities: &'a [crate::model::entity::SemanticEntity],
         custom_test_dirs: &[String],
     ) -> StdHashSet<&'a str> {
-        let mut test_ids = StdHashSet::new();
-        for entity in entities {
-            if is_test_entity(entity, custom_test_dirs) {
-                test_ids.insert(entity.id.as_str());
-            }
-        }
-        // ABAP marks the class `FOR TESTING`, not each of its methods: outside a
-        // `*.testclasses.abap` file a method is a test because its class is.
-        let abap_test_members: Vec<&str> = entities
-            .iter()
-            .filter(|e| e.file_path.to_ascii_lowercase().ends_with(".abap"))
-            .filter(|e| {
-                e.parent_id
-                    .as_deref()
-                    .is_some_and(|pid| test_ids.contains(pid))
-            })
-            .map(|e| e.id.as_str())
-            .collect();
-        test_ids.extend(abap_test_members);
-        test_ids
+        test_entity_ids(entities, custom_test_dirs)
     }
 
     /// Impact analysis filtered to test entities only.
@@ -5053,6 +5034,35 @@ pub fn is_abap_test_entity(entity: &crate::model::entity::SemanticEntity) -> boo
         prev = Some(word);
     }
     false
+}
+
+/// The ids of `entities` that are tests: [`is_test_entity`], plus the methods of an ABAP
+/// test class. The body of [`EntityGraph::filter_test_entities_with_custom_dirs`], free of
+/// the graph, so a caller holding only a few re-extracted files classifies them the same way.
+pub fn test_entity_ids<'a>(
+    entities: &'a [crate::model::entity::SemanticEntity],
+    custom_test_dirs: &[String],
+) -> StdHashSet<&'a str> {
+    let mut test_ids = StdHashSet::new();
+    for entity in entities {
+        if is_test_entity(entity, custom_test_dirs) {
+            test_ids.insert(entity.id.as_str());
+        }
+    }
+    // ABAP marks the class `FOR TESTING`, not each of its methods: outside a
+    // `*.testclasses.abap` file a method is a test because its class is.
+    let abap_test_members: Vec<&str> = entities
+        .iter()
+        .filter(|e| e.file_path.to_ascii_lowercase().ends_with(".abap"))
+        .filter(|e| {
+            e.parent_id
+                .as_deref()
+                .is_some_and(|pid| test_ids.contains(pid))
+        })
+        .map(|e| e.id.as_str())
+        .collect();
+    test_ids.extend(abap_test_members);
+    test_ids
 }
 
 /// Whether `query` names an entity called `entity_name` in `file_path`: ABAP names compare
