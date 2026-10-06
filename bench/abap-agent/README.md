@@ -24,6 +24,7 @@ upstream's merge-base `dc2cc4d7173d9f3eab87d491b351927fbe2f1f63`); see "C1 targe
 | B2 change-and-verify | 6 (`tasks/b2_change.json`) | add mandatory parameter p to method X, update every caller, make the tests pass | hidden tests and `npm run unit` pass, test classes the agent ran, callers missed |
 | B3 review | 4 (`tasks/b3_review.json`) | summarise what merged PR #n changed and what it could break | changed entities and callers left behind against `ground_truth/b3_rubric.json` |
 | C1 where-used, Rust control | 12 (`tasks/c1_whereused.json`) | B1A's question on sem's own Rust source | as B1, against `ground_truth/whereused-rust.json` |
+| R1 read-method | 8 (`tasks/r1_readmethod.json`) | list every method one method in a large class calls, with the line of each call | precision/recall of called method names against `ground_truth/readmethod.json` (`score_r1`) |
 
 How the targets were picked is in each task file's `selection` field. In short:
 
@@ -32,6 +33,7 @@ How the targets were picked is in each task file's `selection` field. In short:
 - **B2**: methods whose own class has a test class that runs under `npm run unit`. Each hidden test in `hidden_tests/` was checked twice. It passes against a reference implementation (the parameter added with a DEFAULT, callers untouched). It fails to build on the unchanged checkout.
 - **B3**: four squash-merged PRs from the 300 commits before the pinned one.
 - **C1**: B1A's rule carried over to Rust: functions and methods whose name is declared 3 or more times. See "C1 targets".
+- **R1**: methods of 30 to 150 lines past line 500 of a class file of 1,500 lines or more, two per file. See "R1 targets".
 
 **Ground truth status.** `whereused.json` does not exist yet; it will come from `sapcli whereused`.
 Until it does, B1 is scored against `ground_truth/whereused.grep.json`, the hand-checked text
@@ -144,6 +146,102 @@ and confirms every truth file path and every `defined_in` exists at the pinned c
 
 `run.py` does not run B1A yet: `CLASSES`, `--class` and `RUN_TIMEOUT_S` know B1 to B3. B1A needs the B1 path
 (scorer `score_b1`, ground truth from the task file's `ground_truth`) under the new class name.
+
+## R1 targets
+
+Every class before R1 asks a where-used question, and an agent answers those with little source read (about 13k bytes
+of tool output per run in Gate 2c). R1 ("read a method in a large class") asks for what one method's body calls, the
+kind of question for which an agent reads a large class to understand one method. The rule was written into
+`tasks/r1_readmethod.json` (`selection`) before any method body was read:
+
+| Step | Rule |
+|---|---|
+| file | a global class's main include, `src/**/*.clas.abap` (not `.locals_imp`, not `.testclasses`), of **1,500 lines or more** |
+| method | a `METHOD ... ENDMETHOD` block of that class's `IMPLEMENTATION`, starting **after line 500**, body (the lines strictly between `METHOD` and `ENDMETHOD`) **30 to 150** lines; no constructor, `class_constructor` or test method |
+| callees | **5 to 30** distinct names by a call-shaped grep over the body (below) |
+| picks | the kept candidates in (file, line) order, n of them, k = n div 8, picks at index 0, k, ..., 7k; an index already used or whose file already has **2** picks moves to the next |
+
+The call-shaped grep removes comments and `'...'` / `` `...` `` literals (string templates stay, since `{ }` in them can
+hold calls), then collects the names of `->name(` and `=>name(` (with `zif_x~name`), `CALL METHOD`, a bare `name(`
+followed by a blank, `)` or the line end that is not an ABAP built-in function or constructor operator (the task
+file's `grep_builtins`), and `NEW x(` / `CREATE OBJECT` as `constructor`, each reduced to the part after its last `->`,
+`=>` or `~`. A script applied the rule and printed line numbers and counts only.
+
+At the pinned commit four files have 1,500 lines or more, so the cap of 2 per file makes it 2 picks per file, and
+n = 14 gives k = 1: in each file the first two candidates. The script's first version only allowed a blank or `)`
+after a bare call's `(`, so a call whose `(` ends the line (`parse_error(` with its parameters below) was missed,
+`zcl_abapgit_object_tabl_ddl` had no candidate and the rule could not fill eight picks under the per-file cap. The regex
+was fixed before any body was read, and n went from 11 to 14. Nothing else was changed and no pick was swapped by hand.
+
+| Task | Method | File | File lines | Lines | Body lines | grep hits | grep files | Call-shaped names | True callees | True call sites |
+|---|---|---|---:|---|---:|---:|---:|---:|---:|---:|
+| r1_01 | `zcl_abapgit_object_tabl_ddl->set_builtin_type` | `zcl_abapgit_object_tabl_ddl.clas.abap` | 2,670 | 1758-1842 | 83 | 3 | 1 | 6 | 6 | 13 |
+| r1_02 | `zcl_abapgit_object_tabl_ddl->serialize` | `zcl_abapgit_object_tabl_ddl.clas.abap` | 2,670 | 2030-2120 | 89 | 337 | 194 | 8 | 8 | 11 |
+| r1_03 | `zcl_abapgit_object_fugr->zif_abapgit_object~deserialize` | `zcl_abapgit_object_fugr.clas.abap` | 1,529 | 1292-1353 | 60 | 311 | 187 | 12 | 12 | 15 |
+| r1_04 | `zcl_abapgit_object_fugr->zif_abapgit_object~serialize` | `zcl_abapgit_object_fugr.clas.abap` | 1,529 | 1474-1528 | 53 | 337 | 194 | 14 | 14 | 17 |
+| r1_05 | `zcl_abapgit_objects=>deserialize_lxe` | `zcl_abapgit_objects.clas.abap` | 1,521 | 820-856 | 35 | 3 | 1 | 6 | 6 | 7 |
+| r1_06 | `zcl_abapgit_objects=>deserialize_step` | `zcl_abapgit_objects.clas.abap` | 1,521 | 859-942 | 82 | 3 | 1 | 13 | 13 | 19 |
+| r1_07 | `zcl_abapgit_objects_program->deserialize_program` | `zcl_abapgit_objects_program.clas.abap` | 1,597 | 668-717 | 48 | 4 | 3 | 10 | 10 | 10 |
+| r1_08 | `zcl_abapgit_objects_program->serialize_program` | `zcl_abapgit_objects_program.clas.abap` | 1,597 | 1311-1418 | 106 | 4 | 3 | 16 | 16 | 23 |
+| total | | | | | | | | | 85 | 115 |
+
+"grep hits" and "grep files" are lines and files under `src/` with the method's bare name (the part after `~`) as a
+whole word, case-insensitive: how hard the implementation would be to find by text alone. They do not come into play
+here, because the prompt names the file. `r1_03` and `r1_04` are `zif_abapgit_object~deserialize` / `~serialize`
+implementations, whose bare names have 311 and 337 whole-word hits in 187 and 194 files; `r1_02` is the class's own
+`serialize`, with the same 337 hits; the other five names occur in one to three files. "Call-shaped names" is the selection grep, "True callees" and "True call sites" the
+ground truth; on all eight the grep's name count equals the truth's.
+
+**The prompt.** The method as `zcl_x->m` (`zcl_x=>m` for a static method), its file, the counting rules, and the
+answer format `{"calls": [{"callee": "...", "line": 123}]}`. Method calls are `receiver->name( )`, `class=>name( )`,
+`zif_x~name( )`, a bare `name( )` of the class's own or inherited methods, `CALL METHOD` with a static name, and object
+creation with `NEW` or `CREATE OBJECT`, a call of `constructor` (as is `super->constructor( )`); a chained call
+`a( )->b( )` is two calls. Function modules (`CALL FUNCTION`), `PERFORM`, dynamic calls with a literal or variable
+name, built-in functions, constructor operators, `RAISE EXCEPTION TYPE`, statements such as `CLEAR`, comments and calls
+in the class's local test classes do not count. The method's line range is not in the prompt.
+
+**The ground truth.** `ground_truth/readmethod.json`, `targets` -> task id -> `[{"callee", "line"}]`, one item per call
+site, the callee as written in the source, the line where the called method's name appears. Every body was read in full
+at the pinned commit, and every call-shaped hit in it (any `name(` with its receiver chain, and every `CALL METHOD`,
+`CALL FUNCTION`, `CREATE OBJECT`, `NEW` and `PERFORM`, comments included) is a line in
+`ground_truth/readmethod.review.md` (`line | decision | reason`): 127 hits, 115 calls, 12 not (the
+built-in functions `to_lower`, `strlen`, `repeat` and `lines`, and one `CALL FUNCTION 'RPY_PROGRAM_READ'`). sem was
+neither built nor run for any of it. Judgement calls a second reader should check: `CREATE OBJECT li_xml TYPE
+zcl_abapgit_xml_output` in `r1_08` counts as `constructor` (the prompt says so); `zcl_abapgit_objects_activation=>clear( )`
+in `r1_06` is a method call, not the `CLEAR` statement; a chained factory call such as
+`zcl_abapgit_factory=>get_sap_report( )->read_progdir( )` is two calls on one line.
+
+**The scorer.** `score_r1` in `scorers.py`, in the style of `score_b1`. Both sides are reduced to the called method's
+name (`_callee_name`): lower case, a leading `CALL METHOD` dropped, `NEW ...` and `CREATE OBJECT ...` read as
+`constructor`, argument lists removed innermost first, then everything up to the last `=>`, `->` and `~` stripped. So
+`lo_repo->get_name`, `me->get_name`, `zif_abapgit_repo~get_name` and `get_name` all score as `get_name`, and the
+receiver's spelling never matters. Precision, recall and F1 are over the set of names (`success_score` is F1); two
+receivers calling the same name are one item. `line_precision` (and `line_recall`, in `results.jsonl`) match answer
+items one to one to true call sites of the same name within `LINE_TOLERANCE` (2) lines, as B1 does.
+
+Check: every task has callees, every file exists at the pinned commit with the recorded length, every truth line lies
+inside its method, and the truth scored against itself gives 1.0 on all eight. The scorer on three hand-written
+answers for `r1_08`: the truth itself, the truth with `li_report->` written as `zif_abapgit_sap_report~` and `li_xml->`
+as `me->mo_xml->`, and the truth plus the function module:
+
+```sh
+python3 -c "
+import json, sys; sys.path.insert(0, 'bench/abap-agent'); import scorers
+truth = json.load(open('bench/abap-agent/ground_truth/readmethod.json'))['targets']['r1_08']
+exact = {'calls': truth}
+receiver = {'calls': [dict(c, callee=c['callee'].replace('li_report->', 'zif_abapgit_sap_report~').replace('li_xml->', 'me->mo_xml->')) for c in truth]}
+fm = {'calls': truth + [{'callee': 'RPY_PROGRAM_READ', 'line': 1332}]}
+for label, answer in (('exact', exact), ('receiver', receiver), ('function module', fm)):
+    r = scorers.score_r1(json.dumps(answer), truth)
+    print(f\"{label:<16} f1 {r['f1']} precision {r['precision']} recall {r['recall']} line_precision {r['line_precision']} fp {r['false_positives']}\")
+"
+```
+
+```
+exact            f1 1.0 precision 1.0 recall 1.0 line_precision 1.0 fp []
+receiver         f1 1.0 precision 1.0 recall 1.0 line_precision 1.0 fp []
+function module  f1 0.9697 precision 0.9412 recall 1.0 line_precision 0.9583 fp ['rpy_program_read']
+```
 
 ## C1 targets
 
@@ -278,7 +376,7 @@ python3 bench/abap-agent/run.py --checkpoint gate1 --class B1 --task b1_03 --rep
 |---|---|
 | `--checkpoint baseline\|gate1\|gate2\|gate2b\|gate2c\|control` | Written to every row; required for a real run. |
 | `--arm grep\|sem\|both` | Which arms to run (default both). |
-| `--class B1\|B1A\|B2\|B3\|C1\|all` | Which task classes (default all); `--task b2_04` (repeatable) narrows to single tasks. A class whose task file is absent is skipped with one line. |
+| `--class B1\|B1A\|B2\|B3\|C1\|R1\|all` | Which task classes (default all); `--task b2_04` (repeatable) narrows to single tasks. A class whose task file is absent is skipped with one line. |
 | `--model` | Passed to `claude --model` (default `claude-sonnet-5-5`). |
 | `--reps` | Repetitions per task per arm (default 3). |
 | `--brief [sem-first\|sem-find-only]` | Add one paragraph to the **sem arm's** prompt naming `sem_find`, `sem_impact` and `sem_certify`. Plain `--brief` tells the agent to prefer them over grep (`BRIEF` in `run.py`); `--brief sem-first` tells it to ask `sem_find` first and grep only to check what it names (`BRIEF_SEM_FIRST`; see "Briefing"); `--brief sem-find-only` is the same for a server that lists `sem_find` alone, and needs `--mcp-tools sem_find`. The grep arm's prompt is unchanged. Default off. Recorded in the `brief` column. |
@@ -837,6 +935,115 @@ its INCOMPLETE answers is inferred from the call counts above, not measured. Two
 and `sem_find` cannot pick between two same-named methods of different types in one file by `file` alone. Neither
 moved a score. **The adoption verdict is unchanged: drop**, as Gate 2b decided; this control is reporting only and
 decides nothing.
+
+## Gate 2d, R1 read-method (reporting only)
+
+**The question.** Every class before R1 asks where-used questions, which read little source. Real agent work on ABAP
+reads large classes to understand one method, and that is where context goes. Does a tool that returns one method by
+name save input tokens against an agent that has to find and read it with Grep and Read, at equal correctness? This is
+reporting only: it has no adoption criterion, and **the adoption verdict is unchanged: drop**, as Gate 2b decided.
+
+| Setting | Value |
+|---|---|
+| Checkpoint | `gate2d` |
+| Class | R1 (see "R1 targets": the selection rule, the eight targets, the scorer's normalisation) |
+| Arms | grep, and the cli arm (`--arm cli --brief cli`, merged from `bench/gate2d-cli`): the grep arm's tools exactly, with the sem binary's directory first on `PATH`, no MCP server |
+| Repetitions | 3 per task per arm, 48 runs |
+| Model, effort | `claude-sonnet-5-5`, high, Claude Code 2.1.291 |
+| sem | `/home/user/sem/crates/target/release/sem`, the release binary built at `767f67e` on this branch (`sem 0.27.0`); not rebuilt. The rows' `build` column says `72a6c38334ac`, the harness commit the run started from, not the binary's |
+| Cap | 3.5 USD |
+
+```sh
+python3 bench/abap-agent/run.py --checkpoint gate2d --arm grep --class R1 --task r1_01 --reps 3 --cap-usd 3.5 \
+  --sem-binary /home/user/sem/crates/target/release/sem --work-dir /tmp/sem-bench-r1
+python3 bench/abap-agent/run.py --checkpoint gate2d --arm cli --brief cli --class R1 --task r1_01 --reps 3 --cap-usd 3.5 \
+  --sem-binary /home/user/sem/crates/target/release/sem --work-dir /tmp/sem-bench-r1
+python3 bench/abap-agent/summarize.py --checkpoint gate2d --brief cli --class R1
+```
+
+`--arm cli` runs alone, so each task took two invocations, one per arm, each with the rest of the 3.5 USD as
+`--cap-usd`. The arm that went first alternated by task (cli first on `r1_01`, `r1_03`, `r1_05` and `r1_07`), in place
+of the per-repetition alternation of a `--arm both` run.
+
+**The CLI route.** What the release binary offers for reading one method by name, probed on a checkout of the pinned
+commit:
+
+| Command | Prints | Bytes, `r1_01` / `r1_08` |
+|---|---|---:|
+| `sem find NAME --file F` | `method NAME F:START`: the start line only | 84 / 80 |
+| `sem find NAME --file F --json` | id, name, type, file, `start_line`, `end_line` | 260 / 252 |
+| `sem find NAME --file F --context` | the body, then its callees, callers and transitive neighbours, packed into an 8,000-token budget | 6,331 / 14,759 |
+| `sem find NAME --file F --context --budget 900` | the same, packed tighter | 5,626 / 5,206 |
+| `sem find NAME --file F --refs` | what it uses: methods, classes, types and constants, each with its definition's line, not the call's | 594 / 1,973 |
+| the method's own lines (`sed -n START,ENDp`) | the body | 3,148 / 3,406 |
+| the whole file | | 89,896 / 48,792 |
+
+No subcommand prints just an entity's body (`sem --help` and `sem find --help` list no `body`, `show` or `read`).
+`--context` is the one that prints code by name, but always with the neighbours: 2 to 4 times the body, and with a
+budget too small for them it leaves out the target as well (`--budget 1`: "target omitted"). `--file` is not in
+`sem find --help` but is accepted. An interface method a class implements is found only by its full name:
+`sem find deserialize --file src/objects/zcl_abapgit_object_fugr.clas.abap --json` returns `[]`, with
+`zif_abapgit_object~deserialize` it returns the range. So the CLI route is `sem find NAME --file F --json` for the
+range, then `Read` with offset and limit.
+
+**The briefing.** The cli arm's paragraph (`BRIEF_CLI`, the where-used advice) plus, on R1 only, one sentence
+(`BRIEF_CLASS_SUFFIX[("cli", "R1")]` in `run.py`; the `brief` column stays `cli`):
+
+> To read one method, run `sem find NAME --file FILE --json` in Bash, with NAME the method's name after the class as the task writes it (zif_x~m for an interface method a class implements), which prints its start_line and end_line, and Read only that range of the file (offset and limit), not the whole file.
+
+The dry run's tool check runs that command (2.3 to 2.7 s on a cold index, 252 to 266 bytes). The first two cli
+transcripts were read before going on: each made the `sem find ... --json` call, then one `Read` of exactly the range.
+
+**Results.** 48 of 48 planned runs, **1.34 USD** by Claude Code's figure. No run hit an error, the turn bound or the
+timeout. Per-run means, except cost (summed); deltas are the cli arm against the grep arm (`summarize.py --checkpoint
+gate2d --brief cli --class R1`):
+
+| Class | Arm | Runs | Success | Precision | Tokens read | Output tokens | Cost (USD) | Wall time (s) | Tool calls | sem calls |
+|---|---|---|---|---|---|---|---|---|---|---|
+| R1 | grep | 24 | 1.000 | 1.000 | 24,245 | 985 | 0.71 | 11.2 | 2.2 | - |
+| R1 | cli | 24 | 1.000 | 1.000 | 22,531 (-7%) | 838 (-15%) | 0.64 (-10%) | 13.1 (+17%) | 2.0 (-8%) | 1.0 |
+
+From `results.jsonl` and the transcripts, per run:
+
+| Arm | First-call context | bytes_read | files_read | Read calls | Grep calls | Bash calls | Turns | line_precision |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| grep | 6,428 | 3,550 | 1.0 | 1.0 | 1.08 | 0.13 | 3.21 | 1.000 |
+| cli | 6,694 | 2,958 | 1.0 | 1.0 | 0 | 1.04 | 3.04 | 1.000 |
+
+First-call context is the first assistant message's `input_tokens + cache_read_input_tokens +
+cache_creation_input_tokens` (grep 6,420 to 6,438, cli 6,686 to 6,704); the 266 tokens between them are the cli
+briefing. Of `bytes_read`, `Read` returned 2,913 bytes per call in the grep arm and 2,710 in the cli arm, the
+`Grep` calls 584 bytes each, and `sem find --json` 238 bytes each (one `echo done` included). Every `Read` in both
+arms had an offset and a limit; no run read a whole file.
+
+Tokens read per task, grep / cli (mean of 3): r1_01 22,734 / 22,714 (-0%), r1_02 30,444 / 22,923 (-25%), r1_03
+22,122 / 21,897 (-1%), r1_04 21,653 / 21,772 (+1%), r1_05 24,282 / 21,469 (-12%), r1_06 25,490 / 25,289 (-1%), r1_07
+21,435 / 21,471 (+0%), r1_08 25,805 / 22,712 (-12%).
+
+**What grep did.** The premise of R1, that a text-search agent reads the large class, did not hold. In all 24 runs
+the grep arm ran one `Grep` in the file the prompt names, in 18 of them for `METHOD name|ENDMETHOD` (the method's first
+line and every `ENDMETHOD` line of the file), in the rest for the name alone or with a second name, and then one
+`Read` of the range, overshooting the method by 16 lines on average (0 to 88). Two of the three `r1_02` runs added a `Grep` for
+`escape_name` to check that it is a method; that is the -25%. The bare name's repo-wide grep hits (up to 337 in 194
+files) never mattered: the prompt names the file.
+
+**What the CLI did.** Every cli run made exactly one `sem find ... --json` call (24 of 24, `sem_cli_calls`), with the
+`zif_abapgit_object~` name on `r1_03` and `r1_04`, and read exactly the range. It replaced the 584-byte `Grep` with a
+238-byte answer and the overshoot with an exact limit, and finished in fewer turns (3.04 against 3.21). Wall time
+rose 17%, about the 2.5 s sem takes to index the cold checkout.
+
+**Reading.** At equal correctness (1.000 in both arms, line precision 1.000) the cli arm read 7% fewer tokens and cost
+10% less, after paying 266 tokens per request for its briefing. But the saving is in locating the method, not in
+reading it: the grep agent already reads only the method, because Sonnet greps for the `METHOD` line and reads a
+window, so the "large class" is never in context in either arm. On this question, with the file named, a by-name
+read tool can save little more than this: the grep arm's `Grep` output (584 bytes, about 150 tokens) and its read
+overshoot are the whole gap, and the per-request briefing costs about as much again. Where the gap is large (`r1_02`,
+`r1_05`, `r1_08`, -12% to -25%) it is one extra grep turn or a wide window in the grep arm, not a whole file read. The
+CLI cannot return the body alone (`--context` returns 2 to 4 times it). A command that did would save a turn, and a turn
+here re-reads the whole 6.5k-token context, so up to a third of a run's tokens; but the grep arm could save the same
+turn with one `sed -n '/METHOD name\./,/ENDMETHOD/p'` in Bash, which no run tried (inferred from the per-turn context,
+not measured). A harder variant would not name the file, or would ask about a method reached through
+an interface. **Reporting only: the adoption verdict is unchanged, drop.**
 
 ## Known issues
 
