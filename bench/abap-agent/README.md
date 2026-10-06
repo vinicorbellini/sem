@@ -667,6 +667,75 @@ question, and grep on this model is not wrong often enough on ABAP to pay for it
 (one tool, a short description) would remove most of the per-turn cost; that is the one lever this
 run identifies, and under the rule it is for the owner to decide whether it is worth a run of its own.
 
+## Control: Rust where-used (reporting only)
+
+Checkpoint `control`, class C1, `--brief sem-first`, 3 repetitions, `claude-sonnet-5-5` at effort high through
+Claude Code 2.1.291, the same harness, arms, briefing and turn bound as Gate 2b. sem served MCP from
+`/home/user/sem/crates/target/release/sem`, built from this branch at `767f67e` (the merge of the `sem_find` callers
+fixes of 40acad8, as in Gate 2b; the binary reports `sem 0.27.0`). The rows' `build` column says `1d00678b37eb`,
+because it records the checkout the harness ran from (the commit that added C1), not the binary's. `abapgit_commit`
+is `dc2cc4d7173d`, sem at upstream's merge-base. 72 of 72 planned runs, **4.23 USD** by Claude Code's figure against
+a 6 USD cap. No run hit an error, the turn bound or the timeout, and the sem server was `connected` in every sem run.
+
+```sh
+python3 bench/abap-agent/run.py --checkpoint control --brief sem-first --class C1 --reps 3 --cap-usd 6 \
+  --sem-binary /home/user/sem/crates/target/release/sem --work-dir /tmp/sem-bench-control
+python3 bench/abap-agent/summarize.py --checkpoint control --brief sem-first
+```
+
+**What the control isolates.** Gate 2b found the sem arm reading 35% more tokens than grep on B1A, with grep at
+1.000. That can mean two things: sem does not pay for itself on a short where-used task with this model, or the ABAP
+port is what costs. C1 keeps everything but the language and the repository: the same question shape (a name
+declared 3 or more times, strata as B1A's), the same prompt clauses, the same briefing, on a Rust repository whose
+resolver is upstream's. If the gap were the port's, it should close on Rust. The targets are under "C1 targets".
+
+Per-run means, except cost (summed); deltas are the sem arm against the grep arm (`summarize.py --checkpoint
+control --brief sem-first`), with Gate 2b's B1A rows for comparison:
+
+| Class | Arm | Runs | Success | Precision | Tokens read | Output tokens | Cost (USD) | Wall time (s) | Tool calls | sem calls |
+|---|---|---|---|---|---|---|---|---|---|---|
+| C1 | grep | 36 | 1.000 | 1.000 | 45,458 | 1,664 | 2.23 | 17.1 | 4.0 | - |
+| C1 | sem (sem-first) | 36 | 1.000 | 1.000 | 53,655 (+18%) | 1,457 (-12%) | 2.00 (-10%) | 17.9 (+5%) | 3.6 (-9%) | 1.25 |
+| B1A (Gate 2b) | grep | 36 | 1.000 | 1.000 | 55,601 | 2,500 | 2.71 | 22.9 | 5.1 | - |
+| B1A (Gate 2b) | sem (sem-first) | 36 | 1.000 | 1.000 | 75,095 (+35%) | 2,225 (-11%) | 2.80 (+3%) | 25.1 (+10%) | 4.5 (-10%) | 1.0 |
+
+Tokens read per task, grep vs sem (mean of 3): c1_01 35,545 / 55,001 (+55%), c1_02 52,939 / 73,805 (+39%), c1_03
+61,766 / 73,261 (+19%), c1_04 37,843 / 46,456 (+23%), c1_05 82,269 / 48,895 (-41%), c1_06 39,959 / 61,308 (+53%),
+c1_07 41,479 / 49,873 (+20%), c1_08 73,961 / 49,974 (-32%), c1_09 35,070 / 71,564 (+104%), c1_10 23,791 / 44,014
+(+85%), c1_11 23,947 / 34,313 (+43%), c1_12 36,926 / 35,394 (-4%). Turns: 5.0 grep, 4.6 sem.
+
+**First-call context.** The first assistant message's `input_tokens + cache_read_input_tokens +
+cache_creation_input_tokens`, from the transcripts, mean over runs: grep **6,331** (6,296 to 6,465), sem **10,821**
+(10,786 to 10,955). The difference, 4,490 tokens, is the eight `sem mcp` tool schemas and the server's instructions,
+the same 4.5k as on every ABAP class; it does not depend on the language. Over the sem arm's 4.6 turns it is some
+21k tokens read, more than the whole C1 gap (8.2k), so on Rust the sem arm's tool traffic was lighter than grep's and
+the schemas alone put it over.
+
+**What `sem_find` did.** Every sem run called it first, as briefed: 42 calls in 36 runs. 27 answered with a caller
+list, and all 27 said INCOMPLETE (on names declared several times the resolver reports the possible callers it did
+not bind, as on ABAP). 10 were refusals, in 9 runs on three targets: "no entity named 'lower'" / "'layout'" on
+`c1_01` and `c1_02` (a trait method declared without a body is not an entity, so the trait targets' question cannot be
+asked), and "'identity' matches 2 definitions; pass file" on `c1_09` (4 calls in 3 runs), where both definitions are in
+the file the task names (`FastExtractorSet::identity` and a test stub's impl). The last 5 listed `lang.rs` with `in`
+after the `c1_01` / `c1_02` refusal, before the agent went to Grep. The sem arm made 1.47 Grep and 0.53 Bash calls per run (grep arm 1.94 and 1.50; B1A's sem
+arm 1.8 and 1.5). Where the answer was usable the arm was cheaper on the targets with the most call sites
+(`QueryIndex::lookup` -41%, `QueryIndex::file_count` -32%), and most expensive where it refused (`c1_09` +104%,
+`c1_01` +55%) or where grep is trivially exact (`c1_10`, fourteen `self.auth_header()` calls in one file, +85%).
+
+**What grep did.** 1.000 on all twelve targets, all 36 runs, where 33% of the call-shaped hits are calls of the
+target, as on B1A: the model read the receivers itself, including the three traps the targets were picked for (the
+bare `lower(` inside each `impl Lang`, `ParserRegistry`'s same-named method, two `CloudClient` types).
+
+**Reading.** The control reproduces Gate 2b's shape on a language upstream sem was built for: equal answers, the sem
+arm reading more context (+18% against +35%), and the gap explained by the same 4.5k-token per-turn schema cost.
+Under Gate 2b's B1A criterion (tokens read at most 85% of grep's) C1 would fail too, at 118%. So the result is mostly
+"sem does not pay for itself on short where-used tasks with this model", not "the ABAP port is the problem". What
+the port adds is the other half of the B1A gap; that it comes from the extra Bash and Grep the ABAP sem arm ran after
+its INCOMPLETE answers is inferred from the call counts above, not measured. Two findings are about sem on Rust, not about the port: a trait method without a default body has no entity,
+and `sem_find` cannot pick between two same-named methods of different types in one file by `file` alone. Neither
+moved a score. **The adoption verdict is unchanged: drop**, as Gate 2b decided; this control is reporting only and
+decides nothing.
+
 ## Known issues
 
 - **abapGit's libraries are pinned here, not by abapGit.** `abap_transpile` clones the libraries named in `test/abap_transpile.json` (`open-abap-core`, `open-abap-gui`, `open-abap-seo`, `express-icf-shim`, `abapGit-web-classic`) from their default branches on every build. On 2026-10-05 `open-abap-gui` changed (#188 to #195) and `npm run unit` started failing before any test ran (`Error: Void type: DISVARIANT` in `cl_alv_variant`), which made B2 unscorable. `abapgit-transpile-libs.json` now maps each library to its repository and its last commit before the pinned abapGit commit (2026-10-04T17:55Z). The harness clones each at that commit into `<work-dir>/libs/<name>` and rewrites `libs[]` in each checkout's `test/abap_transpile.json` from `url` to `folder`. The transpiler resolves `folder` as `path.join(cwd, folder)`, so an absolute path does not work; the harness writes it relative to the checkout. The libraries sit outside every checkout so agents' `grep` and sem's index never see them. The harness fails if the config names a library the pin file lacks, or the reverse. Re-pin on purpose only, and say so in the commit.
