@@ -5,8 +5,9 @@ Paired agent runs on a pinned commit of abapGit: same model, same prompt, both t
 headless Claude Code (`claude -p`). One arm gets the built-in Bash, Read, Grep and Glob
 ("grep"), the other those plus the tools of `sem mcp` attached with --mcp-config ("sem"). A third arm, "cli"
 (Gate 2d), has the grep arm's tools and the sem binary on PATH, to run `sem find` through Bash.
-Task classes: B1 where-used, B1A where-used on ambiguous names, B2 change-and-verify, B3 review, and C1 where-used
-on a Rust repository (the control; a task file's `repo` names the repository). Every run gets a fresh checkout and
+Task classes: B1 where-used, B1A where-used on ambiguous names, B2 change-and-verify, B3 review, C1 where-used
+on a Rust repository (the control; a task file's `repo` names the repository), and R1 read one method in a large
+class. Every run gets a fresh checkout and
 appends one row to results.csv.
 
 Usage:
@@ -37,11 +38,11 @@ import tools  # noqa: E402
 MODEL = "claude-sonnet-5-5"
 EFFORT = "high"            # set explicitly: the default differs by model
 MAX_TURNS = 40             # claude --max-turns: a safety bound, not a target
-RUN_TIMEOUT_S = {"B1": 1800, "B1A": 1800, "B2": 3600, "B3": 1800, "C1": 1800}   # wall clock per run; the process group is killed
+RUN_TIMEOUT_S = {"B1": 1800, "B1A": 1800, "B2": 3600, "B3": 1800, "C1": 1800, "R1": 1800}   # wall clock per run; the process group is killed
 REPS = 3
 CHECKPOINTS = ("baseline", "gate1", "gate2", "gate2b", "gate2c", "control", "gate2d")
 ARMS = ("grep", "sem")     # --arm both; `--arm cli` runs the cli arm alone
-CLASSES = ("B1", "B1A", "B2", "B3", "C1")
+CLASSES = ("B1", "B1A", "B2", "B3", "C1", "R1")
 SCORED_AS_B1 = ("B1", "B1A", "C1")   # where-used: score_b1 against the task file's ground_truth
 
 BENCH_DIR = Path(__file__).resolve().parent
@@ -63,6 +64,7 @@ TASK_FILES = {
     "B2": BENCH_DIR / "tasks" / "b2_change.json",
     "B3": BENCH_DIR / "tasks" / "b3_review.json",
     "C1": BENCH_DIR / "tasks" / "c1_whereused.json",
+    "R1": BENCH_DIR / "tasks" / "r1_readmethod.json",
 }
 
 # Identical for both arms, and sent as the head of the prompt: `claude -p` takes one prompt,
@@ -116,6 +118,13 @@ BRIEF_CLI = (
 )
 BRIEFS = {"1": BRIEF, "sem-first": BRIEF_SEM_FIRST, "sem-find-only": BRIEF_SEM_FIND_ONLY,
           "cli": BRIEF_CLI}   # the `brief` column's values; "0" is no briefing
+# One sentence more for a briefing on one class, after its paragraph; the `brief` column keeps the briefing's key.
+# R1 (read one method): `sem find` prints a method's line range; no sem command prints just its body (README: "Gate 2d, R1").
+BRIEF_CLASS_SUFFIX = {
+    ("cli", "R1"): "To read one method, run `sem find NAME --file FILE --json` in Bash, with NAME the method's name after "
+                   "the class as the task writes it (zif_x~m for an interface method a class implements), which prints "
+                   "its start_line and end_line, and Read only that range of the file (offset and limit), not the whole file.",
+}
 
 CSV_COLUMNS = [
     "timestamp", "checkpoint", "build", "sem_version", "abapgit_commit", "model", "arm", "brief",
@@ -264,11 +273,16 @@ def make_workspace(base: Path, work_dir: Path, run_id: str, commit: str, task_cl
 
 
 def build_prompt(spec: dict, task: dict, brief: str | None = None) -> str:
-    """Both arms get the same text; `brief` (the sem arm only, a key of BRIEFS) adds that sem briefing paragraph."""
+    """Both arms get the same text; `brief` (the sem or cli arm only, a key of BRIEFS) adds that sem briefing paragraph,
+    plus its BRIEF_CLASS_SUFFIX sentence for the task's class, if any."""
     fields = dict(task)
     if spec["class"] == "B3":
         fields["head"] = spec["abapgit_commit"][:12]
-    head = INSTRUCTIONS.format(code_base=spec.get("code_base", "an ABAP code base")) + "\n\n" + (BRIEFS[brief] + "\n\n" if brief else "")
+    if brief and (brief, spec["class"]) in BRIEF_CLASS_SUFFIX:
+        brief_text = BRIEFS[brief] + " " + BRIEF_CLASS_SUFFIX[(brief, spec["class"])]
+    else:
+        brief_text = BRIEFS[brief] if brief else None
+    head = INSTRUCTIONS.format(code_base=spec.get("code_base", "an ABAP code base")) + "\n\n" + (brief_text + "\n\n" if brief else "")
     return head + spec["prompt_template"].format(**fields)
 
 
@@ -341,6 +355,8 @@ def score(spec: dict, task: dict, answer: str, workspace: Path, base: Path, scra
     if spec["class"] in SCORED_AS_B1:   # same scorer and ground-truth schema
         truth = scorers.load_whereused(BENCH_DIR / spec["ground_truth"], task["id"])
         return scorers.score_b1(answer, truth, scope=spec.get("scope", scorers.TRUTH_SCOPE))
+    if spec["class"] == "R1":
+        return scorers.score_r1(answer, scorers.load_readmethod(BENCH_DIR / spec["ground_truth"], task["id"]))
     if spec["class"] == "B2":
         return scorers.score_b2(task, workspace, base, BENCH_DIR / spec["hidden_tests_dir"], scratch)
     rubric = scorers.load_rubric(BENCH_DIR / spec["rubric"], task["id"])
@@ -390,7 +406,10 @@ def check_sem_cli(sem_binary: Path, workspace: Path, task: dict) -> list[str]:
     """--dry-run, cli arm: the command BRIEF_CLI names, run once in the checkout (a cold index)."""
     target = task.get("method") or task.get("target")
     method = target.replace("=>", "->").split("->")[-1].split("~")[-1].split("::")[-1]
-    cmd = [str(sem_binary), "find", method, "--callers", "--file", task["defined_in"]]
+    if "defined_in" in task:
+        cmd = [str(sem_binary), "find", method, "--callers", "--file", task["defined_in"]]
+    else:   # R1: the method's line range, as BRIEF_CLASS_SUFFIX says (zif_x~m kept)
+        cmd = [str(sem_binary), "find", target.replace("=>", "->").split("->")[-1], "--file", task["file"], "--json"]
     start = time.time()
     r = subprocess.run(cmd, cwd=workspace, capture_output=True, text=True, env={**os.environ, **tools.SEM_ENV})
     return [f"{' '.join(cmd[1:])}: exit {r.returncode}, {len(r.stdout.encode())} bytes, {time.time() - start:.1f}s"]

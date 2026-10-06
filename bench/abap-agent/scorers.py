@@ -4,6 +4,7 @@ B1 where-used:      precision/recall of the calling methods against ground_truth
 B2 change-and-verify: hidden tests + `npm run unit` in a scratch copy of the agent's checkout,
                     the new parameter's signature, and call sites that do not pass it.
 B3 review:          changed entities and callers left behind against ground_truth/b3_rubric.json.
+R1 read-method:     precision/recall of the methods one method's body calls, against ground_truth/readmethod.json.
 
 Every scorer returns a dict; "success_score" is the one number per run that goes in the CSV.
 """
@@ -19,7 +20,7 @@ import tools
 
 # ── Config ──────────────────────────────────────────────────────────────────
 
-LINE_TOLERANCE = 2        # B1: a reported line within this many lines of the true call matches
+LINE_TOLERANCE = 2        # B1 and R1: a reported line within this many lines of the true call matches
 TRUTH_SCOPE = "src/"       # B1: the ground truth covers src/ only; answer items elsewhere are not scored (a task file's `scope` overrides it)
 NPM_UNIT_TIMEOUT_S = 1800
 HIDDEN_TEST_CLASS = "ltcl_hidden_b2"
@@ -141,6 +142,82 @@ def score_b1(answer: str, truth, scope: str = TRUTH_SCOPE) -> dict:
         "false_positives": sorted("::".join(p) for p in predicted - expected),
         "false_negatives": sorted("::".join(t) for t in expected - predicted),
         "success_score": method_scores["f1"],
+    })
+    return result
+
+
+# ── R1 ──────────────────────────────────────────────────────────────────────
+
+
+def load_readmethod(path: Path, task_id: str):
+    """Ground truth for one R1 task, or None when the file or the task is not there.
+
+    Format: {"abapgit_commit": "...", "targets": {"r1_01": [{"callee": "lo_x->name", "line": 123}]}},
+    one item per call site, the callee as written in the source.
+    """
+    if not path.exists():
+        return None
+    data = json.loads(path.read_text())
+    return data.get("targets", {}).get(task_id)
+
+
+def _callee_name(callee: str) -> str:
+    """The called method's name, receiver and interface stripped: what R1 scores on.
+
+    'lo_repo->get_name' -> 'get_name'; 'zcl_x=>get( )->run( iv = 1 )' -> 'run'; 'me->zif_x~m' and
+    'zif_x~m' -> 'm'; 'CALL METHOD lo_x->m' -> 'm'; 'NEW zcl_x( )', 'CREATE OBJECT lo_x' and
+    'super->constructor' -> 'constructor'. Argument lists go first, innermost out, so a '->' inside
+    them never decides the name.
+    """
+    name = (callee or "").strip().lower()
+    name = re.sub(r"^call\s+method\s+", "", name)
+    if re.match(r"^(?:new|create\s+object)\b", name):
+        return "constructor"
+    while re.search(r"\([^()]*\)", name):
+        name = re.sub(r"\([^()]*\)", "", name)
+    for sep in ("=>", "->", "~"):
+        name = name.rsplit(sep, 1)[-1]
+    return name.strip(" .()")
+
+
+def score_r1(answer: str, truth) -> dict:
+    """Set of called method names (_callee_name) against the truth's; lines one-to-one per name, within LINE_TOLERANCE."""
+    parsed = parse_final_json(answer, "calls")
+    calls = parsed.get("calls", []) if parsed else []
+    calls = [c for c in calls if isinstance(c, dict)]
+    result = {"parsed": parsed is not None, "predicted_count": len(calls)}
+    if truth is None:
+        result["error"] = "no ground truth (ground_truth/readmethod.json)"
+        return result
+
+    predicted = {_callee_name(c.get("callee")) for c in calls} - {""}
+    expected = {_callee_name(t["callee"]) for t in truth}
+    name_scores = set_scores(predicted, expected)
+
+    # Line level: one answer item matches one true call site of the same name, within LINE_TOLERANCE.
+    remaining = [(_callee_name(t["callee"]), int(t["line"])) for t in truth]
+    line_tp = 0
+    for c in calls:
+        try:
+            key = (_callee_name(c.get("callee")), int(c.get("line")))
+        except (TypeError, ValueError):
+            continue
+        hit = next((t for t in remaining if t[0] == key[0] and abs(t[1] - key[1]) <= LINE_TOLERANCE), None)
+        if hit:
+            remaining.remove(hit)
+            line_tp += 1
+
+    result.update({
+        "truth_count": len(expected),
+        "truth_call_sites": len(truth),
+        "precision": name_scores["precision"],
+        "recall": name_scores["recall"],
+        "f1": name_scores["f1"],
+        "line_precision": round(line_tp / len(calls), 4) if calls else 0.0,
+        "line_recall": round(line_tp / len(truth), 4) if truth else 0.0,
+        "false_positives": sorted(predicted - expected),
+        "false_negatives": sorted(expected - predicted),
+        "success_score": name_scores["f1"],
     })
     return result
 
