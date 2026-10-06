@@ -125,13 +125,16 @@ def arm_tools(arm: str, writes: bool) -> tuple[list[str], list[str]]:
     return builtin, allowed
 
 
-def mcp_config(sem_binary: str, workspace: Path, log_path: Path) -> dict:
-    """`sem mcp` over stdio in the run's checkout, standalone, its stderr appended to log_path."""
+def mcp_config(sem_binary: str, workspace: Path, log_path: Path, mcp_tools: str | None = None) -> dict:
+    """`sem mcp` over stdio in the run's checkout, standalone, its stderr appended to log_path.
+
+    `mcp_tools` (--mcp-tools) becomes SEM_MCP_TOOLS: the server lists only those tools.
+    """
     return {"mcpServers": {MCP_SERVER: {
         "type": "stdio",
         "command": "sh",
         "args": ["-c", 'cd "$2" && exec "$0" mcp 2>>"$1"', sem_binary, str(log_path), str(workspace)],
-        "env": {"SEM_REPO": str(workspace), **SEM_ENV},
+        "env": {"SEM_REPO": str(workspace), **SEM_ENV, **({"SEM_MCP_TOOLS": mcp_tools} if mcp_tools else {})},
     }}}
 
 
@@ -266,9 +269,9 @@ def usage_of(stats: RunStats) -> dict:
 class SemMcp:
     """A `sem mcp` process for one checkout, spoken to over stdio, the way Claude Code starts it."""
 
-    def __init__(self, sem_binary: str, workspace: Path, log_path: Path):
-        env = {k: v for k, v in os.environ.items() if k != "SEM_MCP_REQUIRE_SHARED"}
-        env.update({"SEM_REPO": str(workspace), **SEM_ENV})
+    def __init__(self, sem_binary: str, workspace: Path, log_path: Path, mcp_tools: str | None = None):
+        env = {k: v for k, v in os.environ.items() if k not in ("SEM_MCP_REQUIRE_SHARED", "SEM_MCP_TOOLS")}
+        env.update({"SEM_REPO": str(workspace), **SEM_ENV, **({"SEM_MCP_TOOLS": mcp_tools} if mcp_tools else {})})
         self._log = open(log_path, "ab")
         self._next_id = 0
         self.process = subprocess.Popen(

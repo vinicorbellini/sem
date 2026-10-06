@@ -71,8 +71,36 @@ pub fn list_review_tools() {
 
 /// Whether `tools/list` shows the tool named `name`.
 pub fn is_listed(name: &str) -> bool {
-    LISTED_TOOLS.contains(&name)
-        || (REVIEW_LISTED.load(std::sync::atomic::Ordering::Relaxed) && REVIEW_TOOLS.contains(&name))
+    (LISTED_TOOLS.contains(&name)
+        || (REVIEW_LISTED.load(std::sync::atomic::Ordering::Relaxed)
+            && REVIEW_TOOLS.contains(&name)))
+        && tools_filter().is_none_or(|names| names.iter().any(|n| n == name))
+}
+
+/// The tools `SEM_MCP_TOOLS` restricts `tools/list` to, read once by the process that
+/// serves the session: set it on a standalone server (`SEM_MCP_NO_SHARED=1`), since a
+/// shared daemon keeps the value it started with. The tools left out stay callable by name.
+fn tools_filter() -> Option<&'static [String]> {
+    static FILTER: std::sync::OnceLock<Option<Vec<String>>> = std::sync::OnceLock::new();
+    FILTER
+        .get_or_init(|| {
+            std::env::var("SEM_MCP_TOOLS")
+                .ok()
+                .and_then(|v| parse_tools_filter(&v))
+        })
+        .as_deref()
+}
+
+/// `SEM_MCP_TOOLS`'s comma-separated names that are tools this server can list. Others are
+/// ignored, and when none is left there is no filter: the full list is shown.
+fn parse_tools_filter(value: &str) -> Option<Vec<String>> {
+    let names: Vec<String> = value
+        .split(',')
+        .map(str::trim)
+        .filter(|n| LISTED_TOOLS.contains(n) || REVIEW_TOOLS.contains(n))
+        .map(String::from)
+        .collect();
+    (!names.is_empty()).then_some(names)
 }
 
 /// The `sem` executable to run for the verbs answered by the CLI: this
@@ -3807,6 +3835,20 @@ mod tests {
         }
         assert!(!MCP_INSTRUCTIONS.contains("sem_entities"));
         assert!(!MCP_INSTRUCTIONS.contains("tools: entities"));
+    }
+
+    #[test]
+    fn sem_mcp_tools_keeps_only_tools_it_can_list() {
+        assert_eq!(
+            parse_tools_filter("sem_find"),
+            Some(vec!["sem_find".to_string()])
+        );
+        assert_eq!(
+            parse_tools_filter(" sem_find, sem_entities,nope,join_review "),
+            Some(vec!["sem_find".to_string(), "join_review".to_string()])
+        );
+        assert_eq!(parse_tools_filter(""), None);
+        assert_eq!(parse_tools_filter("sem_entities,nope"), None);
     }
 
     #[tokio::test]

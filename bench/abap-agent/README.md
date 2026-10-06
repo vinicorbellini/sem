@@ -160,12 +160,13 @@ python3 bench/abap-agent/run.py --checkpoint gate1 --class B1 --task b1_03 --rep
 
 | Flag | Meaning |
 |---|---|
-| `--checkpoint baseline\|gate1\|gate2\|gate2b` | Written to every row; required for a real run. |
+| `--checkpoint baseline\|gate1\|gate2\|gate2b\|gate2c` | Written to every row; required for a real run. |
 | `--arm grep\|sem\|both` | Which arms to run (default both). |
 | `--class B1\|B1A\|B2\|B3\|all` | Which task classes (default all); `--task b2_04` (repeatable) narrows to single tasks. A class whose task file is absent is skipped with one line. |
 | `--model` | Passed to `claude --model` (default `claude-sonnet-5-5`). |
 | `--reps` | Repetitions per task per arm (default 3). |
-| `--brief [sem-first]` | Add one paragraph to the **sem arm's** prompt naming `sem_find`, `sem_impact` and `sem_certify`. Plain `--brief` tells the agent to prefer them over grep (`BRIEF` in `run.py`); `--brief sem-first` tells it to ask `sem_find` first and grep only to check what it names (`BRIEF_SEM_FIRST`; see "Briefing"). The grep arm's prompt is unchanged. Default off. Recorded in the `brief` column. |
+| `--brief [sem-first\|sem-find-only]` | Add one paragraph to the **sem arm's** prompt naming `sem_find`, `sem_impact` and `sem_certify`. Plain `--brief` tells the agent to prefer them over grep (`BRIEF` in `run.py`); `--brief sem-first` tells it to ask `sem_find` first and grep only to check what it names (`BRIEF_SEM_FIRST`; see "Briefing"); `--brief sem-find-only` is the same for a server that lists `sem_find` alone, and needs `--mcp-tools sem_find`. The grep arm's prompt is unchanged. Default off. Recorded in the `brief` column. |
+| `--mcp-tools NAMES` | Comma-separated tools the sem arm's server lists, passed to `sem mcp` as `SEM_MCP_TOOLS` (e.g. `sem_find`); the others stay callable by name but are not in the agent's context. Default: all eight. Recorded in the `mcp_tools` column. |
 | `--dry-run` | Everything except calling `claude`. It prepares the checkouts, writes each sem run's MCP config, and prints each run's working directory, exact command line and prompt. For the sem arm it starts `sem mcp` once, lists its tools and calls `sem_find` (B1, B2) or `sem_certify` (B3). It scores the untouched checkout. B2 scoring runs the unit suite, so expect about 30 s per B2 run. |
 | `--cap-usd` | Stop once the cumulative `total_cost_usd` reaches the cap (default 30; see below). |
 | `--abapgit` | abapGit clone to copy from (default `/tmp/claude-0/abapGit`). It is cloned, never modified. |
@@ -252,12 +253,12 @@ commit results with `git add -f bench/abap-agent/results.csv bench/abap-agent/re
 | Column | Meaning |
 |---|---|
 | `timestamp` | UTC, when the run finished. |
-| `checkpoint` | `baseline`, `gate1`, `gate2` or `gate2b` (`dry-run` for dry runs). |
+| `checkpoint` | `baseline`, `gate1`, `gate2`, `gate2b` or `gate2c` (`dry-run` for dry runs). |
 | `build` | sem commit measured: `git rev-parse HEAD` of this repo, `-dirty` if `crates/` has uncommitted changes. Build the binary from that commit. |
 | `sem_version` | `sem --version` of the binary that served MCP. |
 | `abapgit_commit` | Pinned abapGit commit. |
 | `model`, `arm`, `task_class`, `task_id`, `rep` | Which run. |
-| `brief` | Which sem briefing the run's prompt carried (sem arm only): `1` for `--brief`, `sem-first` for `--brief sem-first`, else `0`. Baseline rows and every grep row are 0. Compare only rows with the same `brief`. |
+| `brief` | Which sem briefing the run's prompt carried (sem arm only): `1` for `--brief`, `sem-first` for `--brief sem-first`, `sem-find-only` for `--brief sem-find-only`, else `0`. Baseline rows and every grep row are 0. Compare only rows with the same `brief`. |
 | `dry_run` | 1 for `--dry-run` rows. |
 | `input_tokens` | Uncached input tokens, summed over the run's requests (`usage.input_tokens`). |
 | `output_tokens` | Output tokens, thinking included (`usage.output_tokens`). |
@@ -277,6 +278,7 @@ commit results with `git add -f bench/abap-agent/results.csv bench/abap-agent/re
 | `callers_missed` | B2: call statements under `src/` that do not pass the new parameter by name. |
 | `stop_reason` | The final result's stop reason. |
 | `error` | Cap reached, max turns, timeout, sem mcp not connected, API error, refusal, missing ground truth, patch not applying. |
+| `mcp_tools` | `--mcp-tools` of a sem run (`sem_find`); empty for the grep arm and for a server listing all its tools. Added after Gate 2b: the header gained it at the end, and the rows written before have no field for it, which reads as empty. |
 
 B1 line numbers are also scored, within ±2 lines (`line_precision`, `line_recall` in `results.jsonl`).
 B1 answer items outside `src/` (abapGit's `test/src/`) are neither hits nor misses, because the
@@ -307,6 +309,11 @@ arm ran grep next to `sem_find` instead of in place of it. It adds this paragrap
 > Besides the usual tools you have three sem tools for this code base: sem_find, sem_impact and sem_certify. For where-used questions (who calls a method) call sem_find with mode "callers" first and use its answer as the caller list, passing file with the defining file the task names and the bare method name (an interface method zif_x~m is the entity m in the interface's file). Use Grep only if sem_find returns an error or says INCOMPLETE, and then only to check the possible callers it names, not to search the code base again. When sem_find reports the line of each call, use those lines; otherwise read the calling method's range for the line. For other questions, sem_impact lists what depends on an entity and which tests to run, and sem_certify summarises what a commit or range changed.
 
 Its rows carry `brief` = `sem-first` and never mix with `1` rows.
+
+`--brief sem-find-only` (`BRIEF_SEM_FIND_ONLY`, Gate 2c) is `sem-first` for a server that lists
+`sem_find` alone (`--mcp-tools sem_find`): its first sentence names that one tool, and the last
+sentence, on `sem_impact` and `sem_certify`, is left out. The rest is word for word the same. Its
+rows carry `brief` = `sem-find-only`.
 
 `summarize.py` prints a checkpoint's headline table, the sem arm's deltas against the grep arm and the
 adoption-rule verdict as Markdown: `python3 bench/abap-agent/summarize.py --checkpoint gate2b --brief sem-first`.

@@ -6,6 +6,7 @@ Prints Markdown, so it can be pasted into the README. Scores are the stored ones
 
 Usage:
     python3 bench/abap-agent/summarize.py --checkpoint gate2b --brief sem-first
+    python3 bench/abap-agent/summarize.py --checkpoint gate2c --brief sem-find-only
     python3 bench/abap-agent/summarize.py --checkpoint gate2
 """
 
@@ -33,6 +34,7 @@ def load_rows(checkpoint: str) -> list[dict]:
         rows = [r for r in csv.DictReader(f) if r["checkpoint"] == checkpoint and r["dry_run"] != "1"]
     for r in rows:
         r["sem_calls"] = sem_calls.get((r["timestamp"], r["arm"], r["task_id"], r["rep"]))
+        r["mcp_tools"] = r.get("mcp_tools") or ""   # rows written before the column have none: the full server
     return rows
 
 
@@ -95,6 +97,15 @@ def verdict(checkpoint: str, by: dict) -> list[str]:
         return (g, s) if g and s else (None, None)
 
     lines = []
+    if checkpoint == "gate2c":
+        # Reporting only (README: "Gate 2c, slim server"): Gate 2b's B1A criterion, for reference.
+        g, s = pair("B1A")
+        if g:
+            ratio = s["read"] / g["read"]
+            lines.append(f"- B1A: success sem {s['success']:.3f} vs grep {g['success']:.3f}; tokens read {ratio * 100:.0f}% "
+                         f"of grep (Gate 2b's criterion: at least equal success and 85% or less)")
+        lines.append("\n**Reporting only.** The adoption verdict stays Gate 2b's: drop.")
+        return lines
     if checkpoint == "gate2b":
         g, s = pair("B1A")
         b1a = None
@@ -141,7 +152,7 @@ def verdict(checkpoint: str, by: dict) -> list[str]:
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--checkpoint", required=True, help="Which checkpoint to summarise, e.g. gate2b.")
-    parser.add_argument("--brief", help="Which `brief` value the sem arm's rows carry (0, 1 or sem-first). "
+    parser.add_argument("--brief", help="Which `brief` value the sem arm's rows carry (0, 1, sem-first or sem-find-only). "
                                         "Default: the one the checkpoint's sem rows have; an error when it has several.")
     args = parser.parse_args()
 
@@ -166,8 +177,10 @@ def main():
             if sub:
                 by[(c, arm)] = stats(sub)
 
-    print(f"Checkpoint `{args.checkpoint}`, sem arm `brief` = {args.brief}. Per-run means, except cost (summed); "
-          "deltas are the sem arm against the grep arm.\n")
+    mcp_tools = sorted({r["mcp_tools"] for r in rows if r["arm"] == "sem"})
+    print(f"Checkpoint `{args.checkpoint}`, sem arm `brief` = {args.brief}"
+          + (f", `mcp_tools` = {', '.join(t or 'all' for t in mcp_tools)}" if any(mcp_tools) else "")
+          + ". Per-run means, except cost (summed); deltas are the sem arm against the grep arm.\n")
     print("| Class | Arm | Runs | Success | Precision | Tokens read | Output tokens | Cost (USD) | Wall time (s) | Tool calls | sem calls |")
     print("|---|---|---|---|---|---|---|---|---|---|---|")
     for c in CLASSES:

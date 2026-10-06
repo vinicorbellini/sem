@@ -37,7 +37,7 @@ EFFORT = "high"            # set explicitly: the default differs by model
 MAX_TURNS = 40             # claude --max-turns: a safety bound, not a target
 RUN_TIMEOUT_S = {"B1": 1800, "B1A": 1800, "B2": 3600, "B3": 1800}   # wall clock per run; the process group is killed
 REPS = 3
-CHECKPOINTS = ("baseline", "gate1", "gate2", "gate2b")
+CHECKPOINTS = ("baseline", "gate1", "gate2", "gate2b", "gate2c")
 ARMS = ("grep", "sem")
 CLASSES = ("B1", "B1A", "B2", "B3")
 
@@ -90,7 +90,17 @@ BRIEF_SEM_FIRST = (
     "For other questions, sem_impact lists what depends on an entity and which tests to run, and "
     "sem_certify summarises what a commit or range changed."
 )
-BRIEFS = {"1": BRIEF, "sem-first": BRIEF_SEM_FIRST}   # the `brief` column's values; "0" is no briefing
+
+# --brief sem-find-only: BRIEF_SEM_FIRST for a server that lists sem_find alone (--mcp-tools sem_find, Gate 2c),
+# so it names neither sem_impact nor sem_certify, which that run does not have.
+BRIEF_SEM_FIND_ONLY = (
+    "Besides the usual tools you have a sem tool for this code base: sem_find. "
+    "For where-used questions (who calls a method) call sem_find with mode \"callers\" first "
+    "and use its answer as the caller list, passing file with the defining file the task names and the bare method name (an interface method zif_x~m is the entity m in the interface's file). Use Grep only if sem_find returns an error or says INCOMPLETE, "
+    "and then only to check the possible callers it names, not to search the code base again. When sem_find "
+    "reports the line of each call, use those lines; otherwise read the calling method's range for the line."
+)
+BRIEFS = {"1": BRIEF, "sem-first": BRIEF_SEM_FIRST, "sem-find-only": BRIEF_SEM_FIND_ONLY}   # the `brief` column's values; "0" is no briefing
 
 CSV_COLUMNS = [
     "timestamp", "checkpoint", "build", "sem_version", "abapgit_commit", "model", "arm", "brief",
@@ -98,7 +108,7 @@ CSV_COLUMNS = [
     "input_tokens", "output_tokens", "cache_read_tokens", "cache_write_tokens", "cost_usd",
     "wall_time_s", "api_time_s", "turns", "tool_calls", "files_read", "bytes_read", "test_classes_executed",
     "success_score", "precision", "recall", "tests_passed", "callers_missed",
-    "stop_reason", "error",
+    "stop_reason", "error", "mcp_tools",
 ]
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -300,10 +310,23 @@ def score(spec: dict, task: dict, answer: str, workspace: Path, base: Path, scra
 
 
 def append_row(path: Path, row: dict):
-    """Append-only. A file whose header differs from CSV_COLUMNS is an error, never rewritten."""
+    """Append-only. A file whose header differs from CSV_COLUMNS is an error, never rewritten.
+
+    Columns are only ever added at the end: a header that is a prefix of CSV_COLUMNS gets the new
+    names on its first line, and the rows already there are left as they are (csv reads the
+    missing fields as empty).
+    """
     if path.exists() and path.stat().st_size > 0:
         with open(path, newline="") as f:
             header = next(csv.reader(f), [])
+        if header != CSV_COLUMNS and header == CSV_COLUMNS[:len(header)]:
+            with open(path, newline="") as f:
+                f.readline()
+                rest = f.read()
+            with open(path, "w", newline="") as f:
+                csv.writer(f).writerow(CSV_COLUMNS)   # the line ending csv wrote the rows with
+                f.write(rest)
+            header = CSV_COLUMNS
         if header != CSV_COLUMNS:
             print(f"ERROR: {path} has different columns than this harness; start a new file.")
             sys.exit(1)
@@ -322,13 +345,14 @@ def append_jsonl(path: Path, record: dict):
         f.write(json.dumps(record, default=str) + "\n")
 
 
-def check_sem_mcp(sem_binary: Path, workspace: Path, log_path: Path, spec: dict, task: dict) -> list[str]:
+def check_sem_mcp(sem_binary: Path, workspace: Path, log_path: Path, spec: dict, task: dict,
+                  mcp_tools: str | None = None) -> list[str]:
     """--dry-run: start `sem mcp` as the MCP config does, list its tools and call sem_find once."""
     target = task.get("method") or task.get("target")
     method = target.replace("=>", "->").split("->")[-1].split("~")[-1] if target else None
     lines = []
     try:
-        mcp = tools.SemMcp(str(sem_binary), workspace, log_path)
+        mcp = tools.SemMcp(str(sem_binary), workspace, log_path, mcp_tools)
     except Exception as e:
         return [f"sem mcp: ERROR {str(e)[:200]}"]
     try:
@@ -364,8 +388,12 @@ def main():
     parser.add_argument("--task", action="append", help="Only this task id (repeatable), e.g. b1_03.")
     parser.add_argument("--brief", nargs="?", const="1", choices=tuple(BRIEFS),
                         help="Add a sem briefing paragraph to the sem arm's prompt; the grep arm is unchanged. "
-                             "Plain --brief is BRIEF, `sem-first` is BRIEF_SEM_FIRST. "
+                             "Plain --brief is BRIEF, `sem-first` is BRIEF_SEM_FIRST, `sem-find-only` is "
+                             "BRIEF_SEM_FIND_ONLY (with --mcp-tools sem_find). "
                              "Recorded in the `brief` column: never mix briefings or briefed and unbriefed rows.")
+    parser.add_argument("--mcp-tools", metavar="NAMES",
+                        help="Comma-separated tools the sem arm's server lists (SEM_MCP_TOOLS), e.g. sem_find; "
+                             "default all. Recorded in the `mcp_tools` column.")
     parser.add_argument("--dry-run", action="store_true",
                         help="Do everything except calling claude; print each run's command line and prompt.")
     parser.add_argument("--cap-usd", type=float, default=30.0,
@@ -378,6 +406,8 @@ def main():
 
     if not args.dry_run and not args.checkpoint:
         parser.error("--checkpoint is required for a real run")
+    if args.brief == "sem-find-only" and args.mcp_tools != "sem_find":
+        parser.error("--brief sem-find-only names sem_find alone: pass --mcp-tools sem_find")
     if not args.dry_run and not shutil.which(tools.CLAUDE):
         print("Claude Code not found: `claude` must be on PATH and logged in.")
         sys.exit(1)
@@ -428,6 +458,7 @@ def main():
             if not args.dry_run and not budget.allows_run():
                 break
             brief = args.brief if arm == "sem" else None
+            mcp_tools = args.mcp_tools if arm == "sem" else None
             run_id = f"{checkpoint}-{args.model}-{arm}{'-brief' if brief == '1' else f'-{brief}' if brief else ''}-{task['id']}-r{rep}"
             print(f"── {task['id']} [{arm}] rep {rep} ──")
             workspace = make_workspace(base, work_dir, run_id, commit)
@@ -435,7 +466,7 @@ def main():
             sem_log = work_dir / f"{run_id}.sem-mcp.log"
             if arm == "sem":
                 mcp_path = work_dir / "mcp" / f"{run_id}.json"
-                mcp_path.write_text(json.dumps(tools.mcp_config(str(sem_binary), workspace, sem_log), indent=2))
+                mcp_path.write_text(json.dumps(tools.mcp_config(str(sem_binary), workspace, sem_log, mcp_tools), indent=2))
             prompt = build_prompt(spec, task, brief=brief)
             session_id = str(uuid.uuid4())
             cmd = tools.claude_command(prompt, args.model, EFFORT, MAX_TURNS, arm, writes=(task_class == "B2"),
@@ -452,7 +483,7 @@ def main():
                     print(f"  mcp config ({mcp_path}): {mcp_path.read_text()}")
                 print("  prompt:\n    " + prompt.replace("\n", "\n    "))
                 if arm == "sem":
-                    for line in check_sem_mcp(sem_binary, workspace, sem_log, spec, task):
+                    for line in check_sem_mcp(sem_binary, workspace, sem_log, spec, task, mcp_tools):
                         print(f"  tool check: {line}")
                 agent = {"stop_reason": None, "final_text": "", "error": None}
                 stats = tools.RunStats()
@@ -495,6 +526,7 @@ def main():
                 "tests_passed": result.get("tests_passed"), "callers_missed": result.get("callers_missed"),
                 "stop_reason": agent["stop_reason"],
                 "error": agent["error"] or result.get("error"),
+                "mcp_tools": mcp_tools or "",
             }
             append_row(csv_path, row)
             append_jsonl(jsonl_path, {
