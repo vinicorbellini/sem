@@ -1,0 +1,481 @@
+{
+ "abapgit_commit": "b2b4e250747ecb4f8e2b1d79e332d2cf897d5fa0",
+ "targets": {
+  "r1_01": [
+   {
+    "callee": "parse_error",
+    "line": 1760
+   },
+   {
+    "callee": "parse_error",
+    "line": 1766
+   },
+   {
+    "callee": "parse_error",
+    "line": 1776
+   },
+   {
+    "callee": "set_character_type",
+    "line": 1782
+   },
+   {
+    "callee": "parse_error",
+    "line": 1787
+   },
+   {
+    "callee": "set_numeric_type",
+    "line": 1792
+   },
+   {
+    "callee": "parse_error",
+    "line": 1800
+   },
+   {
+    "callee": "set_decfloat_type",
+    "line": 1805
+   },
+   {
+    "callee": "parse_error",
+    "line": 1812
+   },
+   {
+    "callee": "set_integer_type",
+    "line": 1818
+   },
+   {
+    "callee": "set_date_type",
+    "line": 1825
+   },
+   {
+    "callee": "set_decfloat_type",
+    "line": 1830
+   },
+   {
+    "callee": "parse_error",
+    "line": 1837
+   }
+  ],
+  "r1_02": [
+   {
+    "callee": "serialize_top",
+    "line": 2043
+   },
+   {
+    "callee": "escape_name",
+    "line": 2054
+   },
+   {
+    "callee": "escape_name",
+    "line": 2056
+   },
+   {
+    "callee": "escape_name",
+    "line": 2067
+   },
+   {
+    "callee": "escape_name",
+    "line": 2069
+   },
+   {
+    "callee": "serialize_extend",
+    "line": 2092
+   },
+   {
+    "callee": "serialize_field_annotations",
+    "line": 2103
+   },
+   {
+    "callee": "serialize_fkey_annotations",
+    "line": 2106
+   },
+   {
+    "callee": "serialize_type",
+    "line": 2109
+   },
+   {
+    "callee": "serialize_field_foreign_key",
+    "line": 2111
+   },
+   {
+    "callee": "serialize_value_help",
+    "line": 2114
+   }
+  ],
+  "r1_03": [
+   {
+    "callee": "get_abap_version",
+    "line": 1301
+   },
+   {
+    "callee": "deserialize_xml",
+    "line": 1303
+   },
+   {
+    "callee": "io_xml->read",
+    "line": 1309
+   },
+   {
+    "callee": "deserialize_functions",
+    "line": 1312
+   },
+   {
+    "callee": "deserialize_includes",
+    "line": 1319
+   },
+   {
+    "callee": "main_name",
+    "line": 1324
+   },
+   {
+    "callee": "mo_i18n_params->is_lxe_applicable",
+    "line": 1326
+   },
+   {
+    "callee": "deserialize_texts",
+    "line": 1327
+   },
+   {
+    "callee": "io_xml->read",
+    "line": 1331
+   },
+   {
+    "callee": "deserialize_dynpros",
+    "line": 1334
+   },
+   {
+    "callee": "io_xml->read",
+    "line": 1336
+   },
+   {
+    "callee": "deserialize_cua",
+    "line": 1339
+   },
+   {
+    "callee": "io_xml->read",
+    "line": 1342
+   },
+   {
+    "callee": "deserialize_varis",
+    "line": 1345
+   },
+   {
+    "callee": "deserialize_function_docs",
+    "line": 1348
+   }
+  ],
+  "r1_04": [
+   {
+    "callee": "zif_abapgit_object~exists",
+    "line": 1487
+   },
+   {
+    "callee": "serialize_xml",
+    "line": 1491
+   },
+   {
+    "callee": "serialize_functions",
+    "line": 1493
+   },
+   {
+    "callee": "io_xml->add",
+    "line": 1495
+   },
+   {
+    "callee": "serialize_includes",
+    "line": 1498
+   },
+   {
+    "callee": "main_name",
+    "line": 1500
+   },
+   {
+    "callee": "zcl_abapgit_factory=>get_sap_report",
+    "line": 1502
+   },
+   {
+    "callee": "zcl_abapgit_factory=>get_sap_report( )->read_progdir",
+    "line": 1502
+   },
+   {
+    "callee": "mo_i18n_params->is_lxe_applicable",
+    "line": 1504
+   },
+   {
+    "callee": "serialize_texts",
+    "line": 1505
+   },
+   {
+    "callee": "serialize_dynpros",
+    "line": 1511
+   },
+   {
+    "callee": "io_xml->add",
+    "line": 1512
+   },
+   {
+    "callee": "serialize_cua",
+    "line": 1515
+   },
+   {
+    "callee": "io_xml->add",
+    "line": 1516
+   },
+   {
+    "callee": "serialize_varis",
+    "line": 1519
+   },
+   {
+    "callee": "io_xml->add",
+    "line": 1520
+   },
+   {
+    "callee": "serialize_function_docs",
+    "line": 1524
+   }
+  ],
+  "r1_05": [
+   {
+    "callee": "ii_log->add_success",
+    "line": 828
+   },
+   {
+    "callee": "zcl_abapgit_factory=>get_lxe_texts",
+    "line": 833
+   },
+   {
+    "callee": "zcl_abapgit_factory=>get_lxe_texts( )->deserialize",
+    "line": 833
+   },
+   {
+    "callee": "lo_base->get_accessed_files",
+    "line": 842
+   },
+   {
+    "callee": "ii_log->add_success",
+    "line": 844
+   },
+   {
+    "callee": "ii_log->add_exception",
+    "line": 848
+   },
+   {
+    "callee": "ii_log->add_error",
+    "line": 850
+   }
+  ],
+  "r1_06": [
+   {
+    "callee": "zcl_abapgit_objects_activation=>clear",
+    "line": 870
+   },
+   {
+    "callee": "ii_log->add_success",
+    "line": 872
+   },
+   {
+    "callee": "zcl_abapgit_progress=>get_instance",
+    "line": 874
+   },
+   {
+    "callee": "li_progress->show",
+    "line": 877
+   },
+   {
+    "callee": "zcl_abapgit_factory=>get_cts_api",
+    "line": 882
+   },
+   {
+    "callee": "zcl_abapgit_factory=>get_cts_api( )->is_object_type_customizing",
+    "line": 882
+   },
+   {
+    "callee": "<ls_obj>-obj->deserialize",
+    "line": 889
+   },
+   {
+    "callee": "lo_base->get_accessed_files",
+    "line": 896
+   },
+   {
+    "callee": "ii_log->add_success",
+    "line": 898
+   },
+   {
+    "callee": "ii_log->add_exception",
+    "line": 902
+   },
+   {
+    "callee": "ii_log->add_error",
+    "line": 904
+   },
+   {
+    "callee": "li_progress->show",
+    "line": 910
+   },
+   {
+    "callee": "zcl_abapgit_objects_activation=>activate",
+    "line": 915
+   },
+   {
+    "callee": "zcl_abapgit_objects_activation=>activate",
+    "line": 919
+   },
+   {
+    "callee": "zcl_abapgit_objects_activation=>activate",
+    "line": 924
+   },
+   {
+    "callee": "zcl_abapgit_objects_activation=>activate",
+    "line": 927
+   },
+   {
+    "callee": "li_progress->off",
+    "line": 932
+   },
+   {
+    "callee": "zcl_abapgit_exit=>get_instance",
+    "line": 935
+   },
+   {
+    "callee": "li_exit->deserialize_postprocess",
+    "line": 937
+   }
+  ],
+  "r1_07": [
+   {
+    "callee": "is_exit_include",
+    "line": 674
+   },
+   {
+    "callee": "deserialize_exit_include",
+    "line": 675
+   },
+   {
+    "callee": "zcl_abapgit_factory=>get_cts_api",
+    "line": 683
+   },
+   {
+    "callee": "zcl_abapgit_factory=>get_cts_api( )->insert_transport_object",
+    "line": 683
+   },
+   {
+    "callee": "get_program_title",
+    "line": 689
+   },
+   {
+    "callee": "update_program",
+    "line": 697
+   },
+   {
+    "callee": "insert_program",
+    "line": 702
+   },
+   {
+    "callee": "zcl_abapgit_factory=>get_sap_report",
+    "line": 709
+   },
+   {
+    "callee": "zcl_abapgit_factory=>get_sap_report( )->update_progdir",
+    "line": 709
+   },
+   {
+    "callee": "zcl_abapgit_objects_activation=>add",
+    "line": 713
+   }
+  ],
+  "r1_08": [
+   {
+    "callee": "zcl_abapgit_language=>set_current_language",
+    "line": 1330
+   },
+   {
+    "callee": "zcl_abapgit_language=>restore_login_language",
+    "line": 1347
+   },
+   {
+    "callee": "zcl_abapgit_language=>restore_login_language",
+    "line": 1350
+   },
+   {
+    "callee": "zcx_abapgit_exception=>raise_t100",
+    "line": 1351
+   },
+   {
+    "callee": "zcl_abapgit_language=>restore_login_language",
+    "line": 1354
+   },
+   {
+    "callee": "zcl_abapgit_factory=>get_sap_report",
+    "line": 1357
+   },
+   {
+    "callee": "li_report->read_progdir",
+    "line": 1361
+   },
+   {
+    "callee": "li_report->read_report",
+    "line": 1366
+   },
+   {
+    "callee": "li_report->read_progdir",
+    "line": 1372
+   },
+   {
+    "callee": "clear_abap_language_version",
+    "line": 1376
+   },
+   {
+    "callee": "constructor",
+    "line": 1381
+   },
+   {
+    "callee": "li_xml->add",
+    "line": 1384
+   },
+   {
+    "callee": "serialize_dynpros",
+    "line": 1387
+   },
+   {
+    "callee": "li_xml->add",
+    "line": 1388
+   },
+   {
+    "callee": "serialize_cua",
+    "line": 1391
+   },
+   {
+    "callee": "li_xml->add",
+    "line": 1392
+   },
+   {
+    "callee": "serialize_varis",
+    "line": 1395
+   },
+   {
+    "callee": "li_xml->add",
+    "line": 1396
+   },
+   {
+    "callee": "li_xml->add",
+    "line": 1405
+   },
+   {
+    "callee": "add_tpool",
+    "line": 1406
+   },
+   {
+    "callee": "io_files->add_xml",
+    "line": 1409
+   },
+   {
+    "callee": "strip_generation_comments",
+    "line": 1413
+   },
+   {
+    "callee": "io_files->add_abap",
+    "line": 1415
+   }
+  ]
+ }
+}

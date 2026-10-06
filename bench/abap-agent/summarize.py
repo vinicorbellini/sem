@@ -10,6 +10,7 @@ Usage:
     python3 bench/abap-agent/summarize.py --checkpoint gate2
     python3 bench/abap-agent/summarize.py --checkpoint control --brief sem-first
     python3 bench/abap-agent/summarize.py --checkpoint gate2d --brief cli --grep-from gate2c
+    python3 bench/abap-agent/summarize.py --checkpoint gate2d --brief cli --class R1
 """
 
 import argparse
@@ -21,7 +22,7 @@ from pathlib import Path
 BENCH_DIR = Path(__file__).resolve().parent
 RESULTS_CSV = BENCH_DIR / "results.csv"
 RESULTS_JSONL = BENCH_DIR / "results.jsonl"
-CLASSES = ("B1", "B1A", "B2", "B3", "C1")
+CLASSES = ("B1", "B1A", "B2", "B3", "C1", "R1")
 
 
 def load_rows(checkpoint: str) -> list[dict]:
@@ -109,6 +110,10 @@ def verdict(checkpoint: str, by: dict) -> list[str]:
             ratio = s["read"] / g["read"]
             lines.append(f"- B1A: success sem {s['success']:.3f} vs grep {g['success']:.3f}; tokens read {ratio * 100:.0f}% "
                          f"of grep (Gate 2b's criterion: at least equal success and 85% or less)")
+        g, s = pair("R1")
+        if g:
+            lines.append(f"- R1: success cli/sem {s['success']:.3f} vs grep {g['success']:.3f}; tokens read "
+                         f"{s['read'] / g['read'] * 100:.0f}% of grep (no criterion)")
         lines.append("\n**Reporting only.** The adoption verdict stays Gate 2b's: drop.")
         return lines
     if checkpoint == "control":
@@ -165,9 +170,12 @@ def main():
     parser.add_argument("--grep-from", metavar="CHECKPOINT",
                         help="Compare against this checkpoint's grep rows (same classes, tasks and model as the "
                              "sem or cli rows) instead of the checkpoint's own, e.g. gate2c for gate2d.")
+    parser.add_argument("--class", dest="task_class", choices=CLASSES, help="Only this task class, e.g. R1.")
     args = parser.parse_args()
 
     rows = load_rows(args.checkpoint)
+    if args.task_class:
+        rows = [r for r in rows if r["task_class"] == args.task_class]
     if not rows:
         print(f"No rows for checkpoint {args.checkpoint} in {RESULTS_CSV.name}")
         sys.exit(1)
