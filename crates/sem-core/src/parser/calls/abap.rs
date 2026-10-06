@@ -174,6 +174,7 @@ pub fn lower(src: &str) -> FileFacts {
         nesting: 0,
         dynamic: dynamic_sites(src),
         next_dynamic: 0,
+        test_methods: Vec::new(),
     };
     cx.f.includes = include_names(src).iter().map(|n| fold(n)).collect();
     cx.f.exprs.push(Expr::Unknown);
@@ -193,6 +194,7 @@ pub fn lower(src: &str) -> FileFacts {
     }
     cx.dynamic_sites_before(usize::MAX);
     cx.close_body(code.len());
+    cx.fixture_calls();
     let mut f = cx.f;
     f.locals.sort_by_key(|l| (l.func, l.at));
     f
@@ -220,6 +222,8 @@ struct ClassCx {
     sigs: HashMap<Name, Sig>,
     /// Its `INHERITING FROM` base.
     base: Option<Name>,
+    /// The methods its definition declares `FOR TESTING`.
+    testing: HashSet<Name>,
 }
 
 /// A method's parameters as a `METHODS` declares them, in order, and its
@@ -230,6 +234,9 @@ struct Sig {
     ret: Option<Param>,
     /// `REDEFINITION`: the parameters are the base class's.
     redefinition: bool,
+    /// `FOR TESTING`: an ABAP Unit test method, which the framework runs
+    /// after the class's fixture methods.
+    testing: bool,
 }
 
 impl Sig {
@@ -331,6 +338,9 @@ struct Lower<'a> {
     /// many the statement walk has passed.
     dynamic: Vec<DynSite>,
     next_dynamic: usize,
+    /// The `FOR TESTING` methods implemented in this file: their class,
+    /// function, scope and the offset of their `METHOD` statement.
+    test_methods: Vec<(Name, u32, u32, usize)>,
 }
 
 /// A chain of member accesses being read (`a=>b->c-d`), before it is known
@@ -603,6 +613,7 @@ impl<'a> Lower<'a> {
                     statics: HashSet::default(),
                     sigs: HashMap::default(),
                     base: None,
+                    testing: HashSet::default(),
                 },
             );
         }
@@ -745,6 +756,9 @@ impl<'a> Lower<'a> {
                     if head == "CLASS-METHODS" {
                         cx.statics.insert(name.clone());
                     }
+                    if sig.testing {
+                        cx.testing.insert(name.clone());
+                    }
                     cx.sigs.insert(name, sig);
                     self.declaring.push(at);
                 }
@@ -877,6 +891,7 @@ impl<'a> Lower<'a> {
             let handler = upper.windows(2).any(|w| w[0] == "FOR" && w[1] == "EVENT");
             let mut sig = Sig {
                 redefinition: upper.iter().any(|w| w == "REDEFINITION"),
+                testing: upper.windows(2).any(|w| w[0] == "FOR" && w[1] == "TESTING"),
                 ..Sig::default()
             };
             for (p, returning) in parameters(&part[1..], handler) {
@@ -1015,6 +1030,7 @@ impl<'a> Lower<'a> {
         let name = fold(name);
         let cx = &self.classes[&class];
         let (scope, imp, has_self) = (cx.scope, cx.imp, !cx.statics.contains(&name));
+        let testing = cx.testing.contains(&name);
         let shadows = cx.ty.is_some() && !cx.sigs.get(&name).is_some_and(|s| s.redefinition);
         let base = cx.base.clone();
         let Some(imp) = imp else { return };
@@ -1042,6 +1058,9 @@ impl<'a> Lower<'a> {
             ret: sig.as_ref().and_then(Sig::ret_type),
             shadows,
         });
+        if testing {
+            self.test_methods.push((class.clone(), func, scope, start));
+        }
         self.body = Some(Body {
             func,
             scope,
@@ -1057,6 +1076,39 @@ impl<'a> Lower<'a> {
         if let Some((iface, _)) = name.split_once('~') {
             let at = start + self.code[start..].find('~').unwrap_or(0) - iface.len();
             self.reference(&[iface.into()], at);
+        }
+    }
+
+    /// ABAP Unit runs a test class's fixture methods around each of its
+    /// `FOR TESTING` methods, and no source line calls them: `class_setup`
+    /// and `setup` before, `teardown` and `class_teardown` after. Each test
+    /// method gets a call site, at its `METHOD` statement, to each of those
+    /// its class's definition in this file declares, so a test reaches what
+    /// its `setup` calls. They are real runtime calls, and
+    /// `FileFacts.implicit` marks them, as it does a constructor's
+    /// ([`Self::runs_constructor`]). A class whose `METHODS ... FOR
+    /// TESTING` is in another file (a local test class's definition in
+    /// `locals_def`) has none: its test methods are not known here.
+    fn fixture_calls(&mut self) {
+        const FIXTURES: [&str; 4] = ["class_setup", "setup", "teardown", "class_teardown"];
+        for (class, func, scope, at) in std::mem::take(&mut self.test_methods) {
+            for fixture in FIXTURES {
+                if !self.classes[&class].sigs.contains_key(fixture) {
+                    continue;
+                }
+                let callee = self.path_expr(&[fixture.into()]);
+                let expr = self.node(Expr::Call(callee));
+                self.f.implicit.push(self.f.sites.len() as u32);
+                let row = self.row(at);
+                self.f.sites.push(Site {
+                    func: Some(func),
+                    scope,
+                    row,
+                    at: at as u32,
+                    kind: SiteKind::Call,
+                    expr,
+                });
+            }
         }
     }
 
@@ -1265,6 +1317,23 @@ impl<'a> Lower<'a> {
     fn constructor(&mut self, path: &[Name], at: usize) {
         let callee = self.path_expr(path);
         let expr = self.node(Expr::Call(callee));
+        self.site(SiteKind::Call, expr, at);
+        self.runs_constructor(path, at);
+    }
+
+    /// Making an instance of class `path` runs its `constructor` (its own or
+    /// the nearest base's), which no source line calls: the site above
+    /// reaches the class, and this implicit one, `zcl_x=>constructor`, the
+    /// method, so whatever the constructor calls is reached from where the
+    /// instance is made (a test's `setup`). A class with no constructor in
+    /// the repo binds nothing, and an implicit site that binds nothing is
+    /// not counted as unresolved.
+    fn runs_constructor(&mut self, path: &[Name], at: usize) {
+        let mut segs = path.to_vec();
+        segs.push("constructor".into());
+        let callee = self.path_expr(&segs);
+        let expr = self.node(Expr::Call(callee));
+        self.f.implicit.push(self.f.sites.len() as u32);
         self.site(SiteKind::Call, expr, at);
     }
 
@@ -1600,7 +1669,15 @@ impl<'a> Lower<'a> {
                     Some("new") => {
                         let ty = self.link_type(&link);
                         if called {
-                            self.call(link, i);
+                            if let Link::Path(segs) = &link {
+                                let segs = segs.clone();
+                                let at = self.call(link, i).map(|_| i - segs.last().map_or(0, |s| s.len()));
+                                if let Some(at) = at {
+                                    self.runs_constructor(&segs, at);
+                                }
+                            } else {
+                                self.call(link, i);
+                            }
                         }
                         ty
                     }

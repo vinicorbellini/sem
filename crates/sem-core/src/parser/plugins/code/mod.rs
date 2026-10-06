@@ -4779,6 +4779,252 @@ ENDCLASS.
         }
     }
 
+    // Story 2.6: `sem impact --tests` reaches ABAP Unit tests through resolved
+    // calls, dispatch and the fixture calls ABAP Unit makes, never by name.
+
+    #[cfg(feature = "lang-abap")]
+    const ABAP_FIXTURE_2_6_FILES: &[&str] = &[
+        "zif_fx_order.intf.abap",
+        "zif_fx_audit.intf.abap",
+        "zcl_fx_order.clas.abap",
+        "zcl_fx_order.clas.locals_def.abap",
+        "zcl_fx_order.clas.locals_imp.abap",
+        "zcl_fx_order.clas.testclasses.abap",
+        "zcl_fx_order_sub.clas.abap",
+        "zcl_fx_order_alt.clas.abap",
+        "zcl_fx_user.clas.abap",
+        "zcl_fx_user.clas.testclasses.abap",
+        "zcl_fx_other.clas.abap",
+        "zcl_fx_other.clas.locals_imp.abap",
+        "zcl_fx_other.clas.testclasses.abap",
+    ];
+
+    /// The graph and entities of `(file name, content)` pairs, as `sem impact` builds them.
+    #[cfg(feature = "lang-abap")]
+    fn abap_graph_entities(
+        files: &[(&str, String)],
+    ) -> (crate::parser::graph::EntityGraph, Vec<crate::model::entity::SemanticEntity>) {
+        let dir = tempfile::TempDir::new().unwrap();
+        for (name, content) in files {
+            std::fs::write(dir.path().join(name), content).unwrap();
+        }
+        let paths: Vec<String> = files.iter().map(|(name, _)| name.to_string()).collect();
+        let registry = crate::parser::plugins::create_default_registry();
+        crate::parser::graph::EntityGraph::build(dir.path(), &paths, &registry)
+    }
+
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_6_sources() -> Vec<(&'static str, String)> {
+        ABAP_FIXTURE_2_6_FILES
+            .iter()
+            .map(|file| (*file, abap_fixture_text(file)))
+            .collect()
+    }
+
+    /// A test entity as `class.method`, its class being its parent (`ltc_order.setup`).
+    #[cfg(feature = "lang-abap")]
+    fn abap_test_label(graph: &crate::parser::graph::EntityGraph, id: &str) -> String {
+        let entity = &graph.entities[id];
+        let class = entity
+            .parent_id
+            .as_deref()
+            .and_then(|p| graph.entities.get(p))
+            .map(|p| p.name.to_ascii_lowercase())
+            .unwrap_or_default();
+        format!("{class}.{}", entity.name.to_ascii_lowercase())
+    }
+
+    /// The id of the entity named `name` in `file`.
+    #[cfg(feature = "lang-abap")]
+    fn abap_entity_id(graph: &crate::parser::graph::EntityGraph, file: &str, name: &str) -> String {
+        graph
+            .entities
+            .values()
+            .find(|e| e.file_path == file && e.name.eq_ignore_ascii_case(name))
+            .map(|e| e.id.to_string())
+            .unwrap_or_else(|| panic!("{file} {name}"))
+    }
+
+    /// The tests `sem impact <name> --tests` lists for the entity `name` of `file`, sorted.
+    #[cfg(feature = "lang-abap")]
+    fn abap_tests_of(
+        (graph, entities): &(crate::parser::graph::EntityGraph, Vec<crate::model::entity::SemanticEntity>),
+        file: &str,
+        name: &str,
+    ) -> Vec<String> {
+        let id = abap_entity_id(graph, file, name);
+        let mut tests: Vec<String> = graph
+            .test_impact(&id, entities)
+            .iter()
+            .map(|e| abap_test_label(graph, &e.id))
+            .collect();
+        tests.sort();
+        tests
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_6_tests_through_setup() {
+        // `total_starts_at_zero` calls neither `create` nor anything that does;
+        // `setup` does, and ABAP Unit runs it before each `FOR TESTING` method.
+        // The synthetic fixture call makes that a `calls` edge.
+        let built = abap_graph_entities(&abap_fixture_2_6_sources());
+        let tests = abap_tests_of(&built, "zcl_fx_order.clas.abap", "create");
+        for test in ["ltc_order.setup", "ltc_order.total_starts_at_zero", "ltc_order.describe_mentions_id"] {
+            assert!(tests.contains(&test.to_string()), "{test}: {tests:?}");
+        }
+        let edges = abap_typed_edges(&abap_fixture_2_6_sources());
+        assert!(
+            edges.contains(&(
+                "zcl_fx_order.total_starts_at_zero".to_string(),
+                "zcl_fx_order.setup".to_string(),
+                "calls"
+            )),
+            "{edges:?}"
+        );
+        // `create` makes the instance with `NEW #( )`, which runs the
+        // constructor no line calls: the tests reach that too.
+        let tests = abap_tests_of(&built, "zcl_fx_order.clas.abap", "constructor");
+        for test in ["ltc_order.total_starts_at_zero", "ltc_user.run_labels_order", "ltc_user.describe_through_base"] {
+            assert!(tests.contains(&test.to_string()), "{test}: {tests:?}");
+        }
+        assert!(
+            edges.contains(&("zcl_fx_order.create".to_string(), "zcl_fx_order.constructor".to_string(), "calls")),
+            "{edges:?}"
+        );
+
+        // All four fixture methods, whichever the class declares, from every
+        // test method and from nothing else, `CLASS-METHODS` and a chained
+        // `METHODS:` included. A method not `FOR TESTING` gets none.
+        let code = "CLASS ltc_demo DEFINITION FOR TESTING DURATION SHORT RISK LEVEL HARMLESS.\n  PRIVATE SECTION.\n    CLASS-METHODS: class_setup, class_teardown.\n    METHODS: setup, teardown,\n      first FOR TESTING,\n      second FOR TESTING RAISING cx_static_check,\n      helper.\nENDCLASS.\n\nCLASS ltc_demo IMPLEMENTATION.\n  METHOD class_setup.\n  ENDMETHOD.\n  METHOD class_teardown.\n  ENDMETHOD.\n  METHOD setup.\n  ENDMETHOD.\n  METHOD teardown.\n  ENDMETHOD.\n  METHOD first.\n  ENDMETHOD.\n  METHOD second.\n    helper( ).\n  ENDMETHOD.\n  METHOD helper.\n  ENDMETHOD.\nENDCLASS.\n";
+        let file = "zcl_demo.clas.testclasses.abap";
+        let edges = abap_typed_edges(&[(file, code.to_string())]);
+        let mut calls: Vec<(String, String)> = edges
+            .iter()
+            .filter(|(_, _, kind)| *kind == "calls")
+            .map(|(from, to, _)| (from.clone(), to.clone()))
+            .collect();
+        calls.sort();
+        let mut want: Vec<(String, String)> = Vec::new();
+        for test in ["first", "second"] {
+            for fixture in ["class_setup", "class_teardown", "setup", "teardown"] {
+                want.push((format!("zcl_demo.{test}"), format!("zcl_demo.{fixture}")));
+            }
+        }
+        want.push(("zcl_demo.second".to_string(), "zcl_demo.helper".to_string()));
+        want.sort();
+        assert_eq!(calls, want);
+
+        // The call pipeline counts them apart from the source's calls, and
+        // `NEW zcl_nowhere( )`'s constructor, in no file, is no unresolved call.
+        let code = code.replace("    helper( ).\n", "    helper( ).\n    DATA(lo) = NEW zcl_nowhere( ).\n");
+        let code = code.as_str();
+        let facts = crate::parser::calls::abap::lower(code);
+        assert_eq!(facts.implicit.len(), 9);
+        let files = [(file, &facts)];
+        let (_, stats) = crate::parser::calls::resolve(std::path::Path::new("."), &crate::parser::calls::abap::ABAP, &files, &[]);
+        assert_eq!(stats.unresolved.values().sum::<usize>(), 0, "{stats:?}");
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_6_same_name_other_class_not_listed() {
+        // zcl_fx_user's `describe_is_user` calls `mo_cut->describe( )` on a
+        // zcl_fx_user, whose `describe` shares zcl_fx_order's name. It is not a
+        // test of zcl_fx_order's; `describe_mentions_id` is, and so are the
+        // tests reaching it through a caller or a base reference.
+        let built = abap_graph_entities(&abap_fixture_2_6_sources());
+        let tests = abap_tests_of(&built, "zcl_fx_order.clas.abap", "describe");
+        assert!(!tests.contains(&"ltc_user.describe_is_user".to_string()), "{tests:?}");
+        for test in ["ltc_order.describe_mentions_id", "ltc_other.label_has_tag", "ltc_user.run_labels_order", "ltc_user.describe_through_base"] {
+            assert!(tests.contains(&test.to_string()), "{test}: {tests:?}");
+        }
+        let user = abap_tests_of(&built, "zcl_fx_user.clas.abap", "describe");
+        assert!(user.contains(&"ltc_user.describe_is_user".to_string()), "{user:?}");
+        assert!(!user.iter().any(|t| t.starts_with("ltc_order.")), "{user:?}");
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_6_two_hops() {
+        // `run_labels_order` calls zcl_fx_user's `run`, which calls
+        // `zcl_fx_order=>create`: a test of `create` two calls away.
+        let built = abap_graph_entities(&abap_fixture_2_6_sources());
+        let tests = abap_tests_of(&built, "zcl_fx_order.clas.abap", "create");
+        assert!(tests.contains(&"ltc_user.run_labels_order".to_string()), "{tests:?}");
+        // ... and only the tests of zcl_fx_user that reach it: not the one
+        // calling zcl_fx_user's own `describe`.
+        assert!(!tests.contains(&"ltc_user.describe_is_user".to_string()), "{tests:?}");
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_6_through_dispatch() {
+        // `total_through_interface` calls `lif->get_total( )` with `lif TYPE REF
+        // TO zif_fx_order`: it reaches each class's `zif_fx_order~get_total`
+        // through the declaration's dispatch edges. `describe_through_base`
+        // calls `lo_base->describe( )` on a `REF TO zcl_fx_order`, which
+        // dispatches to zcl_fx_order_sub's `REDEFINITION`.
+        let built = abap_graph_entities(&abap_fixture_2_6_sources());
+        for file in ["zcl_fx_order_alt.clas.abap", "zcl_fx_order.clas.abap"] {
+            let tests = abap_tests_of(&built, file, "zif_fx_order~get_total");
+            assert!(tests.contains(&"ltc_user.total_through_interface".to_string()), "{file}: {tests:?}");
+        }
+        let tests = abap_tests_of(&built, "zcl_fx_order_sub.clas.abap", "describe");
+        assert!(tests.contains(&"ltc_user.describe_through_base".to_string()), "{tests:?}");
+        assert!(!tests.contains(&"ltc_user.describe_is_user".to_string()), "{tests:?}");
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_6_index_and_graph_agree() {
+        // The index's transitive walk (`callers_of` from the target, kept to
+        // entities flagged `is_test`) answers what the graph's `test_impact`
+        // does, for every method of the fixture: the test flags and the edges
+        // the image carries are the graph's.
+        let (graph, entities) = abap_graph_entities(&abap_fixture_2_6_sources());
+        let test_ids = graph.filter_test_entities(&entities);
+        let (bytes, _) = crate::index::build_with_content_and_dirs_and_tests(
+            &graph,
+            &[],
+            &[],
+            &std::collections::HashMap::new(),
+            Some(&test_ids),
+        );
+        let idx = crate::index::QueryIndex::from_bytes(bytes).expect("index");
+        let mut checked = 0;
+        for at in 0..idx.entity_count() {
+            let target = idx.entity(at);
+            if target.entity_type() != "method" {
+                continue;
+            }
+            let mut seen = std::collections::HashSet::from([at]);
+            let mut frontier = vec![at];
+            let mut from_index: Vec<String> = Vec::new();
+            while !frontier.is_empty() {
+                let mut next = Vec::new();
+                for node in frontier {
+                    for caller in idx.callers_of(node) {
+                        if seen.insert(caller.index()) {
+                            if caller.is_test() {
+                                from_index.push(caller.id());
+                            }
+                            next.push(caller.index());
+                        }
+                    }
+                }
+                frontier = next;
+            }
+            from_index.sort();
+            let mut from_graph: Vec<String> =
+                graph.test_impact(&target.id(), &entities).iter().map(|e| e.id.to_string()).collect();
+            from_graph.sort();
+            assert_eq!(from_index, from_graph, "{}", target.id());
+            checked += 1;
+        }
+        assert!(checked > 20, "{checked}");
+    }
+
     #[test]
     #[cfg(feature = "lang-abap")]
     fn abap_grammar_ends_literals_at_end_of_line() {

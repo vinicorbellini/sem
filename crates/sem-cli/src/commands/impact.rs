@@ -115,6 +115,43 @@ fn is_qualified_name(name: &str) -> bool {
     name.contains('.') || name.contains("::")
 }
 
+/// An entity of an `.abap` file (any case).
+fn is_abap(e: &EntityInfo) -> bool {
+    e.file_path.to_ascii_lowercase().ends_with(".abap")
+}
+
+/// The class an ABAP test method is in, read off its parent's id
+/// (`...::class::ltc_order`, without an `@L`/`#` disambiguator). ABAP Unit
+/// runs a test class by name, and abapGit's test methods' names repeat
+/// across classes, so the class is part of what `--tests` names. `None`
+/// for every other language, whose output stays as it was.
+fn abap_test_class(e: &EntityInfo) -> Option<&str> {
+    if !is_abap(e) {
+        return None;
+    }
+    let parent = e.parent_id.as_deref()?;
+    let last = parent.rsplit("::").next()?;
+    let name = last.split(['@', '#']).next().unwrap_or(last);
+    (!name.is_empty()).then_some(name)
+}
+
+/// How a test is named in the text output: `class.method` for ABAP.
+fn test_label(e: &EntityInfo) -> String {
+    match abap_test_class(e) {
+        Some(class) => format!("{class}.{}", e.name),
+        None => e.name.clone(),
+    }
+}
+
+/// A test in the JSON output: the entity, and for ABAP its `class`.
+fn test_json(e: &EntityInfo) -> serde_json::Value {
+    let mut v = entity_json(e);
+    if let (Some(class), Some(o)) = (abap_test_class(e), v.as_object_mut()) {
+        o.insert("class".to_string(), serde_json::json!(class));
+    }
+    v
+}
+
 const LARGE_IMPACT_CACHE_MISS_FILE_THRESHOLD: usize = 20_000;
 
 /// Run a graph build behind a uv-style spinner, then clear it and print a
@@ -806,10 +843,12 @@ fn try_index_impact_transitive(opts: &ImpactOptions, timings: &mut Timings) -> b
         .collect();
 
     if matches!(opts.mode, ImpactMode::Tests) {
-        if tests.is_empty() {
+        if tests.is_empty() && !is_abap(&entity) {
             // Not authoritative — the graph can miss tests that reach the
             // target through a module namespace. The legacy path's lexical
             // fallback needs entity bodies, which the image does not carry.
+            // ABAP has no lexical fallback (see `print_tests`), so its empty
+            // answer is the answer, with the completeness verdict.
             return false;
         }
         let result = CachedImpactResult {
@@ -1106,7 +1145,7 @@ fn print_cached_tests(entity: &EntityInfo, tests: &[EntityInfo], dependents: Opt
     if json {
         let mut output = serde_json::json!({
             "entity": entity_json(entity),
-            "tests": owned_entity_list_json(tests),
+            "tests": tests.iter().map(test_json).collect::<Vec<_>>(),
             "noTestReaches": tests.is_empty(),
         });
         annotate_json(&mut output, verdict.as_ref());
@@ -1145,7 +1184,7 @@ fn print_cached_tests(entity: &EntityInfo, tests: &[EntityInfo], dependents: Opt
                     println!(
                         "      {} {} (L{}–{})",
                         test.entity_type.dimmed(),
-                        test.name.bold(),
+                        test_label(test).bold(),
                         test.start_line,
                         test.end_line,
                     );
@@ -1191,7 +1230,7 @@ fn print_cached_all(result: &CachedImpactResult, json: bool, depth: usize) {
                 "total": result.impact.len(),
                 "entities": impact_entities,
             },
-            "tests": owned_entity_list_json(&result.tests),
+            "tests": result.tests.iter().map(test_json).collect::<Vec<_>>(),
             "noTestReaches": result.tests.is_empty(),
         });
         if result.tests_truncated {
@@ -1301,7 +1340,7 @@ fn print_cached_all(result: &CachedImpactResult, json: bool, depth: usize) {
             println!(
                 "    {} {} ({})",
                 test.entity_type.dimmed(),
-                test.name.bold(),
+                test_label(test).bold(),
                 test.file_path.dimmed(),
             );
         }
@@ -1341,7 +1380,14 @@ fn print_tests(
     custom_test_dirs: &[String],
 ) {
     let tests = graph.test_impact_with_custom_dirs(&entity.id, all_entities, custom_test_dirs);
-    if !tests.is_empty() {
+    // No lexical fallback for ABAP. A test of ABAP code reaches it through
+    // resolved calls, dispatch and ABAP Unit's fixture calls, and through
+    // nothing else: the fallback below would list every test whose body
+    // writes the name, case-sensitively, which in ABAP is a method of any
+    // class (`describe`, `run`, `create`) and misses `ZCL_X=>RUN( )`. What
+    // the graph cannot bind is the completeness verdict's to say, as
+    // possible callers, printed with the "NO TEST REACHES" line.
+    if !tests.is_empty() || is_abap(entity) {
         print_tests_result(entity, &tests, Some(&graph.get_dependents(&entity.id)), json);
         return;
     }
@@ -1414,7 +1460,7 @@ fn print_tests_result(entity: &EntityInfo, tests: &[&EntityInfo], dependents: Op
     if json {
         let mut output = serde_json::json!({
             "entity": entity_json(entity),
-            "tests": entity_list_json(tests),
+            "tests": tests.iter().map(|t| test_json(t)).collect::<Vec<_>>(),
             "noTestReaches": tests.is_empty(),
         });
         annotate_json(&mut output, verdict.as_ref());
@@ -1444,7 +1490,7 @@ fn print_tests_result(entity: &EntityInfo, tests: &[&EntityInfo], dependents: Op
                     println!(
                         "      {} {} (L{}–{})",
                         t.entity_type.dimmed(),
-                        t.name.bold(),
+                        test_label(t).bold(),
                         t.start_line,
                         t.end_line,
                     );
@@ -1522,7 +1568,7 @@ fn print_all_with_tests(
                 "total": impact_bounded.len(),
                 "entities": impact_entities,
             },
-            "tests": entity_list_json(tests),
+            "tests": tests.iter().map(|t| test_json(t)).collect::<Vec<_>>(),
             "noTestReaches": tests.is_empty(),
         });
         let mut output = output;
@@ -1621,7 +1667,7 @@ fn print_all_with_tests(
                 println!(
                     "    {} {} ({})",
                     t.entity_type.dimmed(),
-                    t.name.bold(),
+                    test_label(t).bold(),
                     t.file_path.dimmed(),
                 );
             }

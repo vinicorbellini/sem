@@ -378,6 +378,11 @@ pub struct FileFacts {
     /// and folded (ABAP): the other files pasted into this one, which the
     /// layout joins into one unit.
     pub includes: Vec<Name>,
+    /// Sites no source line writes, by index into `sites` (ascending): the
+    /// calls the ABAP runtime makes, of a test class's fixture methods
+    /// around each test and of a class's `constructor` where an instance
+    /// is made.
+    pub implicit: Vec<u32>,
 }
 
 /// `return <value>` in function `func` (scope `scope`).

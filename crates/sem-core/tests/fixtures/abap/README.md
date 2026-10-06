@@ -16,7 +16,7 @@ Story 1.1 is case-insensitive names, 1.2 comment and string stripping, 1.3 the
 full entity set, 1.4 one entity per class, 1.5 abapGit layout, 1.6 parse-error
 tolerance, 1.7 test detection, 1.10 METHOD blocks the grammar loses, 2.0 names
 across files, 2.4 includes and function groups, 2.1 static calls, 2.2 receiver
-types, 2.3 inheritance and interfaces.
+types, 2.3 inheritance and interfaces, 2.6 tests reached.
 
 | Fixture file | Tests that read it | Story |
 |--------------|--------------------|-------|
@@ -41,6 +41,7 @@ types, 2.3 inheritance and interfaces.
 | | `abap_fixture_1_3_local_classes_attach` | 1.3 |
 | | `abap_fixture_1_6_errors_still_yield_entities` | 1.6 |
 | | `abap_fixture_2_0_unique_method_across_files`, `abap_fixture_2_0_ambiguous_method_no_edge` (same-object names) | 2.0 |
+| | `abap_fixture_2_6_tests_through_setup` (`setup` calls `create`, the two `FOR TESTING` methods reach it through it), `_same_name_other_class_not_listed`, `_index_and_graph_agree`; the `abap_fixture_2_6_*` tests in `crates/sem-cli/tests/abap_tests_reached_cli.rs` | 2.6 |
 | `zcl_fx_order_sub.clas.abap` | `test_abap_fixture_clas_sub` | 1.4 |
 | | `abap_fixture_2_3_base_call_dispatches` (`describe REDEFINITION`), `abap_fixture_2_3_impact_through_dispatch` | 2.3 |
 | | `abap_fixture_1_1_find_any_case` | 1.1 |
@@ -57,6 +58,8 @@ types, 2.3 inheritance and interfaces.
 | `zcl_fx_other.clas.abap` | `abap_fixture_2_0_local_class_stays_in_object`, `abap_fixture_2_0_ambiguous_method_no_edge`, `abap_fixture_2_0_unique_method_across_files` (`zif_fx_order~get_total`) | 2.0 |
 | `zcl_fx_other.clas.locals_imp.abap` | `abap_fixture_2_0_local_class_stays_in_object` (a second `lcl_helper`) | 2.0 |
 | `zcl_fx_other.clas.testclasses.abap` | `abap_fixture_2_0_local_friends_does_not_shadow` (`LOCAL FRIENDS`) | 2.0 |
+| | `abap_fixture_2_6_same_name_other_class_not_listed` (`label_has_tag` reaches `zcl_fx_order.describe` through `label`, and `create` directly) | 2.6 |
+| `zcl_fx_user.clas.testclasses.abap` | the `abap_fixture_2_6_*` tests: a test two calls from `create` (`run_labels_order`), one calling zcl_fx_user's own `describe` that must not count for zcl_fx_order's (`describe_is_user`), one through `zif_fx_order` (`total_through_interface`) and one through a base reference to a redefinition (`describe_through_base`) | 2.6 |
 | `zfx_report.prog.abap` | `test_abap_fixture_prog`, `abap_fixture_1_3_report`, `abap_fixture_1_3_form`, `abap_fixture_1_3_macro` | 1.3 |
 | | `abap_fixture_1_6_errors_still_yield_entities`, `abap_fixture_1_6_error_count_reported` | 1.6 |
 | | `abap_fixture_2_4_forms_do_not_leak` | 2.4 |
@@ -98,3 +101,4 @@ by `test_abap_fixture_layout`.
 | `abap_fixture_2_2_param_type` (a form's `USING`, a function module's comment-block signature, an interface's and a base class's parameters in another file) | 2.2 |
 | `abap_fixture_2_2_untyped_stays_unknown` (a local class's `METHODS` in `locals_def` and its `METHOD` in `locals_imp`; `NEW #( )` with no target) | 2.2 |
 | `abap_fixture_2_3_redefinition_pairs` (only `REDEFINITION` overrides: not a method named like a private base method, nor a constructor) | 2.3 |
+| `abap_fixture_2_6_tests_through_setup`, second half (all four fixture methods, `CLASS-METHODS` and a chained `METHODS:`, from each `FOR TESTING` method only; a constructor of a class in no file is not unresolved) | 2.6 |

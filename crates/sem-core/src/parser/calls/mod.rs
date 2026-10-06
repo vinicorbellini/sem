@@ -80,6 +80,9 @@ pub struct Stats {
     pub external: usize,
     /// Resolved to a repo definition sem has no entity for.
     pub no_entity: usize,
+    /// Of `calls`, the ones of sites no source line writes
+    /// (`FileFacts::implicit`: ABAP Unit's fixture methods, constructors).
+    pub implicit: usize,
     pub unresolved: HashMap<&'static str, usize>,
     /// Every site's answer as a JSON line, with `SEM_CALLS_SITES` set (`sem
     /// system` sets it around its layer builds).
@@ -94,6 +97,7 @@ impl Stats {
         self.dispatch += o.dispatch;
         self.external += o.external;
         self.no_entity += o.no_entity;
+        self.implicit += o.implicit;
         for (k, v) in o.unresolved {
             *self.unresolved.entry(k).or_default() += v;
         }
@@ -549,7 +553,8 @@ fn classify_file<'e>(
     let mut edges = Vec::new();
     let mut stats = Stats::default();
     let mut cxs: HashMap<(Option<u32>, u32), infer::FnCx> = HashMap::default();
-    for site in &f.sites {
+    for (i, site) in f.sites.iter().enumerate() {
+        let implicit = f.implicit.binary_search(&(i as u32)).is_ok();
         let cx = cxs
             .entry((site.func, site.scope))
             .or_insert_with(|| r.fn_cx(fi, site.func, site.scope));
@@ -589,7 +594,10 @@ fn classify_file<'e>(
                     match (from, to) {
                         (Some(from), Some(to)) => {
                             match kind {
-                                EdgeKind::Calls | EdgeKind::Dispatch => stats.calls += 1,
+                                EdgeKind::Calls | EdgeKind::Dispatch => {
+                                    stats.calls += 1;
+                                    stats.implicit += usize::from(implicit);
+                                }
                                 EdgeKind::Refs => stats.refs += 1,
                                 _ => stats.typerefs += 1,
                             }
@@ -599,23 +607,29 @@ fn classify_file<'e>(
                     }
                 }
             }
+            // an implicit site stands for no source call: one that binds
+            // nothing (a class with no constructor in the repo) is no gap
+            _ if implicit => {}
             Pick::External(_) if call => stats.external += 1,
             Pick::Unknown(why) if call => *stats.unresolved.entry(why).or_default() += 1,
             _ => {}
         }
-        if dump {
+        if dump && (!implicit || matches!(pick, Pick::Defs(..))) {
             let (defs, unknown) = match &pick {
                 Pick::Defs(..) => (Some(answer), None),
                 Pick::External(_) => (None, None),
                 Pick::Unknown(why) => (None, Some(*why)),
             };
-            stats.sites.push(
-                serde_json::json!({
-                    "file": path, "at": site.at, "call": call,
-                    "defs": defs, "unknown": unknown,
-                })
-                .to_string(),
-            );
+            let mut line = serde_json::json!({
+                "file": path, "at": site.at, "call": call,
+                "defs": defs, "unknown": unknown,
+            });
+            // only the sites the framework makes carry the key, so every
+            // other line of the dump stays as it was
+            if implicit {
+                line["implicit"] = serde_json::json!(true);
+            }
+            stats.sites.push(line.to_string());
         }
     }
     (edges, stats)
@@ -789,7 +803,8 @@ pub enum SiteAnswer {
 }
 
 /// Stages 2–4 for one language's files, answering every site: per file,
-/// `(byte offset of the site's name, is a call, answer)`.
+/// `(byte offset of the site's name, is a call, answer)`. A site no source
+/// line writes (`FileFacts::implicit`) has no name and is left out.
 pub fn site_answers(
     root: &FsPath,
     lang: &dyn Lang,
@@ -811,7 +826,11 @@ pub fn site_answers(
         let f = facts[fi];
         let mut cxs: HashMap<(Option<u32>, u32), infer::FnCx> = HashMap::default();
         let mut out = Vec::with_capacity(f.sites.len());
-        for site in &f.sites {
+        for (i, site) in f.sites.iter().enumerate() {
+            // a call the framework makes has no name in the source to answer at
+            if f.implicit.binary_search(&(i as u32)).is_ok() {
+                continue;
+            }
             let cx = cxs
                 .entry((site.func, site.scope))
                 .or_insert_with(|| r.fn_cx(fi as u32, site.func, site.scope));

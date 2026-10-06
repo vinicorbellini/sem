@@ -758,10 +758,11 @@ fn mcp_abap_serves_find_impact_certify() {
     }
     assert_eq!(mcp["complete"], false, "a dynamic call reaches every method of the class");
 
-    // a method reached only by a computed call is not "(callers: none)"
+    // the constructor is called where an instance is made (`NEW zcl_fx_order( 1 )`, `NEW #( )`
+    // in `create`, story 2.6), and the computed call still makes the set incomplete
     let text = tool_text(&client.call_tool("sem_find", json!({"query": "constructor", "mode": "callers", "file": order_file})));
     assert!(!text.contains("(callers: none)\n"), "{text}");
-    assert!(text.contains("NOT a proof of no callers") && text.contains("INCOMPLETE"), "{text}");
+    assert!(text.contains("method create") && text.contains("INCOMPLETE"), "{text}");
     assert!(text.contains("zfx_dynamic.prog.abap") && text.contains("dynamic call"), "{text}");
     let ctor = json_text(&mut client, "sem_callers", json!({"query": "constructor", "file": order_file, "format": "json"}));
     assert_eq!(ctor["complete"], false);
