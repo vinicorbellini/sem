@@ -700,9 +700,23 @@ fn visit_node(
                         }
                     }
 
-                    // An interface's `TYPES` and `CONSTANTS` are direct children.
+                    // An interface's `TYPES` and `CONSTANTS` are direct children,
+                    // and so are its `DATA` and `CLASS-DATA` attributes: one
+                    // `variable_declaration` per name of a chain, as in a section.
                     if config.id == "abap" && node_type == "interface_declaration" {
                         push_abap_declarations(node, file_path, source, &entity_id, entities);
+                        let mut attr_cursor = node.walk();
+                        let attributes: Vec<_> = node
+                            .named_children(&mut attr_cursor)
+                            .filter(|c| c.kind() == "variable_declaration")
+                            .collect();
+                        for attribute in attributes.into_iter().rev() {
+                            worklist.push((
+                                attribute,
+                                Some(entity_id.clone()),
+                                next_suppression.clone(),
+                            ));
+                        }
                     }
 
                     // ABAP `CLASS x IMPLEMENTATION` has no body node to declare as a
@@ -1474,10 +1488,11 @@ fn first_abap_name_token(node: Node) -> Option<Node> {
     None
 }
 
-/// ABAP `DATA` outside a class's sections declares a program global or a
-/// local variable of a FORM or METHOD body, not a member. The grammar gives
-/// both the same `variable_declaration`, so only the sections' are entities,
-/// the way other languages keep locals out (`scope_boundary_types`).
+/// ABAP `DATA` outside a class's sections or an interface declares a program
+/// global or a local variable of a FORM or METHOD body, not a member. The
+/// grammar gives both the same `variable_declaration`, so only the sections'
+/// and the interfaces' are entities, the way other languages keep locals out
+/// (`scope_boundary_types`).
 ///
 /// The one exception, a `TOP` include's top-level `DATA`, is not read here:
 /// the grammar loses it (`FUNCTION-POOL` leaves an `ERROR` that swallows it),
@@ -1485,9 +1500,10 @@ fn first_abap_name_token(node: Node) -> Option<Node> {
 fn is_abap_local_data(node: Node, config: &LanguageConfig) -> bool {
     config.id == "abap"
         && node.kind() == "variable_declaration"
-        && !node
-            .parent()
-            .is_some_and(|parent| config.container_node_types.contains(&parent.kind()))
+        && !node.parent().is_some_and(|parent| {
+            config.container_node_types.contains(&parent.kind())
+                || parent.kind() == "interface_declaration"
+        })
 }
 
 /// The period that ends an ABAP statement node, when the node runs on past it.

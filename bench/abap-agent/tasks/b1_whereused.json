@@ -2,7 +2,8 @@
   "class": "B1",
   "name": "where-used",
   "abapgit_commit": "b2b4e250747ecb4f8e2b1d79e332d2cf897d5fa0",
-  "ground_truth": "ground_truth/whereused.json",
+  "ground_truth": "ground_truth/whereused.grep.json",
+  "ground_truth_source": "grep fallback of story 2.7 (crates/sem-core/tests/fixtures/abap/inside-sap/whereused.grep.json, converted by scripts/abap-whereused-convert.py); point this at ground_truth/whereused.json once the sapcli export exists",
   "prompt_template": "The current directory is a checkout of the abapGit repository (ABAP sources in abapGit file format under src/). List every method that calls {target}, defined in {defined_in}. Include callers in local classes and in unit test classes. For each call give the calling method, the file path relative to the repository root, and the 1-based line number of the call.\n\nEnd your reply with a single JSON object and nothing after it:\n{{\"callers\": [{{\"method\": \"<class>-><method>\", \"file\": \"src/...\", \"line\": 123}}]}}",
   "selection": "Methods declared in exactly one class or interface, name at least 8 characters, with 3 to 30 distinct calling methods found by grep for '->name(', '=>name(' and 'CALL METHOD' at the pinned commit, spread over 3 or more files. grep_* fields are that baseline, not the ground truth.",
   "tasks": [

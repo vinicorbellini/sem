@@ -12,7 +12,10 @@ stories describe may be offered upstream separately, with their own
 - `stories/1-1-case-folding.md` to `stories/1-9-tests-and-fixture.md`: one file
   per Tier 1 spec row (review-grade ABAP support).
 - `census-gate1.md`: the parse-error census on abapGit. Written by stories 1.6
-  and 1.8, required by Gate 1. It does not exist yet.
+  and 1.8, required by Gate 1.
+- `census-gate2.md`: the precision study of story 2.7 (Gate 2 item 2): 30
+  abapGit methods, sem's resolved callers against a hand-checked text
+  where-used, and the B.1 targets scored the same way.
 
 ## Starting point
 

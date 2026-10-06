@@ -1,0 +1,750 @@
+{
+ "abapgit_commit": "b2b4e250747ecb4f8e2b1d79e332d2cf897d5fa0",
+ "targets": {
+  "b1_01": [
+   {
+    "method": "zcl_abapgit_git_branch_list->parse_branch_list",
+    "file": "src/git/zcl_abapgit_git_branch_list.clas.abap",
+    "line": 191
+   },
+   {
+    "method": "zcl_abapgit_git_branch_utils->get_description",
+    "file": "src/git/zcl_abapgit_git_branch_utils.clas.abap",
+    "line": 58
+   },
+   {
+    "method": "zcl_abapgit_repo_online->raise_error_if_branch_exists",
+    "file": "src/repo/zcl_abapgit_repo_online.clas.abap",
+    "line": 164
+   },
+   {
+    "method": "zcl_abapgit_repo_online->zif_abapgit_repo_online~check_for_valid_branch",
+    "file": "src/repo/zcl_abapgit_repo_online.clas.abap",
+    "line": 195
+   },
+   {
+    "method": "zcl_abapgit_gui_chunk_lib->render_branch_name",
+    "file": "src/ui/lib/zcl_abapgit_gui_chunk_lib.clas.abap",
+    "line": 359
+   },
+   {
+    "method": "zcl_abapgit_gui_chunk_lib->render_branch_name",
+    "file": "src/ui/lib/zcl_abapgit_gui_chunk_lib.clas.abap",
+    "line": 368
+   },
+   {
+    "method": "zcl_abapgit_gui_page_sett_remo->initialize_form_data",
+    "file": "src/ui/pages/sett/zcl_abapgit_gui_page_sett_remo.clas.abap",
+    "line": 591
+   },
+   {
+    "method": "zcl_abapgit_gui_page_sett_remo->initialize_form_data",
+    "file": "src/ui/pages/sett/zcl_abapgit_gui_page_sett_remo.clas.abap",
+    "line": 596
+   },
+   {
+    "method": "zcl_abapgit_gui_page_ref_sel->create_picklist",
+    "file": "src/ui/pages/zcl_abapgit_gui_page_ref_sel.clas.abap",
+    "line": 118
+   },
+   {
+    "method": "zcl_abapgit_gui_page_stage->switch_branch",
+    "file": "src/ui/pages/zcl_abapgit_gui_page_stage.clas.abap",
+    "line": 693
+   },
+   {
+    "method": "zcl_abapgit_services_git->create_branch",
+    "file": "src/ui/routing/zcl_abapgit_services_git.clas.abap",
+    "line": 146
+   },
+   {
+    "method": "zcl_abapgit_services_git->create_branch",
+    "file": "src/ui/routing/zcl_abapgit_services_git.clas.abap",
+    "line": 147
+   },
+   {
+    "method": "zcl_abapgit_services_git->create_branch_common",
+    "file": "src/ui/routing/zcl_abapgit_services_git.clas.abap",
+    "line": 209
+   },
+   {
+    "method": "zcl_abapgit_services_git->create_branch_common",
+    "file": "src/ui/routing/zcl_abapgit_services_git.clas.abap",
+    "line": 210
+   },
+   {
+    "method": "zcl_abapgit_popups->zif_abapgit_popups~branch_list_popup",
+    "file": "src/ui/zcl_abapgit_popups.clas.abap",
+    "line": 280
+   },
+   {
+    "method": "zcl_abapgit_popups->zif_abapgit_popups~branch_list_popup",
+    "file": "src/ui/zcl_abapgit_popups.clas.abap",
+    "line": 281
+   },
+   {
+    "method": "zcl_abapgit_popups->zif_abapgit_popups~create_branch_popup",
+    "file": "src/ui/zcl_abapgit_popups.clas.abap",
+    "line": 396
+   }
+  ],
+  "b1_02": [
+   {
+    "method": "zcl_abapgit_longtexts->zif_abapgit_longtexts~deserialize_aff",
+    "file": "src/objects/texts/zcl_abapgit_longtexts.clas.abap",
+    "line": 226
+   },
+   {
+    "method": "zcl_abapgit_object_bdef->get_object_data",
+    "file": "src/objects/zcl_abapgit_object_bdef.clas.abap",
+    "line": 257
+   },
+   {
+    "method": "zcl_abapgit_object_dcls->zif_abapgit_object~deserialize",
+    "file": "src/objects/zcl_abapgit_object_dcls.clas.abap",
+    "line": 116
+   },
+   {
+    "method": "zcl_abapgit_object_ddls->read_baseinfo",
+    "file": "src/objects/zcl_abapgit_object_ddls.clas.abap",
+    "line": 233
+   },
+   {
+    "method": "zcl_abapgit_object_ddls->zif_abapgit_object~deserialize",
+    "file": "src/objects/zcl_abapgit_object_ddls.clas.abap",
+    "line": 362
+   },
+   {
+    "method": "zcl_abapgit_object_ddlx->zif_abapgit_object~deserialize",
+    "file": "src/objects/zcl_abapgit_object_ddlx.clas.abap",
+    "line": 138
+   },
+   {
+    "method": "zcl_abapgit_object_drul->zif_abapgit_object~deserialize",
+    "file": "src/objects/zcl_abapgit_object_drul.clas.abap",
+    "line": 321
+   },
+   {
+    "method": "zcl_abapgit_object_dtdc->zif_abapgit_object~deserialize",
+    "file": "src/objects/zcl_abapgit_object_dtdc.clas.abap",
+    "line": 338
+   },
+   {
+    "method": "zcl_abapgit_object_form->extract_tdlines",
+    "file": "src/objects/zcl_abapgit_object_form.clas.abap",
+    "line": 184
+   },
+   {
+    "method": "zcl_abapgit_object_form->extract_tdlines",
+    "file": "src/objects/zcl_abapgit_object_form.clas.abap",
+    "line": 189
+   },
+   {
+    "method": "zcl_abapgit_object_iatu->zif_abapgit_object~deserialize",
+    "file": "src/objects/zcl_abapgit_object_iatu.clas.abap",
+    "line": 344
+   },
+   {
+    "method": "zcl_abapgit_object_intf->read_json",
+    "file": "src/objects/zcl_abapgit_object_intf.clas.abap",
+    "line": 326
+   },
+   {
+    "method": "zcl_abapgit_object_sots->zif_abapgit_object~deserialize",
+    "file": "src/objects/zcl_abapgit_object_sots.clas.abap",
+    "line": 281
+   },
+   {
+    "method": "zcl_abapgit_object_srvd->get_object_data",
+    "file": "src/objects/zcl_abapgit_object_srvd.clas.abap",
+    "line": 212
+   },
+   {
+    "method": "zcl_abapgit_object_srvd->get_object_data",
+    "file": "src/objects/zcl_abapgit_object_srvd.clas.abap",
+    "line": 214
+   },
+   {
+    "method": "zcl_abapgit_object_wdca->zif_abapgit_object~deserialize",
+    "file": "src/objects/zcl_abapgit_object_wdca.clas.abap",
+    "line": 282
+   },
+   {
+    "method": "zcl_abapgit_object_wdcc->zif_abapgit_object~deserialize",
+    "file": "src/objects/zcl_abapgit_object_wdcc.clas.abap",
+    "line": 168
+   },
+   {
+    "method": "zcl_abapgit_object_xslt->zif_abapgit_object~deserialize",
+    "file": "src/objects/zcl_abapgit_object_xslt.clas.abap",
+    "line": 128
+   }
+  ],
+  "b1_03": [
+   {
+    "method": "zcl_abapgit_object_common_aff->zif_abapgit_object~deserialize",
+    "file": "src/objects/aff/zcl_abapgit_object_common_aff.clas.abap",
+    "line": 431
+   },
+   {
+    "method": "zcl_abapgit_oo_base->zif_abapgit_oo_object_fnc~add_to_activation_list",
+    "file": "src/objects/oo/zcl_abapgit_oo_base.clas.abap",
+    "line": 48
+   },
+   {
+    "method": "zcl_abapgit_object_tabl->zif_abapgit_object~deserialize",
+    "file": "src/objects/tabl/zcl_abapgit_object_tabl.clas.abap",
+    "line": 756
+   },
+   {
+    "method": "zcl_abapgit_object_bdef->zif_abapgit_object~deserialize",
+    "file": "src/objects/zcl_abapgit_object_bdef.clas.abap",
+    "line": 502
+   },
+   {
+    "method": "zcl_abapgit_object_dcls->zif_abapgit_object~deserialize",
+    "file": "src/objects/zcl_abapgit_object_dcls.clas.abap",
+    "line": 150
+   },
+   {
+    "method": "zcl_abapgit_object_ddls->zif_abapgit_object~deserialize",
+    "file": "src/objects/zcl_abapgit_object_ddls.clas.abap",
+    "line": 427
+   },
+   {
+    "method": "zcl_abapgit_object_ddlx->zif_abapgit_object~deserialize",
+    "file": "src/objects/zcl_abapgit_object_ddlx.clas.abap",
+    "line": 174
+   },
+   {
+    "method": "zcl_abapgit_object_doma->zif_abapgit_object~deserialize",
+    "file": "src/objects/zcl_abapgit_object_doma.clas.abap",
+    "line": 469
+   },
+   {
+    "method": "zcl_abapgit_object_dtel->zif_abapgit_object~deserialize",
+    "file": "src/objects/zcl_abapgit_object_dtel.clas.abap",
+    "line": 305
+   },
+   {
+    "method": "zcl_abapgit_object_enho->zif_abapgit_object~deserialize",
+    "file": "src/objects/zcl_abapgit_object_enho.clas.abap",
+    "line": 192
+   },
+   {
+    "method": "zcl_abapgit_object_enqu->zif_abapgit_object~deserialize",
+    "file": "src/objects/zcl_abapgit_object_enqu.clas.abap",
+    "line": 103
+   },
+   {
+    "method": "zcl_abapgit_object_jobd->zif_abapgit_object~deserialize",
+    "file": "src/objects/zcl_abapgit_object_jobd.clas.abap",
+    "line": 139
+   },
+   {
+    "method": "zcl_abapgit_object_sfbf->zif_abapgit_object~deserialize",
+    "file": "src/objects/zcl_abapgit_object_sfbf.clas.abap",
+    "line": 232
+   },
+   {
+    "method": "zcl_abapgit_object_sfbs->zif_abapgit_object~deserialize",
+    "file": "src/objects/zcl_abapgit_object_sfbs.clas.abap",
+    "line": 215
+   },
+   {
+    "method": "zcl_abapgit_object_sfpf->zif_abapgit_object~deserialize",
+    "file": "src/objects/zcl_abapgit_object_sfpf.clas.abap",
+    "line": 398
+   },
+   {
+    "method": "zcl_abapgit_object_sfpi->zif_abapgit_object~deserialize",
+    "file": "src/objects/zcl_abapgit_object_sfpi.clas.abap",
+    "line": 121
+   },
+   {
+    "method": "zcl_abapgit_object_sfsw->zif_abapgit_object~deserialize",
+    "file": "src/objects/zcl_abapgit_object_sfsw.clas.abap",
+    "line": 223
+   },
+   {
+    "method": "zcl_abapgit_object_shlp->zif_abapgit_object~deserialize",
+    "file": "src/objects/zcl_abapgit_object_shlp.clas.abap",
+    "line": 164
+   },
+   {
+    "method": "zcl_abapgit_object_srvb->zif_abapgit_object~deserialize",
+    "file": "src/objects/zcl_abapgit_object_srvb.clas.abap",
+    "line": 503
+   },
+   {
+    "method": "zcl_abapgit_object_srvd->zif_abapgit_object~deserialize",
+    "file": "src/objects/zcl_abapgit_object_srvd.clas.abap",
+    "line": 480
+   },
+   {
+    "method": "zcl_abapgit_object_ttyp->zif_abapgit_object~deserialize",
+    "file": "src/objects/zcl_abapgit_object_ttyp.clas.abap",
+    "line": 116
+   },
+   {
+    "method": "zcl_abapgit_object_type->zif_abapgit_object~deserialize",
+    "file": "src/objects/zcl_abapgit_object_type.clas.abap",
+    "line": 150
+   },
+   {
+    "method": "zcl_abapgit_object_view->zif_abapgit_object~deserialize",
+    "file": "src/objects/zcl_abapgit_object_view.clas.abap",
+    "line": 433
+   },
+   {
+    "method": "zcl_abapgit_object_wapa->create_new_application",
+    "file": "src/objects/zcl_abapgit_object_wapa.clas.abap",
+    "line": 93
+   },
+   {
+    "method": "zcl_abapgit_object_webi->zif_abapgit_object~deserialize",
+    "file": "src/objects/zcl_abapgit_object_webi.clas.abap",
+    "line": 432
+   },
+   {
+    "method": "zcl_abapgit_object_xslt->zif_abapgit_object~deserialize",
+    "file": "src/objects/zcl_abapgit_object_xslt.clas.abap",
+    "line": 112
+   },
+   {
+    "method": "zcl_abapgit_object_xslt->zif_abapgit_object~deserialize",
+    "file": "src/objects/zcl_abapgit_object_xslt.clas.abap",
+    "line": 183
+   }
+  ],
+  "b1_04": [
+   {
+    "method": "zcl_abapgit_apack_reader->get_manifest_descriptor",
+    "file": "src/apack/zcl_abapgit_apack_reader.clas.abap",
+    "line": 214
+   },
+   {
+    "method": "zcl_abapgit_transport->collect_all_objects",
+    "file": "src/cts/zcl_abapgit_transport.clas.abap",
+    "line": 159
+   },
+   {
+    "method": "zcl_abapgit_data_deserializer->is_table_included_in_repo",
+    "file": "src/data/zcl_abapgit_data_deserializer.clas.abap",
+    "line": 142
+   },
+   {
+    "method": "zcl_abapgit_code_inspector->create_objectset",
+    "file": "src/inspect/zcl_abapgit_code_inspector.clas.abap",
+    "line": 203
+   },
+   {
+    "method": "zcl_abapgit_dependencies->resolve_packages",
+    "file": "src/objects/core/zcl_abapgit_dependencies.clas.abap",
+    "line": 379
+   },
+   {
+    "method": "zcl_abapgit_folder_logic->get_parent",
+    "file": "src/objects/core/zcl_abapgit_folder_logic.clas.abap",
+    "line": 68
+   },
+   {
+    "method": "zcl_abapgit_tadir->select_objects",
+    "file": "src/objects/core/zcl_abapgit_tadir.clas.abap",
+    "line": 280
+   },
+   {
+    "method": "zcl_abapgit_object_devc->is_empty",
+    "file": "src/objects/zcl_abapgit_object_devc.clas.abap",
+    "line": 130
+   },
+   {
+    "method": "zcl_abapgit_object_filter_tran->get_all_sub_packages",
+    "file": "src/repo/filter/zcl_abapgit_object_filter_tran.clas.abap",
+    "line": 157
+   },
+   {
+    "method": "zcl_abapgit_status_calc->process_items",
+    "file": "src/repo/status/zcl_abapgit_status_calc.clas.abap",
+    "line": 345
+   },
+   {
+    "method": "zcl_abapgit_repo_srv->validate_package_korrflag",
+    "file": "src/repo/zcl_abapgit_repo_srv.clas.abap",
+    "line": 266
+   },
+   {
+    "method": "zcl_abapgit_repo_srv->validate_sub_super_packages",
+    "file": "src/repo/zcl_abapgit_repo_srv.clas.abap",
+    "line": 297
+   },
+   {
+    "method": "zcl_abapgit_flow_logic->relevant_transports_via_devc",
+    "file": "src/ui/flow/zcl_abapgit_flow_logic.clas.abap",
+    "line": 969
+   },
+   {
+    "method": "zcl_abapgit_flow_logic->try_matching_transports",
+    "file": "src/ui/flow/zcl_abapgit_flow_logic.clas.abap",
+    "line": 1078
+   },
+   {
+    "method": "zcl_abapgit_gui_page_chg_pckg->check_support",
+    "file": "src/ui/pages/zcl_abapgit_gui_page_chg_pckg.clas.abap",
+    "line": 209
+   },
+   {
+    "method": "zcl_abapgit_gui_page_chg_pckg->get_package_mapping",
+    "file": "src/ui/pages/zcl_abapgit_gui_page_chg_pckg.clas.abap",
+    "line": 340
+   }
+  ],
+  "b1_05": [
+   {
+    "method": "zcl_abapgit_object_tabl->zif_abapgit_object~deserialize",
+    "file": "src/objects/tabl/zcl_abapgit_object_tabl.clas.abap",
+    "line": 760
+   },
+   {
+    "method": "zcl_abapgit_object_tabl->zif_abapgit_object~serialize",
+    "file": "src/objects/tabl/zcl_abapgit_object_tabl.clas.abap",
+    "line": 997
+   },
+   {
+    "method": "zcl_abapgit_object_clas->serialize_xml",
+    "file": "src/objects/zcl_abapgit_object_clas.clas.abap",
+    "line": 801
+   },
+   {
+    "method": "zcl_abapgit_object_clas->zif_abapgit_object~deserialize",
+    "file": "src/objects/zcl_abapgit_object_clas.clas.abap",
+    "line": 936
+   },
+   {
+    "method": "zcl_abapgit_object_doma->zif_abapgit_object~deserialize",
+    "file": "src/objects/zcl_abapgit_object_doma.clas.abap",
+    "line": 458
+   },
+   {
+    "method": "zcl_abapgit_object_doma->zif_abapgit_object~serialize",
+    "file": "src/objects/zcl_abapgit_object_doma.clas.abap",
+    "line": 625
+   },
+   {
+    "method": "zcl_abapgit_object_dtel->zif_abapgit_object~deserialize",
+    "file": "src/objects/zcl_abapgit_object_dtel.clas.abap",
+    "line": 291
+   },
+   {
+    "method": "zcl_abapgit_object_dtel->zif_abapgit_object~serialize",
+    "file": "src/objects/zcl_abapgit_object_dtel.clas.abap",
+    "line": 477
+   },
+   {
+    "method": "zcl_abapgit_object_fugr->zif_abapgit_object~deserialize",
+    "file": "src/objects/zcl_abapgit_object_fugr.clas.abap",
+    "line": 1326
+   },
+   {
+    "method": "zcl_abapgit_object_fugr->zif_abapgit_object~serialize",
+    "file": "src/objects/zcl_abapgit_object_fugr.clas.abap",
+    "line": 1504
+   },
+   {
+    "method": "zcl_abapgit_object_msag->zif_abapgit_object~deserialize",
+    "file": "src/objects/zcl_abapgit_object_msag.clas.abap",
+    "line": 423
+   },
+   {
+    "method": "zcl_abapgit_object_msag->zif_abapgit_object~serialize",
+    "file": "src/objects/zcl_abapgit_object_msag.clas.abap",
+    "line": 530
+   },
+   {
+    "method": "zcl_abapgit_object_prog->zif_abapgit_object~deserialize",
+    "file": "src/objects/zcl_abapgit_object_prog.clas.abap",
+    "line": 262
+   },
+   {
+    "method": "zcl_abapgit_object_prog->zif_abapgit_object~serialize",
+    "file": "src/objects/zcl_abapgit_object_prog.clas.abap",
+    "line": 356
+   },
+   {
+    "method": "zcl_abapgit_object_shi3->zif_abapgit_object~serialize",
+    "file": "src/objects/zcl_abapgit_object_shi3.clas.abap",
+    "line": 455
+   },
+   {
+    "method": "zcl_abapgit_object_tran->zif_abapgit_object~deserialize",
+    "file": "src/objects/zcl_abapgit_object_tran.clas.abap",
+    "line": 810
+   },
+   {
+    "method": "zcl_abapgit_object_tran->zif_abapgit_object~serialize",
+    "file": "src/objects/zcl_abapgit_object_tran.clas.abap",
+    "line": 979
+   },
+   {
+    "method": "zcl_abapgit_object_view->zif_abapgit_object~deserialize",
+    "file": "src/objects/zcl_abapgit_object_view.clas.abap",
+    "line": 424
+   },
+   {
+    "method": "zcl_abapgit_object_view->zif_abapgit_object~serialize",
+    "file": "src/objects/zcl_abapgit_object_view.clas.abap",
+    "line": 609
+   },
+   {
+    "method": "zcl_abapgit_objects->deserialize_steps",
+    "file": "src/objects/zcl_abapgit_objects.clas.abap",
+    "line": 959
+   },
+   {
+    "method": "zcl_abapgit_objects->serialize",
+    "file": "src/objects/zcl_abapgit_objects.clas.abap",
+    "line": 1318
+   }
+  ],
+  "b1_06": [
+   {
+    "method": "zcl_abapgit_objects_check->warning_data_loss_find",
+    "file": "src/objects/core/zcl_abapgit_objects_check.clas.abap",
+    "line": 376
+   },
+   {
+    "method": "zcl_abapgit_stage_logic->zif_abapgit_stage_logic~get",
+    "file": "src/repo/stage/zcl_abapgit_stage_logic.clas.abap",
+    "line": 121
+   },
+   {
+    "method": "zcl_abapgit_repo->zif_abapgit_repo~refresh_local_objects",
+    "file": "src/repo/zcl_abapgit_repo.clas.abap",
+    "line": 849
+   },
+   {
+    "method": "zcl_abapgit_repo_checksums->zif_abapgit_repo_checksums~rebuild",
+    "file": "src/repo/zcl_abapgit_repo_checksums.clas.abap",
+    "line": 246
+   },
+   {
+    "method": "zcl_abapgit_repo_status->calculate",
+    "file": "src/repo/zcl_abapgit_repo_status.clas.abap",
+    "line": 36
+   },
+   {
+    "method": "zcl_abapgit_gui_page_diff_base->get_files_and_status",
+    "file": "src/ui/pages/diff/zcl_abapgit_gui_page_diff_base.clas.abap",
+    "line": 658
+   },
+   {
+    "method": "zcl_abapgit_gui_page_sett_info->read_stats_files",
+    "file": "src/ui/pages/sett/zcl_abapgit_gui_page_sett_info.clas.abap",
+    "line": 403
+   },
+   {
+    "method": "zcl_abapgit_gui_page_sett_locl->is_customizing_included",
+    "file": "src/ui/pages/sett/zcl_abapgit_gui_page_sett_locl.clas.abap",
+    "line": 341
+   },
+   {
+    "method": "zcl_abapgit_gui_page_sett_repo->validate_version_constant",
+    "file": "src/ui/pages/sett/zcl_abapgit_gui_page_sett_repo.clas.abap",
+    "line": 550
+   },
+   {
+    "method": "zcl_abapgit_gui_page_chg_pckg->check_support",
+    "file": "src/ui/pages/zcl_abapgit_gui_page_chg_pckg.clas.abap",
+    "line": 211
+   },
+   {
+    "method": "zcl_abapgit_gui_router->zip_services",
+    "file": "src/ui/routing/zcl_abapgit_gui_router.clas.abap",
+    "line": 930
+   }
+  ],
+  "b1_07": [
+   {
+    "method": "zcl_abapgit_gui_page_flowcons->zif_abapgit_gui_renderable~render",
+    "file": "src/ui/flow/zcl_abapgit_gui_page_flowcons.clas.abap",
+    "line": 270
+   },
+   {
+    "method": "zcl_abapgit_gui_page_code_insp->zif_abapgit_gui_renderable~render",
+    "file": "src/ui/pages/codi/zcl_abapgit_gui_page_code_insp.clas.abap",
+    "line": 343
+   },
+   {
+    "method": "zcl_abapgit_gui_page_runit->zif_abapgit_gui_renderable~render",
+    "file": "src/ui/pages/codi/zcl_abapgit_gui_page_runit.clas.abap",
+    "line": 297
+   },
+   {
+    "method": "zcl_abapgit_gui_page_syntax->zif_abapgit_gui_renderable~render",
+    "file": "src/ui/pages/codi/zcl_abapgit_gui_page_syntax.clas.abap",
+    "line": 138
+   },
+   {
+    "method": "zcl_abapgit_gui_page_diff_base->zif_abapgit_gui_renderable~render",
+    "file": "src/ui/pages/diff/zcl_abapgit_gui_page_diff_base.clas.abap",
+    "line": 1461
+   },
+   {
+    "method": "zcl_abapgit_gui_page_sett_bckg->zif_abapgit_gui_renderable~render",
+    "file": "src/ui/pages/sett/zcl_abapgit_gui_page_sett_bckg.clas.abap",
+    "line": 332
+   },
+   {
+    "method": "zcl_abapgit_gui_page_sett_info->zif_abapgit_gui_renderable~render",
+    "file": "src/ui/pages/sett/zcl_abapgit_gui_page_sett_info.clas.abap",
+    "line": 592
+   },
+   {
+    "method": "zcl_abapgit_gui_page_sett_locl->zif_abapgit_gui_renderable~render",
+    "file": "src/ui/pages/sett/zcl_abapgit_gui_page_sett_locl.clas.abap",
+    "line": 575
+   },
+   {
+    "method": "zcl_abapgit_gui_page_sett_remo->render_content",
+    "file": "src/ui/pages/sett/zcl_abapgit_gui_page_sett_remo.clas.abap",
+    "line": 655
+   },
+   {
+    "method": "zcl_abapgit_gui_page_sett_repo->zif_abapgit_gui_renderable~render",
+    "file": "src/ui/pages/sett/zcl_abapgit_gui_page_sett_repo.clas.abap",
+    "line": 598
+   },
+   {
+    "method": "zcl_abapgit_gui_page_commit->zif_abapgit_gui_renderable~render",
+    "file": "src/ui/pages/zcl_abapgit_gui_page_commit.clas.abap",
+    "line": 574
+   },
+   {
+    "method": "zcl_abapgit_gui_page_merge->zif_abapgit_gui_renderable~render",
+    "file": "src/ui/pages/zcl_abapgit_gui_page_merge.clas.abap",
+    "line": 191
+   },
+   {
+    "method": "zcl_abapgit_gui_page_merge_sel->zif_abapgit_gui_renderable~render",
+    "file": "src/ui/pages/zcl_abapgit_gui_page_merge_sel.clas.abap",
+    "line": 185
+   },
+   {
+    "method": "zcl_abapgit_gui_page_repo_view->zif_abapgit_gui_renderable~render",
+    "file": "src/ui/pages/zcl_abapgit_gui_page_repo_view.clas.abap",
+    "line": 1314
+   },
+   {
+    "method": "zcl_abapgit_gui_page_repo_view->zif_abapgit_gui_renderable~render",
+    "file": "src/ui/pages/zcl_abapgit_gui_page_repo_view.clas.abap",
+    "line": 1339
+   },
+   {
+    "method": "zcl_abapgit_gui_page_stage->zif_abapgit_gui_renderable~render",
+    "file": "src/ui/pages/zcl_abapgit_gui_page_stage.clas.abap",
+    "line": 873
+   },
+   {
+    "method": "zcl_abapgit_gui_page_tags->zif_abapgit_gui_renderable~render",
+    "file": "src/ui/pages/zcl_abapgit_gui_page_tags.clas.abap",
+    "line": 395
+   }
+  ],
+  "b1_08": [
+   {
+    "method": "zcl_abapgit_gui_page_sett_glob->get_form_schema",
+    "file": "src/ui/pages/sett/zcl_abapgit_gui_page_sett_glob.clas.abap",
+    "line": 138
+   },
+   {
+    "method": "zcl_abapgit_gui_page_sett_locl->get_form_schema",
+    "file": "src/ui/pages/sett/zcl_abapgit_gui_page_sett_locl.clas.abap",
+    "line": 288
+   },
+   {
+    "method": "zcl_abapgit_gui_page_sett_pers->get_form_schema",
+    "file": "src/ui/pages/sett/zcl_abapgit_gui_page_sett_pers.clas.abap",
+    "line": 162
+   },
+   {
+    "method": "zcl_abapgit_gui_page_sett_repo->get_form_schema",
+    "file": "src/ui/pages/sett/zcl_abapgit_gui_page_sett_repo.clas.abap",
+    "line": 166
+   },
+   {
+    "method": "zcl_abapgit_gui_page_sett_repo->get_form_schema",
+    "file": "src/ui/pages/sett/zcl_abapgit_gui_page_sett_repo.clas.abap",
+    "line": 195
+   },
+   {
+    "method": "zcl_abapgit_gui_page_commit->get_form_schema",
+    "file": "src/ui/pages/zcl_abapgit_gui_page_commit.clas.abap",
+    "line": 320
+   },
+   {
+    "method": "zcl_abapgit_gui_page_data->get_form_schema",
+    "file": "src/ui/pages/zcl_abapgit_gui_page_data.clas.abap",
+    "line": 339
+   },
+   {
+    "method": "zcl_abapgit_gui_page_data->render_for_existing_config",
+    "file": "src/ui/pages/zcl_abapgit_gui_page_data.clas.abap",
+    "line": 391
+   },
+   {
+    "method": "zcl_abapgit_gui_page_ex_object->get_form_schema",
+    "file": "src/ui/pages/zcl_abapgit_gui_page_ex_object.clas.abap",
+    "line": 130
+   },
+   {
+    "method": "zcl_abapgit_gui_page_tags->get_form_schema",
+    "file": "src/ui/pages/zcl_abapgit_gui_page_tags.clas.abap",
+    "line": 198
+   }
+  ],
+  "b1_09": [
+   {
+    "method": "zcl_abapgit_filename_logic->get_lang_and_ext",
+    "file": "src/objects/core/zcl_abapgit_filename_logic.clas.abap",
+    "line": 208
+   },
+   {
+    "method": "zcl_abapgit_i18n_params->trim_saplang_keyed_table",
+    "file": "src/objects/texts/zcl_abapgit_i18n_params.clas.abap",
+    "line": 220
+   },
+   {
+    "method": "zcl_abapgit_i18n_params->trim_saplang_list",
+    "file": "src/objects/texts/zcl_abapgit_i18n_params.clas.abap",
+    "line": 256
+   },
+   {
+    "method": "zcl_abapgit_lxe_texts->langu_to_laiso_safe",
+    "file": "src/objects/texts/zcl_abapgit_lxe_texts.clas.abap",
+    "line": 656
+   },
+   {
+    "method": "zcl_abapgit_object_intf->extract_languages_for_transl",
+    "file": "src/objects/zcl_abapgit_object_intf.clas.abap",
+    "line": 314
+   },
+   {
+    "method": "zcl_abapgit_convert->conversion_exit_isola_output",
+    "file": "src/utils/zcl_abapgit_convert.clas.abap",
+    "line": 161
+   }
+  ],
+  "b1_10": [
+   {
+    "method": "zcl_abapgit_proxy_config->get_proxy_url",
+    "file": "src/http/zcl_abapgit_proxy_config.clas.abap",
+    "line": 102
+   },
+   {
+    "method": "zcl_abapgit_gui_page_sett_glob->read_settings",
+    "file": "src/ui/pages/sett/zcl_abapgit_gui_page_sett_glob.clas.abap",
+    "line": 218
+   }
+  ]
+ }
+}

@@ -50,15 +50,15 @@ use crate::utils::hash::content_hash;
 const METADATA_SOURCE: (&str, &str) = ("source", "abap-fallback");
 
 /// Add the `report` (for `PROGRAM`), `form`, `module`, `macro` and class-level
-/// `type` entities of an ABAP file to the ones the tree walk found, and the
-/// `method` entities its error recovery lost, then put all of them back in
-/// source order.
+/// `type`, `constant` and `variable` entities of an ABAP file to the ones the
+/// tree walk found, and the `method` entities its error recovery lost, then
+/// put all of them back in source order.
 ///
 /// Forms, modules and `PROGRAM` sit at the top of the file; a macro defined
-/// inside a form or module nests under it; a `TYPES` nests under the
-/// `CLASS ... DEFINITION` it is declared in. `TYPES` outside a class
-/// definition (a program's or an interface's, or a local type in a body) is
-/// not an entity, the same as `DATA` there. A method nests under the
+/// inside a form or module nests under it; a `TYPES`, `CONSTANTS`, `DATA` or
+/// `CLASS-DATA` nests under the `CLASS ... DEFINITION` or `INTERFACE` it is
+/// declared in, one entity per name of a chain. Outside one (a program's, or
+/// a local in a body) it is not an entity, save a `TOP` include's globals. A method nests under the
 /// `CLASS ... IMPLEMENTATION` it is written in; a `METHOD` outside one is not
 /// an entity. An interface's `METHODS` and `CLASS-METHODS` declare its
 /// methods, one `method` entity per name of a chain, under the interface:
@@ -100,7 +100,7 @@ pub(super) fn extract_abap_fallback_entities(
         if keyword != "TYPES" {
             open_type = None;
         }
-        if keyword != "DATA" {
+        if keyword != "DATA" && keyword != "CLASS-DATA" {
             open_data = None;
         }
         if keyword != "CONSTANTS" {
@@ -253,7 +253,9 @@ pub(super) fn extract_abap_fallback_entities(
                 }
             }
             "TYPES" => {
-                let Some(class_id) = innermost_class(&classes, head.start_byte) else {
+                let Some(class_id) =
+                    declaring_block(file_path, &classes, open_class.as_ref(), head.start_byte)
+                else {
                     continue;
                 };
                 if open_method.is_some() {
@@ -266,14 +268,15 @@ pub(super) fn extract_abap_fallback_entities(
                     &statement,
                     head.start_byte,
                     "type",
-                    Some(class_id),
+                    Some(&class_id),
                     &mut open_type,
                 ));
             }
             // A class's or interface's constants, and the global constants of
             // a `TOP` include, by the same rule as its `DATA` below.
             "CONSTANTS" => {
-                let class_id = innermost_class(&classes, head.start_byte);
+                let class_id =
+                    declaring_block(file_path, &classes, open_class.as_ref(), head.start_byte);
                 if open_method.is_some()
                     || class_id.is_none() && !(top_include && open_blocks.is_empty())
                 {
@@ -286,15 +289,25 @@ pub(super) fn extract_abap_fallback_entities(
                     &statement,
                     head.start_byte,
                     "constant",
-                    class_id,
+                    class_id.as_deref(),
                     &mut open_constant,
                 ));
             }
-            // Global data of a function group or program: the `DATA` of its
-            // `TOP` include, outside any FORM or MODULE. Anywhere else a `DATA`
-            // is a local, or a program global the pool leaves out (see
+            // A class's or interface's attributes, `DATA` and `CLASS-DATA`, one
+            // `variable` per name of a chain and one per `BEGIN OF ... END OF`
+            // block, as for `TYPES`; the grammar gives the same where it reads
+            // the definition, and `reconcile_declarations` keeps its entities.
+            // And the global data of a function group or program: the `DATA` of
+            // its `TOP` include, outside any FORM or MODULE. Anywhere else a
+            // `DATA` is a local, or a program global the pool leaves out (see
             // `is_abap_local_data`).
-            "DATA" if top_include && open_blocks.is_empty() => {
+            "DATA" | "CLASS-DATA" => {
+                let class_id =
+                    declaring_block(file_path, &classes, open_class.as_ref(), head.start_byte);
+                let global = keyword == "DATA" && top_include && open_blocks.is_empty();
+                if open_method.is_some() || class_id.is_none() && !global {
+                    continue;
+                }
                 found.extend(declarator_entities(
                     file_path,
                     source,
@@ -302,7 +315,7 @@ pub(super) fn extract_abap_fallback_entities(
                     &statement,
                     head.start_byte,
                     "variable",
-                    None,
+                    class_id.as_deref(),
                     &mut open_data,
                 ));
             }
@@ -313,6 +326,7 @@ pub(super) fn extract_abap_fallback_entities(
     class_blocks.extend(open_class);
     reconcile_declarations(entities, &mut found);
     reconcile_methods(file_path, source, &class_blocks, entities, &mut found);
+    drop_unparented_declarations(entities, &mut found);
 
     if found.is_empty() {
         return;
@@ -706,14 +720,14 @@ fn declarator_entity(
     )
 }
 
-/// Drop the `type` and `constant` entities read off the statements that the
-/// grammar already gave: one that has the same type and parent and overlaps
-/// the fallback's range is the same declaration. The grammar's entity wins,
-/// as a method's does in `reconcile_methods`; the fallback keeps what the
-/// grammar lost, in the files and classes it fails on.
+/// Drop the `type`, `constant` and `variable` entities read off the
+/// statements that the grammar already gave: one that has the same type and
+/// parent and overlaps the fallback's range is the same declaration. The
+/// grammar's entity wins, as a method's does in `reconcile_methods`; the
+/// fallback keeps what the grammar lost, in the files and classes it fails on.
 fn reconcile_declarations(entities: &[SemanticEntity], found: &mut Vec<SemanticEntity>) {
     found.retain(|f| {
-        if f.entity_type != "type" && f.entity_type != "constant" {
+        if !matches!(f.entity_type.as_str(), "type" | "constant" | "variable") {
             return true;
         }
         !entities.iter().any(|e| {
@@ -896,6 +910,39 @@ fn indented_start(source: &[u8], keyword_byte: usize) -> usize {
     } else {
         keyword_byte
     }
+}
+
+/// The class or interface a declaration at `byte` belongs to: the innermost
+/// one the grammar gave, or else the `CLASS ... DEFINITION` the statements
+/// have open, which `reconcile_methods` recovers as a class when the grammar
+/// lost it whole (`drop_unparented_declarations` drops the declarations of a
+/// definition it does not recover).
+fn declaring_block(
+    file_path: &str,
+    classes: &[(usize, usize, String)],
+    open_class: Option<&ClassBlock>,
+    byte: usize,
+) -> Option<String> {
+    innermost_class(classes, byte).map(str::to_string).or_else(|| {
+        open_class
+            .filter(|c| !c.implementation)
+            .map(|c| build_entity_id(file_path, "class", &c.name.text, None))
+    })
+}
+
+/// Drop a `type`, `constant` or `variable` read off the statements whose
+/// parent is no entity: a definition the grammar lost and `reconcile_methods`
+/// did not recover (no implementation with a method).
+fn drop_unparented_declarations(entities: &[SemanticEntity], found: &mut Vec<SemanticEntity>) {
+    let ids: std::collections::HashSet<String> = entities
+        .iter()
+        .chain(found.iter())
+        .map(|e| e.id.clone())
+        .collect();
+    found.retain(|f| {
+        !matches!(f.entity_type.as_str(), "type" | "constant" | "variable")
+            || f.parent_id.as_ref().is_none_or(|p| ids.contains(p))
+    });
 }
 
 fn innermost_class(classes: &[(usize, usize, String)], byte: usize) -> Option<&str> {

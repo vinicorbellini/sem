@@ -1,0 +1,3510 @@
+{
+ "_meta": {
+  "abapgit_commit": "b2b4e250747ecb4f8e2b1d79e332d2cf897d5fa0",
+  "source": "grep fallback (scripts/abap-whereused-grep.py), not sapcli",
+  "include": "the calling method or form, case-folded (a sapcli export gives the SAP include; the converter maps it)",
+  "pinned_commit_matches": true,
+  "targets": {
+   "ZCL_ABAPGIT_APACK_HELPER=>GET_DEPENDENCIES_MET_STATUS": {
+    "kind": "class",
+    "stratum": "static",
+    "file": "src/apack/zcl_abapgit_apack_helper.clas.abap",
+    "grep_call_sites": 2,
+    "grep_caller_methods": 2,
+    "grep_files": 1,
+    "adjudicated_rows": 0,
+    "rejected": [],
+    "dynamic": []
+   },
+   "ZCL_ABAPGIT_GIT_PACK=>DECODE_COMMIT": {
+    "kind": "class",
+    "stratum": "static",
+    "file": "src/git/zcl_abapgit_git_pack.clas.abap",
+    "grep_call_sites": 20,
+    "grep_caller_methods": 14,
+    "grep_files": 7,
+    "adjudicated_rows": 0,
+    "rejected": [],
+    "dynamic": []
+   },
+   "ZCL_ABAPGIT_HTTP=>GET_HTTP_CLIENT": {
+    "kind": "class",
+    "stratum": "static",
+    "file": "src/http/zcl_abapgit_http.clas.abap",
+    "grep_call_sites": 2,
+    "grep_caller_methods": 2,
+    "grep_files": 1,
+    "adjudicated_rows": 0,
+    "rejected": [],
+    "dynamic": []
+   },
+   "ZCL_ABAPGIT_FILENAME_LOGIC=>IS_OBJ_DEFINITION_FILE": {
+    "kind": "class",
+    "stratum": "static",
+    "file": "src/objects/core/zcl_abapgit_filename_logic.clas.abap",
+    "grep_call_sites": 5,
+    "grep_caller_methods": 2,
+    "grep_files": 2,
+    "adjudicated_rows": 0,
+    "rejected": [],
+    "dynamic": []
+   },
+   "ZCL_ABAPGIT_OBJECT_SICF=>GET_HASH_FROM_OBJECT": {
+    "kind": "class",
+    "stratum": "static",
+    "file": "src/objects/zcl_abapgit_object_sicf.clas.abap",
+    "grep_call_sites": 2,
+    "grep_caller_methods": 2,
+    "grep_files": 1,
+    "adjudicated_rows": 0,
+    "rejected": [],
+    "dynamic": []
+   },
+   "ZCL_ABAPGIT_ZIP=>ENCODE_FILES": {
+    "kind": "class",
+    "stratum": "static",
+    "file": "src/repo/utils/zcl_abapgit_zip.clas.abap",
+    "grep_call_sites": 3,
+    "grep_caller_methods": 3,
+    "grep_files": 2,
+    "adjudicated_rows": 0,
+    "rejected": [],
+    "dynamic": []
+   },
+   "ZCL_ABAPGIT_GUI_CHUNK_LIB=>RENDER_REPO_PALETTE": {
+    "kind": "class",
+    "stratum": "static",
+    "file": "src/ui/lib/zcl_abapgit_gui_chunk_lib.clas.abap",
+    "grep_call_sites": 3,
+    "grep_caller_methods": 3,
+    "grep_files": 3,
+    "adjudicated_rows": 0,
+    "rejected": [],
+    "dynamic": []
+   },
+   "ZCL_ABAPGIT_SERVICES_REPO=>DELETE_UNNECESSARY_OBJECTS": {
+    "kind": "class",
+    "stratum": "static",
+    "file": "src/ui/routing/zcl_abapgit_services_repo.clas.abap",
+    "grep_call_sites": 2,
+    "grep_caller_methods": 2,
+    "grep_files": 2,
+    "adjudicated_rows": 0,
+    "rejected": [],
+    "dynamic": []
+   },
+   "ZCL_ABAPGIT_APACK_READER=>COPY_MANIFEST_DESCRIPTOR": {
+    "kind": "class",
+    "stratum": "instance",
+    "file": "src/apack/zcl_abapgit_apack_reader.clas.abap",
+    "grep_call_sites": 2,
+    "grep_caller_methods": 2,
+    "grep_files": 2,
+    "adjudicated_rows": 0,
+    "rejected": [],
+    "dynamic": []
+   },
+   "ZCL_ABAPGIT_SETTINGS=>GET_RUN_CRITICAL_TESTS": {
+    "kind": "class",
+    "stratum": "instance",
+    "file": "src/env/zcl_abapgit_settings.clas.abap",
+    "grep_call_sites": 2,
+    "grep_caller_methods": 2,
+    "grep_files": 2,
+    "adjudicated_rows": 0,
+    "rejected": [],
+    "dynamic": []
+   },
+   "ZCL_ABAPGIT_ZLIB_STREAM=>REMAINING": {
+    "kind": "class",
+    "stratum": "instance",
+    "file": "src/git/zlib/zcl_abapgit_zlib_stream.clas.abap",
+    "grep_call_sites": 9,
+    "grep_caller_methods": 5,
+    "grep_files": 2,
+    "adjudicated_rows": 0,
+    "rejected": [],
+    "dynamic": []
+   },
+   "ZCL_ABAPGIT_FOLDER_LOGIC=>PATH_TO_PACKAGE": {
+    "kind": "class",
+    "stratum": "instance",
+    "file": "src/objects/core/zcl_abapgit_folder_logic.clas.abap",
+    "grep_call_sites": 4,
+    "grep_caller_methods": 4,
+    "grep_files": 4,
+    "adjudicated_rows": 0,
+    "rejected": [],
+    "dynamic": []
+   },
+   "ZCL_ABAPGIT_OO_SERIALIZER=>SERIALIZE_ABAP_CLIF_SOURCE": {
+    "kind": "class",
+    "stratum": "instance",
+    "file": "src/objects/oo/zcl_abapgit_oo_serializer.clas.abap",
+    "grep_call_sites": 2,
+    "grep_caller_methods": 2,
+    "grep_files": 2,
+    "adjudicated_rows": 0,
+    "rejected": [],
+    "dynamic": []
+   },
+   "ZCL_ABAPGIT_REPO_ITEM_STATE=>SUM_WITH_REPO_ITEM": {
+    "kind": "class",
+    "stratum": "instance",
+    "file": "src/repo/utils/zcl_abapgit_repo_item_state.clas.abap",
+    "grep_call_sites": 7,
+    "grep_caller_methods": 3,
+    "grep_files": 3,
+    "adjudicated_rows": 0,
+    "rejected": [],
+    "dynamic": []
+   },
+   "ZCL_ABAPGIT_DOT_ABAPGIT=>SET_NAME": {
+    "kind": "class",
+    "stratum": "instance",
+    "file": "src/repo/zcl_abapgit_dot_abapgit.clas.abap",
+    "grep_call_sites": 4,
+    "grep_caller_methods": 4,
+    "grep_files": 3,
+    "adjudicated_rows": 0,
+    "rejected": [
+     {
+      "object": "ZCL_ABAPGIT_ECATT_HELPER",
+      "type": "CLAS",
+      "include": "upload_data_from_stream",
+      "line": 137,
+      "file": "src/objects/ecatt/zcl_abapgit_ecatt_helper.clas.abap",
+      "caller": "zcl_abapgit_ecatt_helper->upload_data_from_stream",
+      "shape": "arrow",
+      "adjudicated": true,
+      "why": "receiver li_n_xmlref_typ is a if_ixml_node"
+     }
+    ],
+    "dynamic": []
+   },
+   "ZCL_ABAPGIT_GUI_PICKLIST=>IS_IN_PAGE": {
+    "kind": "class",
+    "stratum": "instance",
+    "file": "src/ui/lib/zcl_abapgit_gui_picklist.clas.abap",
+    "grep_call_sites": 16,
+    "grep_caller_methods": 12,
+    "grep_files": 4,
+    "adjudicated_rows": 0,
+    "rejected": [],
+    "dynamic": []
+   },
+   "ZIF_ABAPGIT_CTS_API~CREATE_TRANSPORT_ENTRIES": {
+    "kind": "interface",
+    "stratum": "interface",
+    "file": "src/cts/zif_abapgit_cts_api.intf.abap",
+    "grep_call_sites": 3,
+    "grep_caller_methods": 2,
+    "grep_files": 2,
+    "adjudicated_rows": 0,
+    "rejected": [
+     {
+      "object": "ZCL_ABAPGIT_CTS_API",
+      "type": "CLAS",
+      "include": "zif_abapgit_cts_api~create_transport_entries",
+      "line": 429,
+      "file": "src/cts/zcl_abapgit_cts_api.clas.abap",
+      "caller": "zcl_abapgit_cts_api->zif_abapgit_cts_api~create_transport_entries",
+      "shape": "static",
+      "adjudicated": true,
+      "why": "static receiver cl_table_utilities_brf"
+     }
+    ],
+    "dynamic": []
+   },
+   "ZIF_ABAPGIT_EXIT~ADJUST_COMMIT_MESSAGE": {
+    "kind": "interface",
+    "stratum": "interface",
+    "file": "src/exits/zif_abapgit_exit.intf.abap",
+    "grep_call_sites": 2,
+    "grep_caller_methods": 2,
+    "grep_files": 2,
+    "adjudicated_rows": 0,
+    "rejected": [],
+    "dynamic": []
+   },
+   "ZIF_ABAPGIT_EXIT~VALIDATE_AFTER_PUSH": {
+    "kind": "interface",
+    "stratum": "interface",
+    "file": "src/exits/zif_abapgit_exit.intf.abap",
+    "grep_call_sites": 2,
+    "grep_caller_methods": 2,
+    "grep_files": 2,
+    "adjudicated_rows": 0,
+    "rejected": [],
+    "dynamic": []
+   },
+   "ZIF_ABAPGIT_AJSON_ITERATOR~HAS_NEXT": {
+    "kind": "interface",
+    "stratum": "interface",
+    "file": "src/json/zif_abapgit_ajson_iterator.intf.abap",
+    "grep_call_sites": 3,
+    "grep_caller_methods": 2,
+    "grep_files": 1,
+    "adjudicated_rows": 0,
+    "rejected": [],
+    "dynamic": []
+   },
+   "ZIF_ABAPGIT_OO_OBJECT_FNC~READ_ATTRIBUTES": {
+    "kind": "interface",
+    "stratum": "interface",
+    "file": "src/objects/oo/zif_abapgit_oo_object_fnc.intf.abap",
+    "grep_call_sites": 2,
+    "grep_caller_methods": 2,
+    "grep_files": 2,
+    "adjudicated_rows": 0,
+    "rejected": [],
+    "dynamic": []
+   },
+   "ZIF_ABAPGIT_PERSIST_USER~SET_REPO_SHOW": {
+    "kind": "interface",
+    "stratum": "interface",
+    "file": "src/persist/zif_abapgit_persist_user.intf.abap",
+    "grep_call_sites": 10,
+    "grep_caller_methods": 9,
+    "grep_files": 6,
+    "adjudicated_rows": 0,
+    "rejected": [],
+    "dynamic": []
+   },
+   "ZIF_ABAPGIT_REPO_ONLINE~GET_SELECTED_COMMIT": {
+    "kind": "interface",
+    "stratum": "interface",
+    "file": "src/repo/zif_abapgit_repo_online.intf.abap",
+    "grep_call_sites": 8,
+    "grep_caller_methods": 5,
+    "grep_files": 3,
+    "adjudicated_rows": 6,
+    "rejected": [],
+    "dynamic": []
+   },
+   "ZIF_ABAPGIT_PROGRESS~SHOW": {
+    "kind": "interface",
+    "stratum": "interface",
+    "file": "src/ui/progress/zif_abapgit_progress.intf.abap",
+    "grep_call_sites": 14,
+    "grep_caller_methods": 12,
+    "grep_files": 9,
+    "adjudicated_rows": 0,
+    "rejected": [],
+    "dynamic": [
+     {
+      "file": "src/objects/jump/zcl_abapgit_gui_jumper.clas.abap",
+      "line": 111,
+      "text": "iv_action         = 'SHOW'"
+     },
+     {
+      "file": "src/objects/jump/zcl_abapgit_gui_jumper.clas.abap",
+      "line": 128,
+      "text": "operation           = 'SHOW'"
+     },
+     {
+      "file": "src/objects/jump/zcl_abapgit_gui_jumper.clas.abap",
+      "line": 151,
+      "text": "operation           = 'SHOW'"
+     },
+     {
+      "file": "src/objects/sap/zcl_abapgit_sap_report.clas.abap",
+      "line": 173,
+      "text": "iv_mode = 'SHOW'"
+     },
+     {
+      "file": "src/objects/zcl_abapgit_object_jobd.clas.abap",
+      "line": 201,
+      "text": "iv_action         = 'SHOW'"
+     }
+    ]
+   },
+   "ZCL_ABAPGIT_OBJECT_COMMON_AFF=>GET_ADDITIONAL_EXTENSIONS": {
+    "kind": "class",
+    "stratum": "redefined",
+    "file": "src/objects/aff/zcl_abapgit_object_common_aff.clas.abap",
+    "grep_call_sites": 2,
+    "grep_caller_methods": 2,
+    "grep_files": 1,
+    "adjudicated_rows": 0,
+    "rejected": [],
+    "dynamic": []
+   },
+   "ZCL_ABAPGIT_REPO=>RESET_REMOTE": {
+    "kind": "class",
+    "stratum": "redefined",
+    "file": "src/repo/zcl_abapgit_repo.clas.abap",
+    "grep_call_sites": 5,
+    "grep_caller_methods": 5,
+    "grep_files": 3,
+    "adjudicated_rows": 0,
+    "rejected": [],
+    "dynamic": []
+   },
+   "ZCL_ABAPGIT_SYNTAX_HIGHLIGHTER=>ORDER_MATCHES": {
+    "kind": "class",
+    "stratum": "redefined",
+    "file": "src/syntax/zcl_abapgit_syntax_highlighter.clas.abap",
+    "grep_call_sites": 3,
+    "grep_caller_methods": 3,
+    "grep_files": 3,
+    "adjudicated_rows": 0,
+    "rejected": [],
+    "dynamic": []
+   },
+   "ZCL_ABAPGIT_APACK_MIGRATION=>ADD_INTF_SOURCE_AND_ACTIVATE": {
+    "kind": "class",
+    "stratum": "me",
+    "file": "src/apack/zcl_abapgit_apack_migration.clas.abap",
+    "grep_call_sites": 2,
+    "grep_caller_methods": 2,
+    "grep_files": 1,
+    "adjudicated_rows": 0,
+    "rejected": [],
+    "dynamic": []
+   },
+   "ZCL_ABAPGIT_OBJECT_ECATT_SUPER=>SERIALIZE_VERSION": {
+    "kind": "class",
+    "stratum": "me",
+    "file": "src/objects/zcl_abapgit_object_ecatt_super.clas.abap",
+    "grep_call_sites": 2,
+    "grep_caller_methods": 1,
+    "grep_files": 1,
+    "adjudicated_rows": 0,
+    "rejected": [],
+    "dynamic": []
+   },
+   "ZCL_ABAPGIT_REPO_ONLINE=>SET_OBJECTS": {
+    "kind": "class",
+    "stratum": "me",
+    "file": "src/repo/zcl_abapgit_repo_online.clas.abap",
+    "grep_call_sites": 2,
+    "grep_caller_methods": 2,
+    "grep_files": 1,
+    "adjudicated_rows": 0,
+    "rejected": [],
+    "dynamic": []
+   },
+   "ZCL_ABAPGIT_GIT_BRANCH_UTILS=>GET_DISPLAY_NAME": {
+    "kind": "class",
+    "stratum": "b1",
+    "file": "src/git/zcl_abapgit_git_branch_utils.clas.abap",
+    "grep_call_sites": 17,
+    "grep_caller_methods": 12,
+    "grep_files": 9,
+    "adjudicated_rows": 0,
+    "rejected": [],
+    "dynamic": []
+   },
+   "ZCL_ABAPGIT_OBJECTS_FILES=>READ_STRING": {
+    "kind": "class",
+    "stratum": "b1",
+    "file": "src/objects/core/zcl_abapgit_objects_files.clas.abap",
+    "grep_call_sites": 18,
+    "grep_caller_methods": 16,
+    "grep_files": 15,
+    "adjudicated_rows": 0,
+    "rejected": [],
+    "dynamic": []
+   },
+   "ZCL_ABAPGIT_OBJECTS_ACTIVATION=>ADD_ITEM": {
+    "kind": "class",
+    "stratum": "b1",
+    "file": "src/objects/core/zcl_abapgit_objects_activation.clas.abap",
+    "grep_call_sites": 27,
+    "grep_caller_methods": 26,
+    "grep_files": 26,
+    "adjudicated_rows": 0,
+    "rejected": [],
+    "dynamic": []
+   },
+   "ZIF_ABAPGIT_SAP_PACKAGE~LIST_SUBPACKAGES": {
+    "kind": "interface",
+    "stratum": "b1",
+    "file": "src/objects/sap/zif_abapgit_sap_package.intf.abap",
+    "grep_call_sites": 16,
+    "grep_caller_methods": 16,
+    "grep_files": 13,
+    "adjudicated_rows": 0,
+    "rejected": [],
+    "dynamic": []
+   },
+   "ZCL_ABAPGIT_I18N_PARAMS=>IS_LXE_APPLICABLE": {
+    "kind": "class",
+    "stratum": "b1",
+    "file": "src/objects/texts/zcl_abapgit_i18n_params.clas.abap",
+    "grep_call_sites": 21,
+    "grep_caller_methods": 21,
+    "grep_files": 11,
+    "adjudicated_rows": 0,
+    "rejected": [],
+    "dynamic": []
+   },
+   "ZIF_ABAPGIT_REPO~GET_FILES_LOCAL": {
+    "kind": "interface",
+    "stratum": "b1",
+    "file": "src/repo/zif_abapgit_repo.intf.abap",
+    "grep_call_sites": 11,
+    "grep_caller_methods": 11,
+    "grep_files": 11,
+    "adjudicated_rows": 1,
+    "rejected": [],
+    "dynamic": []
+   },
+   "ZCL_ABAPGIT_GUI_CHUNK_LIB=>RENDER_REPO_TOP": {
+    "kind": "class",
+    "stratum": "b1",
+    "file": "src/ui/lib/zcl_abapgit_gui_chunk_lib.clas.abap",
+    "grep_call_sites": 17,
+    "grep_caller_methods": 16,
+    "grep_files": 16,
+    "adjudicated_rows": 0,
+    "rejected": [],
+    "dynamic": []
+   },
+   "ZCL_ABAPGIT_HTML_FORM=>TEXTAREA": {
+    "kind": "class",
+    "stratum": "b1",
+    "file": "src/ui/lib/zcl_abapgit_html_form.clas.abap",
+    "grep_call_sites": 10,
+    "grep_caller_methods": 9,
+    "grep_files": 8,
+    "adjudicated_rows": 0,
+    "rejected": [],
+    "dynamic": []
+   },
+   "ZCL_ABAPGIT_CONVERT=>LANGUAGE_SAP1_TO_SAP2": {
+    "kind": "class",
+    "stratum": "b1",
+    "file": "src/utils/zcl_abapgit_convert.clas.abap",
+    "grep_call_sites": 6,
+    "grep_caller_methods": 6,
+    "grep_files": 5,
+    "adjudicated_rows": 0,
+    "rejected": [],
+    "dynamic": []
+   },
+   "ZCL_ABAPGIT_SETTINGS=>GET_PROXY_URL": {
+    "kind": "class",
+    "stratum": "b1",
+    "file": "src/env/zcl_abapgit_settings.clas.abap",
+    "grep_call_sites": 2,
+    "grep_caller_methods": 2,
+    "grep_files": 2,
+    "adjudicated_rows": 2,
+    "rejected": [
+     {
+      "object": "ZCL_ABAPGIT_HTTP",
+      "type": "CLAS",
+      "include": "get_http_client",
+      "line": 325,
+      "file": "src/http/zcl_abapgit_http.clas.abap",
+      "caller": "zcl_abapgit_http->get_http_client",
+      "shape": "arrow",
+      "adjudicated": true,
+      "why": "receiver lo_proxy_configuration is a zcl_abapgit_proxy_config"
+     },
+     {
+      "object": "ZCL_ABAPGIT_HTTP_AGENT",
+      "type": "CLAS",
+      "include": "zif_abapgit_http_agent~request",
+      "line": 87,
+      "file": "src/http/zcl_abapgit_http_agent.clas.abap",
+      "caller": "zcl_abapgit_http_agent->zif_abapgit_http_agent~request",
+      "shape": "arrow",
+      "adjudicated": true,
+      "why": "receiver lo_proxy_configuration is a zcl_abapgit_proxy_config"
+     }
+    ],
+    "dynamic": []
+   }
+  }
+ },
+ "ZCL_ABAPGIT_APACK_HELPER=>GET_DEPENDENCIES_MET_STATUS": [
+  {
+   "object": "ZCL_ABAPGIT_APACK_HELPER",
+   "type": "CLAS",
+   "include": "are_dependencies_met",
+   "line": 93,
+   "file": "src/apack/zcl_abapgit_apack_helper.clas.abap",
+   "caller": "zcl_abapgit_apack_helper->are_dependencies_met",
+   "shape": "bare",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_APACK_HELPER",
+   "type": "CLAS",
+   "include": "dependencies_popup",
+   "line": 113,
+   "file": "src/apack/zcl_abapgit_apack_helper.clas.abap",
+   "caller": "zcl_abapgit_apack_helper->dependencies_popup",
+   "shape": "bare",
+   "adjudicated": false
+  }
+ ],
+ "ZCL_ABAPGIT_GIT_PACK=>DECODE_COMMIT": [
+  {
+   "object": "ZCL_ABAPGIT_GIT_COMMIT",
+   "type": "CLAS",
+   "include": "parse_commits",
+   "line": 243,
+   "file": "src/git/zcl_abapgit_git_commit.clas.abap",
+   "caller": "zcl_abapgit_git_commit->parse_commits",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GIT_PACK",
+   "type": "CLAS",
+   "include": "commit",
+   "line": 490,
+   "file": "src/git/zcl_abapgit_git_pack.clas.testclasses.abap",
+   "caller": "ltcl_pack->commit",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GIT_PACK",
+   "type": "CLAS",
+   "include": "commit_newline",
+   "line": 514,
+   "file": "src/git/zcl_abapgit_git_pack.clas.testclasses.abap",
+   "caller": "ltcl_pack->commit_newline",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GIT_PACK",
+   "type": "CLAS",
+   "include": "signed_commit",
+   "line": 537,
+   "file": "src/git/zcl_abapgit_git_pack.clas.testclasses.abap",
+   "caller": "ltcl_pack->signed_commit",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GIT_PACK",
+   "type": "CLAS",
+   "include": "decode",
+   "line": 592,
+   "file": "src/git/zcl_abapgit_git_pack.clas.testclasses.abap",
+   "caller": "ltcl_git_pack_decode_commit->decode",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GIT_PORCELAIN",
+   "type": "CLAS",
+   "include": "full_tree",
+   "line": 488,
+   "file": "src/git/zcl_abapgit_git_porcelain.clas.abap",
+   "caller": "zcl_abapgit_git_porcelain->full_tree",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GIT_PORCELAIN",
+   "type": "CLAS",
+   "include": "pull",
+   "line": 511,
+   "file": "src/git/zcl_abapgit_git_porcelain.clas.abap",
+   "caller": "zcl_abapgit_git_porcelain->pull",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_MERGE",
+   "type": "CLAS",
+   "include": "find_ancestors",
+   "line": 297,
+   "file": "src/repo/stage/zcl_abapgit_merge.clas.abap",
+   "caller": "zcl_abapgit_merge->find_ancestors",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_FLOW_GIT",
+   "type": "CLAS",
+   "include": "build_main_reachable",
+   "line": 195,
+   "file": "src/ui/flow/zcl_abapgit_flow_git.clas.abap",
+   "caller": "zcl_abapgit_flow_git->build_main_reachable",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_FLOW_GIT",
+   "type": "CLAS",
+   "include": "find_branch_commits",
+   "line": 224,
+   "file": "src/ui/flow/zcl_abapgit_flow_git.clas.abap",
+   "caller": "zcl_abapgit_flow_git->find_branch_commits",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_FLOW_GIT",
+   "type": "CLAS",
+   "include": "find_up_to_date",
+   "line": 291,
+   "file": "src/ui/flow/zcl_abapgit_flow_git.clas.abap",
+   "caller": "zcl_abapgit_flow_git->find_up_to_date",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_FLOW_GIT",
+   "type": "CLAS",
+   "include": "expand",
+   "line": 88,
+   "file": "src/ui/flow/zcl_abapgit_flow_git.clas.locals_imp.abap",
+   "caller": "lcl_walker->expand",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_FLOW_GIT",
+   "type": "CLAS",
+   "include": "lif_find_changes~find_changes",
+   "line": 260,
+   "file": "src/ui/flow/zcl_abapgit_flow_git.clas.locals_imp.abap",
+   "caller": "lcl_find_changes_new->lif_find_changes~find_changes",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_FLOW_GIT",
+   "type": "CLAS",
+   "include": "lif_find_changes~find_changes",
+   "line": 266,
+   "file": "src/ui/flow/zcl_abapgit_flow_git.clas.locals_imp.abap",
+   "caller": "lcl_find_changes_new->lif_find_changes~find_changes",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_FLOW_GIT",
+   "type": "CLAS",
+   "include": "lif_find_changes~find_changes",
+   "line": 271,
+   "file": "src/ui/flow/zcl_abapgit_flow_git.clas.locals_imp.abap",
+   "caller": "lcl_find_changes_new->lif_find_changes~find_changes",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_FLOW_GIT",
+   "type": "CLAS",
+   "include": "lif_find_changes~find_changes",
+   "line": 276,
+   "file": "src/ui/flow/zcl_abapgit_flow_git.clas.locals_imp.abap",
+   "caller": "lcl_find_changes_new->lif_find_changes~find_changes",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_FLOW_GIT",
+   "type": "CLAS",
+   "include": "lif_find_changes~find_changes",
+   "line": 280,
+   "file": "src/ui/flow/zcl_abapgit_flow_git.clas.locals_imp.abap",
+   "caller": "lcl_find_changes_new->lif_find_changes~find_changes",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_FLOW_GIT",
+   "type": "CLAS",
+   "include": "lif_find_changes~find_changes",
+   "line": 323,
+   "file": "src/ui/flow/zcl_abapgit_flow_git.clas.locals_imp.abap",
+   "caller": "lcl_find_changes->lif_find_changes~find_changes",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_FLOW_GIT",
+   "type": "CLAS",
+   "include": "lif_find_changes~find_changes",
+   "line": 328,
+   "file": "src/ui/flow/zcl_abapgit_flow_git.clas.locals_imp.abap",
+   "caller": "lcl_find_changes->lif_find_changes~find_changes",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_FLOW_GIT",
+   "type": "CLAS",
+   "include": "create_commit",
+   "line": 178,
+   "file": "src/ui/flow/zcl_abapgit_flow_git.clas.testclasses.abap",
+   "caller": "lcl_test_data->create_commit",
+   "shape": "static",
+   "adjudicated": false
+  }
+ ],
+ "ZCL_ABAPGIT_HTTP=>GET_HTTP_CLIENT": [
+  {
+   "object": "ZCL_ABAPGIT_HTTP",
+   "type": "CLAS",
+   "include": "check_connection",
+   "line": 176,
+   "file": "src/http/zcl_abapgit_http.clas.abap",
+   "caller": "zcl_abapgit_http->check_connection",
+   "shape": "bare",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_HTTP",
+   "type": "CLAS",
+   "include": "create_by_url",
+   "line": 187,
+   "file": "src/http/zcl_abapgit_http.clas.abap",
+   "caller": "zcl_abapgit_http->create_by_url",
+   "shape": "bare",
+   "adjudicated": false
+  }
+ ],
+ "ZCL_ABAPGIT_FILENAME_LOGIC=>IS_OBJ_DEFINITION_FILE": [
+  {
+   "object": "ZCL_ABAPGIT_FILENAME_LOGIC",
+   "type": "CLAS",
+   "include": "is_obj_def_file",
+   "line": 76,
+   "file": "src/objects/core/zcl_abapgit_filename_logic.clas.testclasses.abap",
+   "caller": "ltcl_run_checks->is_obj_def_file",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_FILENAME_LOGIC",
+   "type": "CLAS",
+   "include": "is_obj_def_file",
+   "line": 80,
+   "file": "src/objects/core/zcl_abapgit_filename_logic.clas.testclasses.abap",
+   "caller": "ltcl_run_checks->is_obj_def_file",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_FILENAME_LOGIC",
+   "type": "CLAS",
+   "include": "is_obj_def_file",
+   "line": 84,
+   "file": "src/objects/core/zcl_abapgit_filename_logic.clas.testclasses.abap",
+   "caller": "ltcl_run_checks->is_obj_def_file",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_FILENAME_LOGIC",
+   "type": "CLAS",
+   "include": "is_obj_def_file",
+   "line": 88,
+   "file": "src/objects/core/zcl_abapgit_filename_logic.clas.testclasses.abap",
+   "caller": "ltcl_run_checks->is_obj_def_file",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_STATUS_CALC",
+   "type": "CLAS",
+   "include": "process_local",
+   "line": 378,
+   "file": "src/repo/status/zcl_abapgit_status_calc.clas.abap",
+   "caller": "zcl_abapgit_status_calc->process_local",
+   "shape": "static",
+   "adjudicated": false
+  }
+ ],
+ "ZCL_ABAPGIT_OBJECT_SICF=>GET_HASH_FROM_OBJECT": [
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_SICF",
+   "type": "CLAS",
+   "include": "zif_abapgit_object~map_filename_to_object",
+   "line": 678,
+   "file": "src/objects/zcl_abapgit_object_sicf.clas.abap",
+   "caller": "zcl_abapgit_object_sicf->zif_abapgit_object~map_filename_to_object",
+   "shape": "bare",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_SICF",
+   "type": "CLAS",
+   "include": "zif_abapgit_object~map_object_to_filename",
+   "line": 692,
+   "file": "src/objects/zcl_abapgit_object_sicf.clas.abap",
+   "caller": "zcl_abapgit_object_sicf->zif_abapgit_object~map_object_to_filename",
+   "shape": "bare",
+   "adjudicated": false
+  }
+ ],
+ "ZCL_ABAPGIT_ZIP=>ENCODE_FILES": [
+  {
+   "object": "ZCL_ABAPGIT_ZIP",
+   "type": "CLAS",
+   "include": "export",
+   "line": 135,
+   "file": "src/repo/utils/zcl_abapgit_zip.clas.abap",
+   "caller": "zcl_abapgit_zip->export",
+   "shape": "bare",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_ROUTER",
+   "type": "CLAS",
+   "include": "zip_export_transport",
+   "line": 847,
+   "file": "src/ui/routing/zcl_abapgit_gui_router.clas.abap",
+   "caller": "zcl_abapgit_gui_router->zip_export_transport",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_ROUTER",
+   "type": "CLAS",
+   "include": "zip_services",
+   "line": 930,
+   "file": "src/ui/routing/zcl_abapgit_gui_router.clas.abap",
+   "caller": "zcl_abapgit_gui_router->zip_services",
+   "shape": "static",
+   "adjudicated": false
+  }
+ ],
+ "ZCL_ABAPGIT_GUI_CHUNK_LIB=>RENDER_REPO_PALETTE": [
+  {
+   "object": "ZCL_ABAPGIT_GUI_CHUNK_LIB",
+   "type": "CLAS",
+   "include": "render_repo_palette_display_nm",
+   "line": 318,
+   "file": "src/ui/lib/zcl_abapgit_gui_chunk_lib.clas.testclasses.abap",
+   "caller": "ltcl_render_repo->render_repo_palette_display_nm",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_REPO_OVER",
+   "type": "CLAS",
+   "include": "render_scripts",
+   "line": 672,
+   "file": "src/ui/pages/zcl_abapgit_gui_page_repo_over.clas.abap",
+   "caller": "zcl_abapgit_gui_page_repo_over->render_scripts",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_REPO_VIEW",
+   "type": "CLAS",
+   "include": "render_scripts",
+   "line": 1036,
+   "file": "src/ui/pages/zcl_abapgit_gui_page_repo_view.clas.abap",
+   "caller": "zcl_abapgit_gui_page_repo_view->render_scripts",
+   "shape": "static",
+   "adjudicated": false
+  }
+ ],
+ "ZCL_ABAPGIT_SERVICES_REPO=>DELETE_UNNECESSARY_OBJECTS": [
+  {
+   "object": "ZCL_ABAPGIT_BACKGROUND_PULL",
+   "type": "CLAS",
+   "include": "zif_abapgit_background~run",
+   "line": 53,
+   "file": "src/background/zcl_abapgit_background_pull.clas.abap",
+   "caller": "zcl_abapgit_background_pull->zif_abapgit_background~run",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_SERVICES_REPO",
+   "type": "CLAS",
+   "include": "real_deserialize",
+   "line": 912,
+   "file": "src/ui/routing/zcl_abapgit_services_repo.clas.abap",
+   "caller": "zcl_abapgit_services_repo->real_deserialize",
+   "shape": "bare",
+   "adjudicated": false
+  }
+ ],
+ "ZCL_ABAPGIT_APACK_READER=>COPY_MANIFEST_DESCRIPTOR": [
+  {
+   "object": "ZCL_ABAPGIT_APACK_HELPER",
+   "type": "CLAS",
+   "include": "get_installed_packages",
+   "line": 257,
+   "file": "src/apack/zcl_abapgit_apack_helper.clas.abap",
+   "caller": "zcl_abapgit_apack_helper->get_installed_packages",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_APACK_READER",
+   "type": "CLAS",
+   "include": "get_manifest_descriptor",
+   "line": 232,
+   "file": "src/apack/zcl_abapgit_apack_reader.clas.abap",
+   "caller": "zcl_abapgit_apack_reader->get_manifest_descriptor",
+   "shape": "bare",
+   "adjudicated": false
+  }
+ ],
+ "ZCL_ABAPGIT_SETTINGS=>GET_RUN_CRITICAL_TESTS": [
+  {
+   "object": "ZCL_ABAPGIT_OBJECTS_CI_TESTS",
+   "type": "CLAS",
+   "include": "run",
+   "line": 68,
+   "file": "src/test/zcl_abapgit_objects_ci_tests.clas.abap",
+   "caller": "zcl_abapgit_objects_ci_tests->run",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_SETT_GLOB",
+   "type": "CLAS",
+   "include": "read_settings",
+   "line": 248,
+   "file": "src/ui/pages/sett/zcl_abapgit_gui_page_sett_glob.clas.abap",
+   "caller": "zcl_abapgit_gui_page_sett_glob->read_settings",
+   "shape": "arrow",
+   "adjudicated": false
+  }
+ ],
+ "ZCL_ABAPGIT_ZLIB_STREAM=>REMAINING": [
+  {
+   "object": "ZCL_ABAPGIT_ZLIB",
+   "type": "CLAS",
+   "include": "decompress",
+   "line": 166,
+   "file": "src/git/zlib/zcl_abapgit_zlib.clas.abap",
+   "caller": "zcl_abapgit_zlib->decompress",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_ZLIB_STREAM",
+   "type": "CLAS",
+   "include": "test",
+   "line": 41,
+   "file": "src/git/zlib/zcl_abapgit_zlib_stream.clas.testclasses.abap",
+   "caller": "ltcl_test->test",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_ZLIB_STREAM",
+   "type": "CLAS",
+   "include": "test_empty",
+   "line": 71,
+   "file": "src/git/zlib/zcl_abapgit_zlib_stream.clas.testclasses.abap",
+   "caller": "ltcl_test->test_empty",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_ZLIB_STREAM",
+   "type": "CLAS",
+   "include": "test_take_bit_vs_take_bits",
+   "line": 157,
+   "file": "src/git/zlib/zcl_abapgit_zlib_stream.clas.testclasses.abap",
+   "caller": "ltcl_test->test_take_bit_vs_take_bits",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_ZLIB_STREAM",
+   "type": "CLAS",
+   "include": "test_take_bit_vs_take_bits",
+   "line": 158,
+   "file": "src/git/zlib/zcl_abapgit_zlib_stream.clas.testclasses.abap",
+   "caller": "ltcl_test->test_take_bit_vs_take_bits",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_ZLIB_STREAM",
+   "type": "CLAS",
+   "include": "test_take_bit_cross_byte",
+   "line": 187,
+   "file": "src/git/zlib/zcl_abapgit_zlib_stream.clas.testclasses.abap",
+   "caller": "ltcl_test->test_take_bit_cross_byte",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_ZLIB_STREAM",
+   "type": "CLAS",
+   "include": "test_take_bit_cross_byte",
+   "line": 188,
+   "file": "src/git/zlib/zcl_abapgit_zlib_stream.clas.testclasses.abap",
+   "caller": "ltcl_test->test_take_bit_cross_byte",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_ZLIB_STREAM",
+   "type": "CLAS",
+   "include": "test_take_bit_cross_byte",
+   "line": 203,
+   "file": "src/git/zlib/zcl_abapgit_zlib_stream.clas.testclasses.abap",
+   "caller": "ltcl_test->test_take_bit_cross_byte",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_ZLIB_STREAM",
+   "type": "CLAS",
+   "include": "test_take_bit_cross_byte",
+   "line": 204,
+   "file": "src/git/zlib/zcl_abapgit_zlib_stream.clas.testclasses.abap",
+   "caller": "ltcl_test->test_take_bit_cross_byte",
+   "shape": "arrow",
+   "adjudicated": false
+  }
+ ],
+ "ZCL_ABAPGIT_FOLDER_LOGIC=>PATH_TO_PACKAGE": [
+  {
+   "object": "ZCL_ABAPGIT_FOLDER_LOGIC",
+   "type": "CLAS",
+   "include": "test",
+   "line": 28,
+   "file": "src/objects/core/zcl_abapgit_folder_logic.clas.testclasses.abap",
+   "caller": "ltcl_folder_logic_helper->test",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECTS_CHECK",
+   "type": "CLAS",
+   "include": "warning_package_find",
+   "line": 575,
+   "file": "src/objects/core/zcl_abapgit_objects_check.clas.abap",
+   "caller": "zcl_abapgit_objects_check->warning_package_find",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_DEVC",
+   "type": "CLAS",
+   "include": "zif_abapgit_object~map_filename_to_object",
+   "line": 803,
+   "file": "src/objects/zcl_abapgit_object_devc.clas.abap",
+   "caller": "zcl_abapgit_object_devc->zif_abapgit_object~map_filename_to_object",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECTS",
+   "type": "CLAS",
+   "include": "deserialize",
+   "line": 702,
+   "file": "src/objects/zcl_abapgit_objects.clas.abap",
+   "caller": "zcl_abapgit_objects->deserialize",
+   "shape": "arrow",
+   "adjudicated": false
+  }
+ ],
+ "ZCL_ABAPGIT_OO_SERIALIZER=>SERIALIZE_ABAP_CLIF_SOURCE": [
+  {
+   "object": "ZCL_ABAPGIT_OO_BASE",
+   "type": "CLAS",
+   "include": "zif_abapgit_oo_object_fnc~serialize_abap",
+   "line": 275,
+   "file": "src/objects/oo/zcl_abapgit_oo_base.clas.abap",
+   "caller": "zcl_abapgit_oo_base->zif_abapgit_oo_object_fnc~serialize_abap",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_DEBUGINFO",
+   "type": "CLAS",
+   "include": "render_exit_info",
+   "line": 221,
+   "file": "src/ui/pages/zcl_abapgit_gui_page_debuginfo.clas.abap",
+   "caller": "zcl_abapgit_gui_page_debuginfo->render_exit_info",
+   "shape": "arrow",
+   "adjudicated": false
+  }
+ ],
+ "ZCL_ABAPGIT_REPO_ITEM_STATE=>SUM_WITH_REPO_ITEM": [
+  {
+   "object": "ZCL_ABAPGIT_REPO_ITEM_STATE",
+   "type": "CLAS",
+   "include": "test_sum_with_ritem",
+   "line": 143,
+   "file": "src/repo/utils/zcl_abapgit_repo_item_state.clas.testclasses.abap",
+   "caller": "ltcl_state_test->test_sum_with_ritem",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_REPO_ITEM_STATE",
+   "type": "CLAS",
+   "include": "test_sum_with_ritem",
+   "line": 161,
+   "file": "src/repo/utils/zcl_abapgit_repo_item_state.clas.testclasses.abap",
+   "caller": "ltcl_state_test->test_sum_with_ritem",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_REPO_ITEM_STATE",
+   "type": "CLAS",
+   "include": "test_sum_with_ritem",
+   "line": 178,
+   "file": "src/repo/utils/zcl_abapgit_repo_item_state.clas.testclasses.abap",
+   "caller": "ltcl_state_test->test_sum_with_ritem",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_REPO_ITEM_STATE",
+   "type": "CLAS",
+   "include": "test_sum_with_ritem",
+   "line": 196,
+   "file": "src/repo/utils/zcl_abapgit_repo_item_state.clas.testclasses.abap",
+   "caller": "ltcl_state_test->test_sum_with_ritem",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_REPO_ITEM_STATE",
+   "type": "CLAS",
+   "include": "test_sum_with_ritem",
+   "line": 214,
+   "file": "src/repo/utils/zcl_abapgit_repo_item_state.clas.testclasses.abap",
+   "caller": "ltcl_state_test->test_sum_with_ritem",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_REPO_CONTENT_LIST",
+   "type": "CLAS",
+   "include": "build_folders",
+   "line": 99,
+   "file": "src/repo/zcl_abapgit_repo_content_list.clas.abap",
+   "caller": "zcl_abapgit_repo_content_list->build_folders",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_REPO_VIEW",
+   "type": "CLAS",
+   "include": "zif_abapgit_gui_renderable~render",
+   "line": 1363,
+   "file": "src/ui/pages/zcl_abapgit_gui_page_repo_view.clas.abap",
+   "caller": "zcl_abapgit_gui_page_repo_view->zif_abapgit_gui_renderable~render",
+   "shape": "arrow",
+   "adjudicated": false
+  }
+ ],
+ "ZCL_ABAPGIT_DOT_ABAPGIT=>SET_NAME": [
+  {
+   "object": "ZCL_ABAPGIT_MIGRATIONS",
+   "type": "CLAS",
+   "include": "migrate_offline_repos",
+   "line": 37,
+   "file": "src/persist/zcl_abapgit_migrations.clas.abap",
+   "caller": "zcl_abapgit_migrations->migrate_offline_repos",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_REPO_SRV",
+   "type": "CLAS",
+   "include": "zif_abapgit_repo_srv~new_offline",
+   "line": 598,
+   "file": "src/repo/zcl_abapgit_repo_srv.clas.abap",
+   "caller": "zcl_abapgit_repo_srv->zif_abapgit_repo_srv~new_offline",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_REPO_SRV",
+   "type": "CLAS",
+   "include": "zif_abapgit_repo_srv~new_online",
+   "line": 666,
+   "file": "src/repo/zcl_abapgit_repo_srv.clas.abap",
+   "caller": "zcl_abapgit_repo_srv->zif_abapgit_repo_srv~new_online",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_SETT_REPO",
+   "type": "CLAS",
+   "include": "save_settings",
+   "line": 381,
+   "file": "src/ui/pages/sett/zcl_abapgit_gui_page_sett_repo.clas.abap",
+   "caller": "zcl_abapgit_gui_page_sett_repo->save_settings",
+   "shape": "arrow",
+   "adjudicated": false
+  }
+ ],
+ "ZCL_ABAPGIT_GUI_PICKLIST=>IS_IN_PAGE": [
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_ADDONLINE",
+   "type": "CLAS",
+   "include": "handle_picklist_state",
+   "line": 145,
+   "file": "src/ui/pages/dlg/zcl_abapgit_gui_page_addonline.clas.abap",
+   "caller": "zcl_abapgit_gui_page_addonline->handle_picklist_state",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_ADDONLINE",
+   "type": "CLAS",
+   "include": "zif_abapgit_gui_event_handler~on_event",
+   "line": 408,
+   "file": "src/ui/pages/dlg/zcl_abapgit_gui_page_addonline.clas.abap",
+   "caller": "zcl_abapgit_gui_page_addonline->zif_abapgit_gui_event_handler~on_event",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_ADDONLINE",
+   "type": "CLAS",
+   "include": "zif_abapgit_gui_renderable~render",
+   "line": 433,
+   "file": "src/ui/pages/dlg/zcl_abapgit_gui_page_addonline.clas.abap",
+   "caller": "zcl_abapgit_gui_page_addonline->zif_abapgit_gui_renderable~render",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_ADDONLINE",
+   "type": "CLAS",
+   "include": "zif_abapgit_gui_renderable~render",
+   "line": 435,
+   "file": "src/ui/pages/dlg/zcl_abapgit_gui_page_addonline.clas.abap",
+   "caller": "zcl_abapgit_gui_page_addonline->zif_abapgit_gui_renderable~render",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_SETT_LOCL",
+   "type": "CLAS",
+   "include": "handle_picklist_state",
+   "line": 321,
+   "file": "src/ui/pages/sett/zcl_abapgit_gui_page_sett_locl.clas.abap",
+   "caller": "zcl_abapgit_gui_page_sett_locl->handle_picklist_state",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_SETT_LOCL",
+   "type": "CLAS",
+   "include": "zif_abapgit_gui_event_handler~on_event",
+   "line": 554,
+   "file": "src/ui/pages/sett/zcl_abapgit_gui_page_sett_locl.clas.abap",
+   "caller": "zcl_abapgit_gui_page_sett_locl->zif_abapgit_gui_event_handler~on_event",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_SETT_LOCL",
+   "type": "CLAS",
+   "include": "zif_abapgit_gui_renderable~render",
+   "line": 586,
+   "file": "src/ui/pages/sett/zcl_abapgit_gui_page_sett_locl.clas.abap",
+   "caller": "zcl_abapgit_gui_page_sett_locl->zif_abapgit_gui_renderable~render",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_SETT_LOCL",
+   "type": "CLAS",
+   "include": "zif_abapgit_gui_renderable~render",
+   "line": 588,
+   "file": "src/ui/pages/sett/zcl_abapgit_gui_page_sett_locl.clas.abap",
+   "caller": "zcl_abapgit_gui_page_sett_locl->zif_abapgit_gui_renderable~render",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_SETT_REMO",
+   "type": "CLAS",
+   "include": "handle_picklist_state",
+   "line": 540,
+   "file": "src/ui/pages/sett/zcl_abapgit_gui_page_sett_remo.clas.abap",
+   "caller": "zcl_abapgit_gui_page_sett_remo->handle_picklist_state",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_SETT_REMO",
+   "type": "CLAS",
+   "include": "zif_abapgit_gui_event_handler~on_event",
+   "line": 994,
+   "file": "src/ui/pages/sett/zcl_abapgit_gui_page_sett_remo.clas.abap",
+   "caller": "zcl_abapgit_gui_page_sett_remo->zif_abapgit_gui_event_handler~on_event",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_SETT_REMO",
+   "type": "CLAS",
+   "include": "zif_abapgit_gui_renderable~render",
+   "line": 1093,
+   "file": "src/ui/pages/sett/zcl_abapgit_gui_page_sett_remo.clas.abap",
+   "caller": "zcl_abapgit_gui_page_sett_remo->zif_abapgit_gui_renderable~render",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_SETT_REMO",
+   "type": "CLAS",
+   "include": "zif_abapgit_gui_renderable~render",
+   "line": 1095,
+   "file": "src/ui/pages/sett/zcl_abapgit_gui_page_sett_remo.clas.abap",
+   "caller": "zcl_abapgit_gui_page_sett_remo->zif_abapgit_gui_renderable~render",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_STAGE",
+   "type": "CLAS",
+   "include": "handle_picklist_state",
+   "line": 351,
+   "file": "src/ui/pages/zcl_abapgit_gui_page_stage.clas.abap",
+   "caller": "zcl_abapgit_gui_page_stage->handle_picklist_state",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_STAGE",
+   "type": "CLAS",
+   "include": "zif_abapgit_gui_event_handler~on_event",
+   "line": 767,
+   "file": "src/ui/pages/zcl_abapgit_gui_page_stage.clas.abap",
+   "caller": "zcl_abapgit_gui_page_stage->zif_abapgit_gui_event_handler~on_event",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_STAGE",
+   "type": "CLAS",
+   "include": "zif_abapgit_gui_renderable~render",
+   "line": 889,
+   "file": "src/ui/pages/zcl_abapgit_gui_page_stage.clas.abap",
+   "caller": "zcl_abapgit_gui_page_stage->zif_abapgit_gui_renderable~render",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_STAGE",
+   "type": "CLAS",
+   "include": "zif_abapgit_gui_renderable~render",
+   "line": 891,
+   "file": "src/ui/pages/zcl_abapgit_gui_page_stage.clas.abap",
+   "caller": "zcl_abapgit_gui_page_stage->zif_abapgit_gui_renderable~render",
+   "shape": "arrow",
+   "adjudicated": false
+  }
+ ],
+ "ZIF_ABAPGIT_CTS_API~CREATE_TRANSPORT_ENTRIES": [
+  {
+   "object": "ZCL_ABAPGIT_DATA_DESERIALIZER",
+   "type": "CLAS",
+   "include": "zif_abapgit_data_deserializer~actualize",
+   "line": 313,
+   "file": "src/data/zcl_abapgit_data_deserializer.clas.abap",
+   "caller": "zcl_abapgit_data_deserializer->zif_abapgit_data_deserializer~actualize",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_DATA_DESERIALIZER",
+   "type": "CLAS",
+   "include": "zif_abapgit_data_deserializer~actualize",
+   "line": 320,
+   "file": "src/data/zcl_abapgit_data_deserializer.clas.abap",
+   "caller": "zcl_abapgit_data_deserializer->zif_abapgit_data_deserializer~actualize",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_VIEW",
+   "type": "CLAS",
+   "include": "insert_transport",
+   "line": 175,
+   "file": "src/objects/zcl_abapgit_object_view.clas.abap",
+   "caller": "zcl_abapgit_object_view->insert_transport",
+   "shape": "arrow",
+   "adjudicated": false
+  }
+ ],
+ "ZIF_ABAPGIT_EXIT~ADJUST_COMMIT_MESSAGE": [
+  {
+   "object": "ZCL_ABAPGIT_EXIT",
+   "type": "CLAS",
+   "include": "zif_abapgit_exit~adjust_commit_message",
+   "line": 88,
+   "file": "src/exits/zcl_abapgit_exit.clas.abap",
+   "caller": "zcl_abapgit_exit->zif_abapgit_exit~adjust_commit_message",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_COMMIT",
+   "type": "CLAS",
+   "include": "zif_abapgit_gui_event_handler~on_event",
+   "line": 503,
+   "file": "src/ui/pages/zcl_abapgit_gui_page_commit.clas.abap",
+   "caller": "zcl_abapgit_gui_page_commit->zif_abapgit_gui_event_handler~on_event",
+   "shape": "arrow",
+   "adjudicated": false
+  }
+ ],
+ "ZIF_ABAPGIT_EXIT~VALIDATE_AFTER_PUSH": [
+  {
+   "object": "ZCL_ABAPGIT_EXIT",
+   "type": "CLAS",
+   "include": "zif_abapgit_exit~validate_after_push",
+   "line": 523,
+   "file": "src/exits/zcl_abapgit_exit.clas.abap",
+   "caller": "zcl_abapgit_exit->zif_abapgit_exit~validate_after_push",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_SERVICES_GIT",
+   "type": "CLAS",
+   "include": "commit",
+   "line": 114,
+   "file": "src/ui/routing/zcl_abapgit_services_git.clas.abap",
+   "caller": "zcl_abapgit_services_git->commit",
+   "shape": "arrow",
+   "adjudicated": false
+  }
+ ],
+ "ZIF_ABAPGIT_AJSON_ITERATOR~HAS_NEXT": [
+  {
+   "object": "ZCL_ABAPGIT_AJSON_UTILITIES",
+   "type": "CLAS",
+   "include": "iterate_array",
+   "line": 588,
+   "file": "src/json/zcl_abapgit_ajson_utilities.clas.testclasses.abap",
+   "caller": "ltcl_json_utils->iterate_array",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_AJSON_UTILITIES",
+   "type": "CLAS",
+   "include": "iterate_array",
+   "line": 604,
+   "file": "src/json/zcl_abapgit_ajson_utilities.clas.testclasses.abap",
+   "caller": "ltcl_json_utils->iterate_array",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_AJSON_UTILITIES",
+   "type": "CLAS",
+   "include": "iterate_object",
+   "line": 660,
+   "file": "src/json/zcl_abapgit_ajson_utilities.clas.testclasses.abap",
+   "caller": "ltcl_json_utils->iterate_object",
+   "shape": "arrow",
+   "adjudicated": false
+  }
+ ],
+ "ZIF_ABAPGIT_OO_OBJECT_FNC~READ_ATTRIBUTES": [
+  {
+   "object": "ZCL_ABAPGIT_OO_CLASS",
+   "type": "CLAS",
+   "include": "zif_abapgit_oo_object_fnc~create",
+   "line": 582,
+   "file": "src/objects/oo/zcl_abapgit_oo_class.clas.abap",
+   "caller": "zcl_abapgit_oo_class->zif_abapgit_oo_object_fnc~create",
+   "shape": "tilde",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_CLAS",
+   "type": "CLAS",
+   "include": "serialize_attr",
+   "line": 516,
+   "file": "src/objects/zcl_abapgit_object_clas.clas.abap",
+   "caller": "zcl_abapgit_object_clas->serialize_attr",
+   "shape": "arrow",
+   "adjudicated": false
+  }
+ ],
+ "ZIF_ABAPGIT_PERSIST_USER~SET_REPO_SHOW": [
+  {
+   "object": "ZCL_ABAPGIT_PERSISTENCE_USER",
+   "type": "CLAS",
+   "include": "zif_abapgit_persist_user~get_repo_show",
+   "line": 290,
+   "file": "src/persist/zcl_abapgit_persistence_user.clas.abap",
+   "caller": "zcl_abapgit_persistence_user->zif_abapgit_persist_user~get_repo_show",
+   "shape": "tilde",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_PERSISTENCE_USER",
+   "type": "CLAS",
+   "include": "set_get_repo_show",
+   "line": 58,
+   "file": "src/persist/zcl_abapgit_persistence_user.clas.testclasses.abap",
+   "caller": "ltcl_user->set_get_repo_show",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_REPO_OVER",
+   "type": "CLAS",
+   "include": "zif_abapgit_gui_event_handler~on_event",
+   "line": 907,
+   "file": "src/ui/pages/zcl_abapgit_gui_page_repo_over.clas.abap",
+   "caller": "zcl_abapgit_gui_page_repo_over->zif_abapgit_gui_event_handler~on_event",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_REPO_VIEW",
+   "type": "CLAS",
+   "include": "constructor",
+   "line": 657,
+   "file": "src/ui/pages/zcl_abapgit_gui_page_repo_view.clas.abap",
+   "caller": "zcl_abapgit_gui_page_repo_view->constructor",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_REPO_VIEW",
+   "type": "CLAS",
+   "include": "zif_abapgit_gui_renderable~render",
+   "line": 1446,
+   "file": "src/ui/pages/zcl_abapgit_gui_page_repo_view.clas.abap",
+   "caller": "zcl_abapgit_gui_page_repo_view->zif_abapgit_gui_renderable~render",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_SERVICES_REPO",
+   "type": "CLAS",
+   "include": "new_offline",
+   "line": 446,
+   "file": "src/ui/routing/zcl_abapgit_services_repo.clas.abap",
+   "caller": "zcl_abapgit_services_repo->new_offline",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_SERVICES_REPO",
+   "type": "CLAS",
+   "include": "new_online",
+   "line": 489,
+   "file": "src/ui/routing/zcl_abapgit_services_repo.clas.abap",
+   "caller": "zcl_abapgit_services_repo->new_online",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZABAPGIT_FORMS",
+   "type": "PROG",
+   "include": "prepare_gui_startup",
+   "line": 32,
+   "file": "src/zabapgit_forms.prog.abap",
+   "caller": "lcl_startup->prepare_gui_startup",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZABAPGIT_FORMS",
+   "type": "PROG",
+   "include": "prepare_gui_startup",
+   "line": 48,
+   "file": "src/zabapgit_forms.prog.abap",
+   "caller": "lcl_startup->prepare_gui_startup",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZABAPGIT_FORMS",
+   "type": "PROG",
+   "include": "set_start_repo_from_package",
+   "line": 104,
+   "file": "src/zabapgit_forms.prog.abap",
+   "caller": "lcl_startup->set_start_repo_from_package",
+   "shape": "arrow",
+   "adjudicated": false
+  }
+ ],
+ "ZIF_ABAPGIT_REPO_ONLINE~GET_SELECTED_COMMIT": [
+  {
+   "object": "ZCL_ABAPGIT_REPO_ONLINE",
+   "type": "CLAS",
+   "include": "fetch_remote",
+   "line": 92,
+   "file": "src/repo/zcl_abapgit_repo_online.clas.abap",
+   "caller": "zcl_abapgit_repo_online->fetch_remote",
+   "shape": "bare",
+   "adjudicated": true,
+   "alias": "get_selected_commit"
+  },
+  {
+   "object": "ZCL_ABAPGIT_REPO_ONLINE",
+   "type": "CLAS",
+   "include": "fetch_remote",
+   "line": 97,
+   "file": "src/repo/zcl_abapgit_repo_online.clas.abap",
+   "caller": "zcl_abapgit_repo_online->fetch_remote",
+   "shape": "bare",
+   "adjudicated": true,
+   "alias": "get_selected_commit"
+  },
+  {
+   "object": "ZCL_ABAPGIT_REPO_ONLINE",
+   "type": "CLAS",
+   "include": "zif_abapgit_repo_online~get_remote_settings",
+   "line": 246,
+   "file": "src/repo/zcl_abapgit_repo_online.clas.abap",
+   "caller": "zcl_abapgit_repo_online->zif_abapgit_repo_online~get_remote_settings",
+   "shape": "bare",
+   "adjudicated": true,
+   "alias": "get_selected_commit"
+  },
+  {
+   "object": "ZCL_ABAPGIT_REPO_ONLINE",
+   "type": "CLAS",
+   "include": "zif_abapgit_repo_online~get_remote_settings",
+   "line": 247,
+   "file": "src/repo/zcl_abapgit_repo_online.clas.abap",
+   "caller": "zcl_abapgit_repo_online->zif_abapgit_repo_online~get_remote_settings",
+   "shape": "bare",
+   "adjudicated": true,
+   "alias": "get_selected_commit"
+  },
+  {
+   "object": "ZCL_ABAPGIT_REPO_ONLINE",
+   "type": "CLAS",
+   "include": "zif_abapgit_repo_online~push",
+   "line": 330,
+   "file": "src/repo/zcl_abapgit_repo_online.clas.abap",
+   "caller": "zcl_abapgit_repo_online->zif_abapgit_repo_online~push",
+   "shape": "bare",
+   "adjudicated": true,
+   "alias": "get_selected_commit"
+  },
+  {
+   "object": "ZCL_ABAPGIT_REPO_ONLINE",
+   "type": "CLAS",
+   "include": "zif_abapgit_repo_online~push",
+   "line": 333,
+   "file": "src/repo/zcl_abapgit_repo_online.clas.abap",
+   "caller": "zcl_abapgit_repo_online->zif_abapgit_repo_online~push",
+   "shape": "bare",
+   "adjudicated": true,
+   "alias": "get_selected_commit"
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_CHUNK_LIB",
+   "type": "CLAS",
+   "include": "render_branch_name",
+   "line": 361,
+   "file": "src/ui/lib/zcl_abapgit_gui_chunk_lib.clas.abap",
+   "caller": "zcl_abapgit_gui_chunk_lib->render_branch_name",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_ROUTER",
+   "type": "CLAS",
+   "include": "get_page_stage",
+   "line": 416,
+   "file": "src/ui/routing/zcl_abapgit_gui_router.clas.abap",
+   "caller": "zcl_abapgit_gui_router->get_page_stage",
+   "shape": "arrow",
+   "adjudicated": false
+  }
+ ],
+ "ZIF_ABAPGIT_PROGRESS~SHOW": [
+  {
+   "object": "ZCL_ABAPGIT_GIT_COMMIT",
+   "type": "CLAS",
+   "include": "get_by_branch",
+   "line": 166,
+   "file": "src/git/zcl_abapgit_git_commit.clas.abap",
+   "caller": "zcl_abapgit_git_commit->get_by_branch",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GIT_COMMIT",
+   "type": "CLAS",
+   "include": "get_by_commit",
+   "line": 197,
+   "file": "src/git/zcl_abapgit_git_commit.clas.abap",
+   "caller": "zcl_abapgit_git_commit->get_by_commit",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GIT_DELTA",
+   "type": "CLAS",
+   "include": "decode_deltas",
+   "line": 55,
+   "file": "src/git/zcl_abapgit_git_delta.clas.abap",
+   "caller": "zcl_abapgit_git_delta->decode_deltas",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GIT_PACK",
+   "type": "CLAS",
+   "include": "encode",
+   "line": 478,
+   "file": "src/git/zcl_abapgit_git_pack.clas.abap",
+   "caller": "zcl_abapgit_git_pack->encode",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_WHERE_USED_TOOLS",
+   "type": "CLAS",
+   "include": "collect_where_used",
+   "line": 172,
+   "file": "src/inspect/zcl_abapgit_where_used_tools.clas.abap",
+   "caller": "zcl_abapgit_where_used_tools->collect_where_used",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_SERIALIZE",
+   "type": "CLAS",
+   "include": "serialize",
+   "line": 756,
+   "file": "src/objects/core/zcl_abapgit_serialize.clas.abap",
+   "caller": "zcl_abapgit_serialize->serialize",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_SERIALIZE",
+   "type": "CLAS",
+   "include": "serialize",
+   "line": 761,
+   "file": "src/objects/core/zcl_abapgit_serialize.clas.abap",
+   "caller": "zcl_abapgit_serialize->serialize",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_TADIR",
+   "type": "CLAS",
+   "include": "check_exists",
+   "line": 217,
+   "file": "src/objects/core/zcl_abapgit_tadir.clas.abap",
+   "caller": "zcl_abapgit_tadir->check_exists",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECTS",
+   "type": "CLAS",
+   "include": "delete",
+   "line": 530,
+   "file": "src/objects/zcl_abapgit_objects.clas.abap",
+   "caller": "zcl_abapgit_objects->delete",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECTS",
+   "type": "CLAS",
+   "include": "deserialize",
+   "line": 689,
+   "file": "src/objects/zcl_abapgit_objects.clas.abap",
+   "caller": "zcl_abapgit_objects->deserialize",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECTS",
+   "type": "CLAS",
+   "include": "deserialize_step",
+   "line": 877,
+   "file": "src/objects/zcl_abapgit_objects.clas.abap",
+   "caller": "zcl_abapgit_objects->deserialize_step",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECTS",
+   "type": "CLAS",
+   "include": "deserialize_step",
+   "line": 910,
+   "file": "src/objects/zcl_abapgit_objects.clas.abap",
+   "caller": "zcl_abapgit_objects->deserialize_step",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_REPO_ONLINE",
+   "type": "CLAS",
+   "include": "fetch_remote",
+   "line": 89,
+   "file": "src/repo/zcl_abapgit_repo_online.clas.abap",
+   "caller": "zcl_abapgit_repo_online->fetch_remote",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_DIFF_BASE",
+   "type": "CLAS",
+   "include": "zif_abapgit_gui_renderable~render",
+   "line": 1470,
+   "file": "src/ui/pages/diff/zcl_abapgit_gui_page_diff_base.clas.abap",
+   "caller": "zcl_abapgit_gui_page_diff_base->zif_abapgit_gui_renderable~render",
+   "shape": "arrow",
+   "adjudicated": false
+  }
+ ],
+ "ZCL_ABAPGIT_OBJECT_COMMON_AFF=>GET_ADDITIONAL_EXTENSIONS": [
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_COMMON_AFF",
+   "type": "CLAS",
+   "include": "zif_abapgit_object~deserialize",
+   "line": 352,
+   "file": "src/objects/aff/zcl_abapgit_object_common_aff.clas.abap",
+   "caller": "zcl_abapgit_object_common_aff->zif_abapgit_object~deserialize",
+   "shape": "bare",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_COMMON_AFF",
+   "type": "CLAS",
+   "include": "zif_abapgit_object~serialize",
+   "line": 666,
+   "file": "src/objects/aff/zcl_abapgit_object_common_aff.clas.abap",
+   "caller": "zcl_abapgit_object_common_aff->zif_abapgit_object~serialize",
+   "shape": "bare",
+   "adjudicated": false
+  }
+ ],
+ "ZCL_ABAPGIT_REPO=>RESET_REMOTE": [
+  {
+   "object": "ZCL_ABAPGIT_REPO",
+   "type": "CLAS",
+   "include": "zif_abapgit_repo~refresh",
+   "line": 793,
+   "file": "src/repo/zcl_abapgit_repo.clas.abap",
+   "caller": "zcl_abapgit_repo->zif_abapgit_repo~refresh",
+   "shape": "bare",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_REPO_OFFLINE",
+   "type": "CLAS",
+   "include": "reset_remote",
+   "line": 32,
+   "file": "src/repo/zcl_abapgit_repo_offline.clas.abap",
+   "caller": "zcl_abapgit_repo_offline->reset_remote",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_REPO_ONLINE",
+   "type": "CLAS",
+   "include": "zif_abapgit_repo_online~select_branch",
+   "line": 356,
+   "file": "src/repo/zcl_abapgit_repo_online.clas.abap",
+   "caller": "zcl_abapgit_repo_online->zif_abapgit_repo_online~select_branch",
+   "shape": "bare",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_REPO_ONLINE",
+   "type": "CLAS",
+   "include": "zif_abapgit_repo_online~select_commit",
+   "line": 365,
+   "file": "src/repo/zcl_abapgit_repo_online.clas.abap",
+   "caller": "zcl_abapgit_repo_online->zif_abapgit_repo_online~select_commit",
+   "shape": "bare",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_REPO_ONLINE",
+   "type": "CLAS",
+   "include": "zif_abapgit_repo_online~set_url",
+   "line": 373,
+   "file": "src/repo/zcl_abapgit_repo_online.clas.abap",
+   "caller": "zcl_abapgit_repo_online->zif_abapgit_repo_online~set_url",
+   "shape": "bare",
+   "adjudicated": false
+  }
+ ],
+ "ZCL_ABAPGIT_SYNTAX_HIGHLIGHTER=>ORDER_MATCHES": [
+  {
+   "object": "ZCL_ABAPGIT_SYNTAX_ABAP",
+   "type": "CLAS",
+   "include": "do_test",
+   "line": 194,
+   "file": "src/syntax/zcl_abapgit_syntax_abap.clas.testclasses.abap",
+   "caller": "ltcl_syntax_cases->do_test",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_SYNTAX_HIGHLIGHTER",
+   "type": "CLAS",
+   "include": "process_line",
+   "line": 261,
+   "file": "src/syntax/zcl_abapgit_syntax_highlighter.clas.abap",
+   "caller": "zcl_abapgit_syntax_highlighter->process_line",
+   "shape": "bare",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_SYNTAX_XML",
+   "type": "CLAS",
+   "include": "do_test",
+   "line": 196,
+   "file": "src/syntax/zcl_abapgit_syntax_xml.clas.testclasses.abap",
+   "caller": "ltcl_syntax_cases->do_test",
+   "shape": "arrow",
+   "adjudicated": false
+  }
+ ],
+ "ZCL_ABAPGIT_APACK_MIGRATION=>ADD_INTF_SOURCE_AND_ACTIVATE": [
+  {
+   "object": "ZCL_ABAPGIT_APACK_MIGRATION",
+   "type": "CLAS",
+   "include": "create_interface",
+   "line": 202,
+   "file": "src/apack/zcl_abapgit_apack_migration.clas.abap",
+   "caller": "zcl_abapgit_apack_migration->create_interface",
+   "shape": "bare",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_APACK_MIGRATION",
+   "type": "CLAS",
+   "include": "perform_migration",
+   "line": 268,
+   "file": "src/apack/zcl_abapgit_apack_migration.clas.abap",
+   "caller": "zcl_abapgit_apack_migration->perform_migration",
+   "shape": "bare",
+   "adjudicated": false
+  }
+ ],
+ "ZCL_ABAPGIT_OBJECT_ECATT_SUPER=>SERIALIZE_VERSION": [
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_ECATT_SUPER",
+   "type": "CLAS",
+   "include": "serialize_versions",
+   "line": 421,
+   "file": "src/objects/zcl_abapgit_object_ecatt_super.clas.abap",
+   "caller": "zcl_abapgit_object_ecatt_super->serialize_versions",
+   "shape": "bare",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_ECATT_SUPER",
+   "type": "CLAS",
+   "include": "serialize_versions",
+   "line": 431,
+   "file": "src/objects/zcl_abapgit_object_ecatt_super.clas.abap",
+   "caller": "zcl_abapgit_object_ecatt_super->serialize_versions",
+   "shape": "bare",
+   "adjudicated": false
+  }
+ ],
+ "ZCL_ABAPGIT_REPO_ONLINE=>SET_OBJECTS": [
+  {
+   "object": "ZCL_ABAPGIT_REPO_ONLINE",
+   "type": "CLAS",
+   "include": "fetch_remote",
+   "line": 101,
+   "file": "src/repo/zcl_abapgit_repo_online.clas.abap",
+   "caller": "zcl_abapgit_repo_online->fetch_remote",
+   "shape": "bare",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_REPO_ONLINE",
+   "type": "CLAS",
+   "include": "zif_abapgit_repo_online~push",
+   "line": 344,
+   "file": "src/repo/zcl_abapgit_repo_online.clas.abap",
+   "caller": "zcl_abapgit_repo_online->zif_abapgit_repo_online~push",
+   "shape": "bare",
+   "adjudicated": false
+  }
+ ],
+ "ZCL_ABAPGIT_GIT_BRANCH_UTILS=>GET_DISPLAY_NAME": [
+  {
+   "object": "ZCL_ABAPGIT_GIT_BRANCH_LIST",
+   "type": "CLAS",
+   "include": "parse_branch_list",
+   "line": 191,
+   "file": "src/git/zcl_abapgit_git_branch_list.clas.abap",
+   "caller": "zcl_abapgit_git_branch_list->parse_branch_list",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GIT_BRANCH_UTILS",
+   "type": "CLAS",
+   "include": "get_description",
+   "line": 58,
+   "file": "src/git/zcl_abapgit_git_branch_utils.clas.abap",
+   "caller": "zcl_abapgit_git_branch_utils->get_description",
+   "shape": "bare",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_REPO_ONLINE",
+   "type": "CLAS",
+   "include": "raise_error_if_branch_exists",
+   "line": 164,
+   "file": "src/repo/zcl_abapgit_repo_online.clas.abap",
+   "caller": "zcl_abapgit_repo_online->raise_error_if_branch_exists",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_REPO_ONLINE",
+   "type": "CLAS",
+   "include": "zif_abapgit_repo_online~check_for_valid_branch",
+   "line": 195,
+   "file": "src/repo/zcl_abapgit_repo_online.clas.abap",
+   "caller": "zcl_abapgit_repo_online->zif_abapgit_repo_online~check_for_valid_branch",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_CHUNK_LIB",
+   "type": "CLAS",
+   "include": "render_branch_name",
+   "line": 359,
+   "file": "src/ui/lib/zcl_abapgit_gui_chunk_lib.clas.abap",
+   "caller": "zcl_abapgit_gui_chunk_lib->render_branch_name",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_CHUNK_LIB",
+   "type": "CLAS",
+   "include": "render_branch_name",
+   "line": 368,
+   "file": "src/ui/lib/zcl_abapgit_gui_chunk_lib.clas.abap",
+   "caller": "zcl_abapgit_gui_chunk_lib->render_branch_name",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_SETT_REMO",
+   "type": "CLAS",
+   "include": "initialize_form_data",
+   "line": 591,
+   "file": "src/ui/pages/sett/zcl_abapgit_gui_page_sett_remo.clas.abap",
+   "caller": "zcl_abapgit_gui_page_sett_remo->initialize_form_data",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_SETT_REMO",
+   "type": "CLAS",
+   "include": "initialize_form_data",
+   "line": 596,
+   "file": "src/ui/pages/sett/zcl_abapgit_gui_page_sett_remo.clas.abap",
+   "caller": "zcl_abapgit_gui_page_sett_remo->initialize_form_data",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_REF_SEL",
+   "type": "CLAS",
+   "include": "create_picklist",
+   "line": 118,
+   "file": "src/ui/pages/zcl_abapgit_gui_page_ref_sel.clas.abap",
+   "caller": "zcl_abapgit_gui_page_ref_sel->create_picklist",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_STAGE",
+   "type": "CLAS",
+   "include": "switch_branch",
+   "line": 693,
+   "file": "src/ui/pages/zcl_abapgit_gui_page_stage.clas.abap",
+   "caller": "zcl_abapgit_gui_page_stage->switch_branch",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_SERVICES_GIT",
+   "type": "CLAS",
+   "include": "create_branch",
+   "line": 146,
+   "file": "src/ui/routing/zcl_abapgit_services_git.clas.abap",
+   "caller": "zcl_abapgit_services_git->create_branch",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_SERVICES_GIT",
+   "type": "CLAS",
+   "include": "create_branch",
+   "line": 147,
+   "file": "src/ui/routing/zcl_abapgit_services_git.clas.abap",
+   "caller": "zcl_abapgit_services_git->create_branch",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_SERVICES_GIT",
+   "type": "CLAS",
+   "include": "create_branch_common",
+   "line": 209,
+   "file": "src/ui/routing/zcl_abapgit_services_git.clas.abap",
+   "caller": "zcl_abapgit_services_git->create_branch_common",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_SERVICES_GIT",
+   "type": "CLAS",
+   "include": "create_branch_common",
+   "line": 210,
+   "file": "src/ui/routing/zcl_abapgit_services_git.clas.abap",
+   "caller": "zcl_abapgit_services_git->create_branch_common",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_POPUPS",
+   "type": "CLAS",
+   "include": "zif_abapgit_popups~branch_list_popup",
+   "line": 280,
+   "file": "src/ui/zcl_abapgit_popups.clas.abap",
+   "caller": "zcl_abapgit_popups->zif_abapgit_popups~branch_list_popup",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_POPUPS",
+   "type": "CLAS",
+   "include": "zif_abapgit_popups~branch_list_popup",
+   "line": 281,
+   "file": "src/ui/zcl_abapgit_popups.clas.abap",
+   "caller": "zcl_abapgit_popups->zif_abapgit_popups~branch_list_popup",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_POPUPS",
+   "type": "CLAS",
+   "include": "zif_abapgit_popups~create_branch_popup",
+   "line": 396,
+   "file": "src/ui/zcl_abapgit_popups.clas.abap",
+   "caller": "zcl_abapgit_popups->zif_abapgit_popups~create_branch_popup",
+   "shape": "static",
+   "adjudicated": false
+  }
+ ],
+ "ZCL_ABAPGIT_OBJECTS_FILES=>READ_STRING": [
+  {
+   "object": "ZCL_ABAPGIT_LONGTEXTS",
+   "type": "CLAS",
+   "include": "zif_abapgit_longtexts~deserialize_aff",
+   "line": 226,
+   "file": "src/objects/texts/zcl_abapgit_longtexts.clas.abap",
+   "caller": "zcl_abapgit_longtexts->zif_abapgit_longtexts~deserialize_aff",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_BDEF",
+   "type": "CLAS",
+   "include": "get_object_data",
+   "line": 257,
+   "file": "src/objects/zcl_abapgit_object_bdef.clas.abap",
+   "caller": "zcl_abapgit_object_bdef->get_object_data",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_DCLS",
+   "type": "CLAS",
+   "include": "zif_abapgit_object~deserialize",
+   "line": 116,
+   "file": "src/objects/zcl_abapgit_object_dcls.clas.abap",
+   "caller": "zcl_abapgit_object_dcls->zif_abapgit_object~deserialize",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_DDLS",
+   "type": "CLAS",
+   "include": "read_baseinfo",
+   "line": 233,
+   "file": "src/objects/zcl_abapgit_object_ddls.clas.abap",
+   "caller": "zcl_abapgit_object_ddls->read_baseinfo",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_DDLS",
+   "type": "CLAS",
+   "include": "zif_abapgit_object~deserialize",
+   "line": 362,
+   "file": "src/objects/zcl_abapgit_object_ddls.clas.abap",
+   "caller": "zcl_abapgit_object_ddls->zif_abapgit_object~deserialize",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_DDLX",
+   "type": "CLAS",
+   "include": "zif_abapgit_object~deserialize",
+   "line": 138,
+   "file": "src/objects/zcl_abapgit_object_ddlx.clas.abap",
+   "caller": "zcl_abapgit_object_ddlx->zif_abapgit_object~deserialize",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_DRUL",
+   "type": "CLAS",
+   "include": "zif_abapgit_object~deserialize",
+   "line": 321,
+   "file": "src/objects/zcl_abapgit_object_drul.clas.abap",
+   "caller": "zcl_abapgit_object_drul->zif_abapgit_object~deserialize",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_DTDC",
+   "type": "CLAS",
+   "include": "zif_abapgit_object~deserialize",
+   "line": 338,
+   "file": "src/objects/zcl_abapgit_object_dtdc.clas.abap",
+   "caller": "zcl_abapgit_object_dtdc->zif_abapgit_object~deserialize",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_FORM",
+   "type": "CLAS",
+   "include": "extract_tdlines",
+   "line": 184,
+   "file": "src/objects/zcl_abapgit_object_form.clas.abap",
+   "caller": "zcl_abapgit_object_form->extract_tdlines",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_FORM",
+   "type": "CLAS",
+   "include": "extract_tdlines",
+   "line": 189,
+   "file": "src/objects/zcl_abapgit_object_form.clas.abap",
+   "caller": "zcl_abapgit_object_form->extract_tdlines",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_IATU",
+   "type": "CLAS",
+   "include": "zif_abapgit_object~deserialize",
+   "line": 344,
+   "file": "src/objects/zcl_abapgit_object_iatu.clas.abap",
+   "caller": "zcl_abapgit_object_iatu->zif_abapgit_object~deserialize",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_INTF",
+   "type": "CLAS",
+   "include": "read_json",
+   "line": 326,
+   "file": "src/objects/zcl_abapgit_object_intf.clas.abap",
+   "caller": "zcl_abapgit_object_intf->read_json",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_SOTS",
+   "type": "CLAS",
+   "include": "zif_abapgit_object~deserialize",
+   "line": 281,
+   "file": "src/objects/zcl_abapgit_object_sots.clas.abap",
+   "caller": "zcl_abapgit_object_sots->zif_abapgit_object~deserialize",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_SRVD",
+   "type": "CLAS",
+   "include": "get_object_data",
+   "line": 212,
+   "file": "src/objects/zcl_abapgit_object_srvd.clas.abap",
+   "caller": "zcl_abapgit_object_srvd->get_object_data",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_SRVD",
+   "type": "CLAS",
+   "include": "get_object_data",
+   "line": 214,
+   "file": "src/objects/zcl_abapgit_object_srvd.clas.abap",
+   "caller": "zcl_abapgit_object_srvd->get_object_data",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_WDCA",
+   "type": "CLAS",
+   "include": "zif_abapgit_object~deserialize",
+   "line": 282,
+   "file": "src/objects/zcl_abapgit_object_wdca.clas.abap",
+   "caller": "zcl_abapgit_object_wdca->zif_abapgit_object~deserialize",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_WDCC",
+   "type": "CLAS",
+   "include": "zif_abapgit_object~deserialize",
+   "line": 168,
+   "file": "src/objects/zcl_abapgit_object_wdcc.clas.abap",
+   "caller": "zcl_abapgit_object_wdcc->zif_abapgit_object~deserialize",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_XSLT",
+   "type": "CLAS",
+   "include": "zif_abapgit_object~deserialize",
+   "line": 128,
+   "file": "src/objects/zcl_abapgit_object_xslt.clas.abap",
+   "caller": "zcl_abapgit_object_xslt->zif_abapgit_object~deserialize",
+   "shape": "arrow",
+   "adjudicated": false
+  }
+ ],
+ "ZCL_ABAPGIT_OBJECTS_ACTIVATION=>ADD_ITEM": [
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_COMMON_AFF",
+   "type": "CLAS",
+   "include": "zif_abapgit_object~deserialize",
+   "line": 431,
+   "file": "src/objects/aff/zcl_abapgit_object_common_aff.clas.abap",
+   "caller": "zcl_abapgit_object_common_aff->zif_abapgit_object~deserialize",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OO_BASE",
+   "type": "CLAS",
+   "include": "zif_abapgit_oo_object_fnc~add_to_activation_list",
+   "line": 48,
+   "file": "src/objects/oo/zcl_abapgit_oo_base.clas.abap",
+   "caller": "zcl_abapgit_oo_base->zif_abapgit_oo_object_fnc~add_to_activation_list",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_TABL",
+   "type": "CLAS",
+   "include": "zif_abapgit_object~deserialize",
+   "line": 756,
+   "file": "src/objects/tabl/zcl_abapgit_object_tabl.clas.abap",
+   "caller": "zcl_abapgit_object_tabl->zif_abapgit_object~deserialize",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_BDEF",
+   "type": "CLAS",
+   "include": "zif_abapgit_object~deserialize",
+   "line": 502,
+   "file": "src/objects/zcl_abapgit_object_bdef.clas.abap",
+   "caller": "zcl_abapgit_object_bdef->zif_abapgit_object~deserialize",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_DCLS",
+   "type": "CLAS",
+   "include": "zif_abapgit_object~deserialize",
+   "line": 150,
+   "file": "src/objects/zcl_abapgit_object_dcls.clas.abap",
+   "caller": "zcl_abapgit_object_dcls->zif_abapgit_object~deserialize",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_DDLS",
+   "type": "CLAS",
+   "include": "zif_abapgit_object~deserialize",
+   "line": 427,
+   "file": "src/objects/zcl_abapgit_object_ddls.clas.abap",
+   "caller": "zcl_abapgit_object_ddls->zif_abapgit_object~deserialize",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_DDLX",
+   "type": "CLAS",
+   "include": "zif_abapgit_object~deserialize",
+   "line": 174,
+   "file": "src/objects/zcl_abapgit_object_ddlx.clas.abap",
+   "caller": "zcl_abapgit_object_ddlx->zif_abapgit_object~deserialize",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_DOMA",
+   "type": "CLAS",
+   "include": "zif_abapgit_object~deserialize",
+   "line": 469,
+   "file": "src/objects/zcl_abapgit_object_doma.clas.abap",
+   "caller": "zcl_abapgit_object_doma->zif_abapgit_object~deserialize",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_DTEL",
+   "type": "CLAS",
+   "include": "zif_abapgit_object~deserialize",
+   "line": 305,
+   "file": "src/objects/zcl_abapgit_object_dtel.clas.abap",
+   "caller": "zcl_abapgit_object_dtel->zif_abapgit_object~deserialize",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_ENHO",
+   "type": "CLAS",
+   "include": "zif_abapgit_object~deserialize",
+   "line": 192,
+   "file": "src/objects/zcl_abapgit_object_enho.clas.abap",
+   "caller": "zcl_abapgit_object_enho->zif_abapgit_object~deserialize",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_ENQU",
+   "type": "CLAS",
+   "include": "zif_abapgit_object~deserialize",
+   "line": 103,
+   "file": "src/objects/zcl_abapgit_object_enqu.clas.abap",
+   "caller": "zcl_abapgit_object_enqu->zif_abapgit_object~deserialize",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_JOBD",
+   "type": "CLAS",
+   "include": "zif_abapgit_object~deserialize",
+   "line": 139,
+   "file": "src/objects/zcl_abapgit_object_jobd.clas.abap",
+   "caller": "zcl_abapgit_object_jobd->zif_abapgit_object~deserialize",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_SFBF",
+   "type": "CLAS",
+   "include": "zif_abapgit_object~deserialize",
+   "line": 232,
+   "file": "src/objects/zcl_abapgit_object_sfbf.clas.abap",
+   "caller": "zcl_abapgit_object_sfbf->zif_abapgit_object~deserialize",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_SFBS",
+   "type": "CLAS",
+   "include": "zif_abapgit_object~deserialize",
+   "line": 215,
+   "file": "src/objects/zcl_abapgit_object_sfbs.clas.abap",
+   "caller": "zcl_abapgit_object_sfbs->zif_abapgit_object~deserialize",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_SFPF",
+   "type": "CLAS",
+   "include": "zif_abapgit_object~deserialize",
+   "line": 398,
+   "file": "src/objects/zcl_abapgit_object_sfpf.clas.abap",
+   "caller": "zcl_abapgit_object_sfpf->zif_abapgit_object~deserialize",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_SFPI",
+   "type": "CLAS",
+   "include": "zif_abapgit_object~deserialize",
+   "line": 121,
+   "file": "src/objects/zcl_abapgit_object_sfpi.clas.abap",
+   "caller": "zcl_abapgit_object_sfpi->zif_abapgit_object~deserialize",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_SFSW",
+   "type": "CLAS",
+   "include": "zif_abapgit_object~deserialize",
+   "line": 223,
+   "file": "src/objects/zcl_abapgit_object_sfsw.clas.abap",
+   "caller": "zcl_abapgit_object_sfsw->zif_abapgit_object~deserialize",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_SHLP",
+   "type": "CLAS",
+   "include": "zif_abapgit_object~deserialize",
+   "line": 164,
+   "file": "src/objects/zcl_abapgit_object_shlp.clas.abap",
+   "caller": "zcl_abapgit_object_shlp->zif_abapgit_object~deserialize",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_SRVB",
+   "type": "CLAS",
+   "include": "zif_abapgit_object~deserialize",
+   "line": 503,
+   "file": "src/objects/zcl_abapgit_object_srvb.clas.abap",
+   "caller": "zcl_abapgit_object_srvb->zif_abapgit_object~deserialize",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_SRVD",
+   "type": "CLAS",
+   "include": "zif_abapgit_object~deserialize",
+   "line": 480,
+   "file": "src/objects/zcl_abapgit_object_srvd.clas.abap",
+   "caller": "zcl_abapgit_object_srvd->zif_abapgit_object~deserialize",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_TTYP",
+   "type": "CLAS",
+   "include": "zif_abapgit_object~deserialize",
+   "line": 116,
+   "file": "src/objects/zcl_abapgit_object_ttyp.clas.abap",
+   "caller": "zcl_abapgit_object_ttyp->zif_abapgit_object~deserialize",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_TYPE",
+   "type": "CLAS",
+   "include": "zif_abapgit_object~deserialize",
+   "line": 150,
+   "file": "src/objects/zcl_abapgit_object_type.clas.abap",
+   "caller": "zcl_abapgit_object_type->zif_abapgit_object~deserialize",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_VIEW",
+   "type": "CLAS",
+   "include": "zif_abapgit_object~deserialize",
+   "line": 433,
+   "file": "src/objects/zcl_abapgit_object_view.clas.abap",
+   "caller": "zcl_abapgit_object_view->zif_abapgit_object~deserialize",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_WAPA",
+   "type": "CLAS",
+   "include": "create_new_application",
+   "line": 93,
+   "file": "src/objects/zcl_abapgit_object_wapa.clas.abap",
+   "caller": "zcl_abapgit_object_wapa->create_new_application",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_WEBI",
+   "type": "CLAS",
+   "include": "zif_abapgit_object~deserialize",
+   "line": 432,
+   "file": "src/objects/zcl_abapgit_object_webi.clas.abap",
+   "caller": "zcl_abapgit_object_webi->zif_abapgit_object~deserialize",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_XSLT",
+   "type": "CLAS",
+   "include": "zif_abapgit_object~deserialize",
+   "line": 112,
+   "file": "src/objects/zcl_abapgit_object_xslt.clas.abap",
+   "caller": "zcl_abapgit_object_xslt->zif_abapgit_object~deserialize",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_XSLT",
+   "type": "CLAS",
+   "include": "zif_abapgit_object~deserialize",
+   "line": 183,
+   "file": "src/objects/zcl_abapgit_object_xslt.clas.abap",
+   "caller": "zcl_abapgit_object_xslt->zif_abapgit_object~deserialize",
+   "shape": "static",
+   "adjudicated": false
+  }
+ ],
+ "ZIF_ABAPGIT_SAP_PACKAGE~LIST_SUBPACKAGES": [
+  {
+   "object": "ZCL_ABAPGIT_APACK_READER",
+   "type": "CLAS",
+   "include": "get_manifest_descriptor",
+   "line": 214,
+   "file": "src/apack/zcl_abapgit_apack_reader.clas.abap",
+   "caller": "zcl_abapgit_apack_reader->get_manifest_descriptor",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_TRANSPORT",
+   "type": "CLAS",
+   "include": "collect_all_objects",
+   "line": 159,
+   "file": "src/cts/zcl_abapgit_transport.clas.abap",
+   "caller": "zcl_abapgit_transport->collect_all_objects",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_DATA_DESERIALIZER",
+   "type": "CLAS",
+   "include": "is_table_included_in_repo",
+   "line": 142,
+   "file": "src/data/zcl_abapgit_data_deserializer.clas.abap",
+   "caller": "zcl_abapgit_data_deserializer->is_table_included_in_repo",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_CODE_INSPECTOR",
+   "type": "CLAS",
+   "include": "create_objectset",
+   "line": 203,
+   "file": "src/inspect/zcl_abapgit_code_inspector.clas.abap",
+   "caller": "zcl_abapgit_code_inspector->create_objectset",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_DEPENDENCIES",
+   "type": "CLAS",
+   "include": "resolve_packages",
+   "line": 379,
+   "file": "src/objects/core/zcl_abapgit_dependencies.clas.abap",
+   "caller": "zcl_abapgit_dependencies->resolve_packages",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_FOLDER_LOGIC",
+   "type": "CLAS",
+   "include": "get_parent",
+   "line": 68,
+   "file": "src/objects/core/zcl_abapgit_folder_logic.clas.abap",
+   "caller": "zcl_abapgit_folder_logic->get_parent",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_TADIR",
+   "type": "CLAS",
+   "include": "select_objects",
+   "line": 280,
+   "file": "src/objects/core/zcl_abapgit_tadir.clas.abap",
+   "caller": "zcl_abapgit_tadir->select_objects",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_DEVC",
+   "type": "CLAS",
+   "include": "is_empty",
+   "line": 130,
+   "file": "src/objects/zcl_abapgit_object_devc.clas.abap",
+   "caller": "zcl_abapgit_object_devc->is_empty",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_FILTER_TRAN",
+   "type": "CLAS",
+   "include": "get_all_sub_packages",
+   "line": 157,
+   "file": "src/repo/filter/zcl_abapgit_object_filter_tran.clas.abap",
+   "caller": "zcl_abapgit_object_filter_tran->get_all_sub_packages",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_STATUS_CALC",
+   "type": "CLAS",
+   "include": "process_items",
+   "line": 345,
+   "file": "src/repo/status/zcl_abapgit_status_calc.clas.abap",
+   "caller": "zcl_abapgit_status_calc->process_items",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_REPO_SRV",
+   "type": "CLAS",
+   "include": "validate_package_korrflag",
+   "line": 266,
+   "file": "src/repo/zcl_abapgit_repo_srv.clas.abap",
+   "caller": "zcl_abapgit_repo_srv->validate_package_korrflag",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_REPO_SRV",
+   "type": "CLAS",
+   "include": "validate_sub_super_packages",
+   "line": 297,
+   "file": "src/repo/zcl_abapgit_repo_srv.clas.abap",
+   "caller": "zcl_abapgit_repo_srv->validate_sub_super_packages",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_FLOW_LOGIC",
+   "type": "CLAS",
+   "include": "relevant_transports_via_devc",
+   "line": 969,
+   "file": "src/ui/flow/zcl_abapgit_flow_logic.clas.abap",
+   "caller": "zcl_abapgit_flow_logic->relevant_transports_via_devc",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_FLOW_LOGIC",
+   "type": "CLAS",
+   "include": "try_matching_transports",
+   "line": 1078,
+   "file": "src/ui/flow/zcl_abapgit_flow_logic.clas.abap",
+   "caller": "zcl_abapgit_flow_logic->try_matching_transports",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_CHG_PCKG",
+   "type": "CLAS",
+   "include": "check_support",
+   "line": 209,
+   "file": "src/ui/pages/zcl_abapgit_gui_page_chg_pckg.clas.abap",
+   "caller": "zcl_abapgit_gui_page_chg_pckg->check_support",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_CHG_PCKG",
+   "type": "CLAS",
+   "include": "get_package_mapping",
+   "line": 340,
+   "file": "src/ui/pages/zcl_abapgit_gui_page_chg_pckg.clas.abap",
+   "caller": "zcl_abapgit_gui_page_chg_pckg->get_package_mapping",
+   "shape": "arrow",
+   "adjudicated": false
+  }
+ ],
+ "ZCL_ABAPGIT_I18N_PARAMS=>IS_LXE_APPLICABLE": [
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_TABL",
+   "type": "CLAS",
+   "include": "zif_abapgit_object~deserialize",
+   "line": 760,
+   "file": "src/objects/tabl/zcl_abapgit_object_tabl.clas.abap",
+   "caller": "zcl_abapgit_object_tabl->zif_abapgit_object~deserialize",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_TABL",
+   "type": "CLAS",
+   "include": "zif_abapgit_object~serialize",
+   "line": 997,
+   "file": "src/objects/tabl/zcl_abapgit_object_tabl.clas.abap",
+   "caller": "zcl_abapgit_object_tabl->zif_abapgit_object~serialize",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_CLAS",
+   "type": "CLAS",
+   "include": "serialize_xml",
+   "line": 801,
+   "file": "src/objects/zcl_abapgit_object_clas.clas.abap",
+   "caller": "zcl_abapgit_object_clas->serialize_xml",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_CLAS",
+   "type": "CLAS",
+   "include": "zif_abapgit_object~deserialize",
+   "line": 936,
+   "file": "src/objects/zcl_abapgit_object_clas.clas.abap",
+   "caller": "zcl_abapgit_object_clas->zif_abapgit_object~deserialize",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_DOMA",
+   "type": "CLAS",
+   "include": "zif_abapgit_object~deserialize",
+   "line": 458,
+   "file": "src/objects/zcl_abapgit_object_doma.clas.abap",
+   "caller": "zcl_abapgit_object_doma->zif_abapgit_object~deserialize",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_DOMA",
+   "type": "CLAS",
+   "include": "zif_abapgit_object~serialize",
+   "line": 625,
+   "file": "src/objects/zcl_abapgit_object_doma.clas.abap",
+   "caller": "zcl_abapgit_object_doma->zif_abapgit_object~serialize",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_DTEL",
+   "type": "CLAS",
+   "include": "zif_abapgit_object~deserialize",
+   "line": 291,
+   "file": "src/objects/zcl_abapgit_object_dtel.clas.abap",
+   "caller": "zcl_abapgit_object_dtel->zif_abapgit_object~deserialize",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_DTEL",
+   "type": "CLAS",
+   "include": "zif_abapgit_object~serialize",
+   "line": 477,
+   "file": "src/objects/zcl_abapgit_object_dtel.clas.abap",
+   "caller": "zcl_abapgit_object_dtel->zif_abapgit_object~serialize",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_FUGR",
+   "type": "CLAS",
+   "include": "zif_abapgit_object~deserialize",
+   "line": 1326,
+   "file": "src/objects/zcl_abapgit_object_fugr.clas.abap",
+   "caller": "zcl_abapgit_object_fugr->zif_abapgit_object~deserialize",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_FUGR",
+   "type": "CLAS",
+   "include": "zif_abapgit_object~serialize",
+   "line": 1504,
+   "file": "src/objects/zcl_abapgit_object_fugr.clas.abap",
+   "caller": "zcl_abapgit_object_fugr->zif_abapgit_object~serialize",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_MSAG",
+   "type": "CLAS",
+   "include": "zif_abapgit_object~deserialize",
+   "line": 423,
+   "file": "src/objects/zcl_abapgit_object_msag.clas.abap",
+   "caller": "zcl_abapgit_object_msag->zif_abapgit_object~deserialize",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_MSAG",
+   "type": "CLAS",
+   "include": "zif_abapgit_object~serialize",
+   "line": 530,
+   "file": "src/objects/zcl_abapgit_object_msag.clas.abap",
+   "caller": "zcl_abapgit_object_msag->zif_abapgit_object~serialize",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_PROG",
+   "type": "CLAS",
+   "include": "zif_abapgit_object~deserialize",
+   "line": 262,
+   "file": "src/objects/zcl_abapgit_object_prog.clas.abap",
+   "caller": "zcl_abapgit_object_prog->zif_abapgit_object~deserialize",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_PROG",
+   "type": "CLAS",
+   "include": "zif_abapgit_object~serialize",
+   "line": 356,
+   "file": "src/objects/zcl_abapgit_object_prog.clas.abap",
+   "caller": "zcl_abapgit_object_prog->zif_abapgit_object~serialize",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_SHI3",
+   "type": "CLAS",
+   "include": "zif_abapgit_object~serialize",
+   "line": 455,
+   "file": "src/objects/zcl_abapgit_object_shi3.clas.abap",
+   "caller": "zcl_abapgit_object_shi3->zif_abapgit_object~serialize",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_TRAN",
+   "type": "CLAS",
+   "include": "zif_abapgit_object~deserialize",
+   "line": 810,
+   "file": "src/objects/zcl_abapgit_object_tran.clas.abap",
+   "caller": "zcl_abapgit_object_tran->zif_abapgit_object~deserialize",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_TRAN",
+   "type": "CLAS",
+   "include": "zif_abapgit_object~serialize",
+   "line": 979,
+   "file": "src/objects/zcl_abapgit_object_tran.clas.abap",
+   "caller": "zcl_abapgit_object_tran->zif_abapgit_object~serialize",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_VIEW",
+   "type": "CLAS",
+   "include": "zif_abapgit_object~deserialize",
+   "line": 424,
+   "file": "src/objects/zcl_abapgit_object_view.clas.abap",
+   "caller": "zcl_abapgit_object_view->zif_abapgit_object~deserialize",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_VIEW",
+   "type": "CLAS",
+   "include": "zif_abapgit_object~serialize",
+   "line": 609,
+   "file": "src/objects/zcl_abapgit_object_view.clas.abap",
+   "caller": "zcl_abapgit_object_view->zif_abapgit_object~serialize",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECTS",
+   "type": "CLAS",
+   "include": "deserialize_steps",
+   "line": 959,
+   "file": "src/objects/zcl_abapgit_objects.clas.abap",
+   "caller": "zcl_abapgit_objects->deserialize_steps",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECTS",
+   "type": "CLAS",
+   "include": "serialize",
+   "line": 1318,
+   "file": "src/objects/zcl_abapgit_objects.clas.abap",
+   "caller": "zcl_abapgit_objects->serialize",
+   "shape": "arrow",
+   "adjudicated": false
+  }
+ ],
+ "ZIF_ABAPGIT_REPO~GET_FILES_LOCAL": [
+  {
+   "object": "ZCL_ABAPGIT_OBJECTS_CHECK",
+   "type": "CLAS",
+   "include": "warning_data_loss_find",
+   "line": 376,
+   "file": "src/objects/core/zcl_abapgit_objects_check.clas.abap",
+   "caller": "zcl_abapgit_objects_check->warning_data_loss_find",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_STAGE_LOGIC",
+   "type": "CLAS",
+   "include": "zif_abapgit_stage_logic~get",
+   "line": 121,
+   "file": "src/repo/stage/zcl_abapgit_stage_logic.clas.abap",
+   "caller": "zcl_abapgit_stage_logic->zif_abapgit_stage_logic~get",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_REPO",
+   "type": "CLAS",
+   "include": "zif_abapgit_repo~refresh_local_objects",
+   "line": 849,
+   "file": "src/repo/zcl_abapgit_repo.clas.abap",
+   "caller": "zcl_abapgit_repo->zif_abapgit_repo~refresh_local_objects",
+   "shape": "bare",
+   "adjudicated": true,
+   "alias": "get_files_local"
+  },
+  {
+   "object": "ZCL_ABAPGIT_REPO_CHECKSUMS",
+   "type": "CLAS",
+   "include": "zif_abapgit_repo_checksums~rebuild",
+   "line": 246,
+   "file": "src/repo/zcl_abapgit_repo_checksums.clas.abap",
+   "caller": "zcl_abapgit_repo_checksums->zif_abapgit_repo_checksums~rebuild",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_REPO_STATUS",
+   "type": "CLAS",
+   "include": "calculate",
+   "line": 36,
+   "file": "src/repo/zcl_abapgit_repo_status.clas.abap",
+   "caller": "zcl_abapgit_repo_status->calculate",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_DIFF_BASE",
+   "type": "CLAS",
+   "include": "get_files_and_status",
+   "line": 658,
+   "file": "src/ui/pages/diff/zcl_abapgit_gui_page_diff_base.clas.abap",
+   "caller": "zcl_abapgit_gui_page_diff_base->get_files_and_status",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_SETT_INFO",
+   "type": "CLAS",
+   "include": "read_stats_files",
+   "line": 403,
+   "file": "src/ui/pages/sett/zcl_abapgit_gui_page_sett_info.clas.abap",
+   "caller": "zcl_abapgit_gui_page_sett_info->read_stats_files",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_SETT_LOCL",
+   "type": "CLAS",
+   "include": "is_customizing_included",
+   "line": 341,
+   "file": "src/ui/pages/sett/zcl_abapgit_gui_page_sett_locl.clas.abap",
+   "caller": "zcl_abapgit_gui_page_sett_locl->is_customizing_included",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_SETT_REPO",
+   "type": "CLAS",
+   "include": "validate_version_constant",
+   "line": 550,
+   "file": "src/ui/pages/sett/zcl_abapgit_gui_page_sett_repo.clas.abap",
+   "caller": "zcl_abapgit_gui_page_sett_repo->validate_version_constant",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_CHG_PCKG",
+   "type": "CLAS",
+   "include": "check_support",
+   "line": 211,
+   "file": "src/ui/pages/zcl_abapgit_gui_page_chg_pckg.clas.abap",
+   "caller": "zcl_abapgit_gui_page_chg_pckg->check_support",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_ROUTER",
+   "type": "CLAS",
+   "include": "zip_services",
+   "line": 930,
+   "file": "src/ui/routing/zcl_abapgit_gui_router.clas.abap",
+   "caller": "zcl_abapgit_gui_router->zip_services",
+   "shape": "arrow",
+   "adjudicated": false
+  }
+ ],
+ "ZCL_ABAPGIT_GUI_CHUNK_LIB=>RENDER_REPO_TOP": [
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_FLOWCONS",
+   "type": "CLAS",
+   "include": "zif_abapgit_gui_renderable~render",
+   "line": 270,
+   "file": "src/ui/flow/zcl_abapgit_gui_page_flowcons.clas.abap",
+   "caller": "zcl_abapgit_gui_page_flowcons->zif_abapgit_gui_renderable~render",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_CODE_INSP",
+   "type": "CLAS",
+   "include": "zif_abapgit_gui_renderable~render",
+   "line": 343,
+   "file": "src/ui/pages/codi/zcl_abapgit_gui_page_code_insp.clas.abap",
+   "caller": "zcl_abapgit_gui_page_code_insp->zif_abapgit_gui_renderable~render",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_RUNIT",
+   "type": "CLAS",
+   "include": "zif_abapgit_gui_renderable~render",
+   "line": 297,
+   "file": "src/ui/pages/codi/zcl_abapgit_gui_page_runit.clas.abap",
+   "caller": "zcl_abapgit_gui_page_runit->zif_abapgit_gui_renderable~render",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_SYNTAX",
+   "type": "CLAS",
+   "include": "zif_abapgit_gui_renderable~render",
+   "line": 138,
+   "file": "src/ui/pages/codi/zcl_abapgit_gui_page_syntax.clas.abap",
+   "caller": "zcl_abapgit_gui_page_syntax->zif_abapgit_gui_renderable~render",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_DIFF_BASE",
+   "type": "CLAS",
+   "include": "zif_abapgit_gui_renderable~render",
+   "line": 1461,
+   "file": "src/ui/pages/diff/zcl_abapgit_gui_page_diff_base.clas.abap",
+   "caller": "zcl_abapgit_gui_page_diff_base->zif_abapgit_gui_renderable~render",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_SETT_BCKG",
+   "type": "CLAS",
+   "include": "zif_abapgit_gui_renderable~render",
+   "line": 332,
+   "file": "src/ui/pages/sett/zcl_abapgit_gui_page_sett_bckg.clas.abap",
+   "caller": "zcl_abapgit_gui_page_sett_bckg->zif_abapgit_gui_renderable~render",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_SETT_INFO",
+   "type": "CLAS",
+   "include": "zif_abapgit_gui_renderable~render",
+   "line": 592,
+   "file": "src/ui/pages/sett/zcl_abapgit_gui_page_sett_info.clas.abap",
+   "caller": "zcl_abapgit_gui_page_sett_info->zif_abapgit_gui_renderable~render",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_SETT_LOCL",
+   "type": "CLAS",
+   "include": "zif_abapgit_gui_renderable~render",
+   "line": 575,
+   "file": "src/ui/pages/sett/zcl_abapgit_gui_page_sett_locl.clas.abap",
+   "caller": "zcl_abapgit_gui_page_sett_locl->zif_abapgit_gui_renderable~render",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_SETT_REMO",
+   "type": "CLAS",
+   "include": "render_content",
+   "line": 655,
+   "file": "src/ui/pages/sett/zcl_abapgit_gui_page_sett_remo.clas.abap",
+   "caller": "zcl_abapgit_gui_page_sett_remo->render_content",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_SETT_REPO",
+   "type": "CLAS",
+   "include": "zif_abapgit_gui_renderable~render",
+   "line": 598,
+   "file": "src/ui/pages/sett/zcl_abapgit_gui_page_sett_repo.clas.abap",
+   "caller": "zcl_abapgit_gui_page_sett_repo->zif_abapgit_gui_renderable~render",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_COMMIT",
+   "type": "CLAS",
+   "include": "zif_abapgit_gui_renderable~render",
+   "line": 574,
+   "file": "src/ui/pages/zcl_abapgit_gui_page_commit.clas.abap",
+   "caller": "zcl_abapgit_gui_page_commit->zif_abapgit_gui_renderable~render",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_MERGE",
+   "type": "CLAS",
+   "include": "zif_abapgit_gui_renderable~render",
+   "line": 191,
+   "file": "src/ui/pages/zcl_abapgit_gui_page_merge.clas.abap",
+   "caller": "zcl_abapgit_gui_page_merge->zif_abapgit_gui_renderable~render",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_MERGE_SEL",
+   "type": "CLAS",
+   "include": "zif_abapgit_gui_renderable~render",
+   "line": 185,
+   "file": "src/ui/pages/zcl_abapgit_gui_page_merge_sel.clas.abap",
+   "caller": "zcl_abapgit_gui_page_merge_sel->zif_abapgit_gui_renderable~render",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_REPO_VIEW",
+   "type": "CLAS",
+   "include": "zif_abapgit_gui_renderable~render",
+   "line": 1314,
+   "file": "src/ui/pages/zcl_abapgit_gui_page_repo_view.clas.abap",
+   "caller": "zcl_abapgit_gui_page_repo_view->zif_abapgit_gui_renderable~render",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_REPO_VIEW",
+   "type": "CLAS",
+   "include": "zif_abapgit_gui_renderable~render",
+   "line": 1339,
+   "file": "src/ui/pages/zcl_abapgit_gui_page_repo_view.clas.abap",
+   "caller": "zcl_abapgit_gui_page_repo_view->zif_abapgit_gui_renderable~render",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_STAGE",
+   "type": "CLAS",
+   "include": "zif_abapgit_gui_renderable~render",
+   "line": 873,
+   "file": "src/ui/pages/zcl_abapgit_gui_page_stage.clas.abap",
+   "caller": "zcl_abapgit_gui_page_stage->zif_abapgit_gui_renderable~render",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_TAGS",
+   "type": "CLAS",
+   "include": "zif_abapgit_gui_renderable~render",
+   "line": 395,
+   "file": "src/ui/pages/zcl_abapgit_gui_page_tags.clas.abap",
+   "caller": "zcl_abapgit_gui_page_tags->zif_abapgit_gui_renderable~render",
+   "shape": "static",
+   "adjudicated": false
+  }
+ ],
+ "ZCL_ABAPGIT_HTML_FORM=>TEXTAREA": [
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_SETT_GLOB",
+   "type": "CLAS",
+   "include": "get_form_schema",
+   "line": 138,
+   "file": "src/ui/pages/sett/zcl_abapgit_gui_page_sett_glob.clas.abap",
+   "caller": "zcl_abapgit_gui_page_sett_glob->get_form_schema",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_SETT_LOCL",
+   "type": "CLAS",
+   "include": "get_form_schema",
+   "line": 288,
+   "file": "src/ui/pages/sett/zcl_abapgit_gui_page_sett_locl.clas.abap",
+   "caller": "zcl_abapgit_gui_page_sett_locl->get_form_schema",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_SETT_PERS",
+   "type": "CLAS",
+   "include": "get_form_schema",
+   "line": 162,
+   "file": "src/ui/pages/sett/zcl_abapgit_gui_page_sett_pers.clas.abap",
+   "caller": "zcl_abapgit_gui_page_sett_pers->get_form_schema",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_SETT_REPO",
+   "type": "CLAS",
+   "include": "get_form_schema",
+   "line": 166,
+   "file": "src/ui/pages/sett/zcl_abapgit_gui_page_sett_repo.clas.abap",
+   "caller": "zcl_abapgit_gui_page_sett_repo->get_form_schema",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_SETT_REPO",
+   "type": "CLAS",
+   "include": "get_form_schema",
+   "line": 195,
+   "file": "src/ui/pages/sett/zcl_abapgit_gui_page_sett_repo.clas.abap",
+   "caller": "zcl_abapgit_gui_page_sett_repo->get_form_schema",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_COMMIT",
+   "type": "CLAS",
+   "include": "get_form_schema",
+   "line": 320,
+   "file": "src/ui/pages/zcl_abapgit_gui_page_commit.clas.abap",
+   "caller": "zcl_abapgit_gui_page_commit->get_form_schema",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_DATA",
+   "type": "CLAS",
+   "include": "get_form_schema",
+   "line": 339,
+   "file": "src/ui/pages/zcl_abapgit_gui_page_data.clas.abap",
+   "caller": "zcl_abapgit_gui_page_data->get_form_schema",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_DATA",
+   "type": "CLAS",
+   "include": "render_for_existing_config",
+   "line": 391,
+   "file": "src/ui/pages/zcl_abapgit_gui_page_data.clas.abap",
+   "caller": "zcl_abapgit_gui_page_data->render_for_existing_config",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_EX_OBJECT",
+   "type": "CLAS",
+   "include": "get_form_schema",
+   "line": 130,
+   "file": "src/ui/pages/zcl_abapgit_gui_page_ex_object.clas.abap",
+   "caller": "zcl_abapgit_gui_page_ex_object->get_form_schema",
+   "shape": "arrow",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_TAGS",
+   "type": "CLAS",
+   "include": "get_form_schema",
+   "line": 198,
+   "file": "src/ui/pages/zcl_abapgit_gui_page_tags.clas.abap",
+   "caller": "zcl_abapgit_gui_page_tags->get_form_schema",
+   "shape": "arrow",
+   "adjudicated": false
+  }
+ ],
+ "ZCL_ABAPGIT_CONVERT=>LANGUAGE_SAP1_TO_SAP2": [
+  {
+   "object": "ZCL_ABAPGIT_FILENAME_LOGIC",
+   "type": "CLAS",
+   "include": "get_lang_and_ext",
+   "line": 208,
+   "file": "src/objects/core/zcl_abapgit_filename_logic.clas.abap",
+   "caller": "zcl_abapgit_filename_logic->get_lang_and_ext",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_I18N_PARAMS",
+   "type": "CLAS",
+   "include": "trim_saplang_keyed_table",
+   "line": 220,
+   "file": "src/objects/texts/zcl_abapgit_i18n_params.clas.abap",
+   "caller": "zcl_abapgit_i18n_params->trim_saplang_keyed_table",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_I18N_PARAMS",
+   "type": "CLAS",
+   "include": "trim_saplang_list",
+   "line": 256,
+   "file": "src/objects/texts/zcl_abapgit_i18n_params.clas.abap",
+   "caller": "zcl_abapgit_i18n_params->trim_saplang_list",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_LXE_TEXTS",
+   "type": "CLAS",
+   "include": "langu_to_laiso_safe",
+   "line": 656,
+   "file": "src/objects/texts/zcl_abapgit_lxe_texts.clas.abap",
+   "caller": "zcl_abapgit_lxe_texts->langu_to_laiso_safe",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_OBJECT_INTF",
+   "type": "CLAS",
+   "include": "extract_languages_for_transl",
+   "line": 314,
+   "file": "src/objects/zcl_abapgit_object_intf.clas.abap",
+   "caller": "zcl_abapgit_object_intf->extract_languages_for_transl",
+   "shape": "static",
+   "adjudicated": false
+  },
+  {
+   "object": "ZCL_ABAPGIT_CONVERT",
+   "type": "CLAS",
+   "include": "conversion_exit_isola_output",
+   "line": 161,
+   "file": "src/utils/zcl_abapgit_convert.clas.abap",
+   "caller": "zcl_abapgit_convert->conversion_exit_isola_output",
+   "shape": "bare",
+   "adjudicated": false
+  }
+ ],
+ "ZCL_ABAPGIT_SETTINGS=>GET_PROXY_URL": [
+  {
+   "object": "ZCL_ABAPGIT_PROXY_CONFIG",
+   "type": "CLAS",
+   "include": "get_proxy_url",
+   "line": 102,
+   "file": "src/http/zcl_abapgit_proxy_config.clas.abap",
+   "caller": "zcl_abapgit_proxy_config->get_proxy_url",
+   "shape": "arrow",
+   "adjudicated": true
+  },
+  {
+   "object": "ZCL_ABAPGIT_GUI_PAGE_SETT_GLOB",
+   "type": "CLAS",
+   "include": "read_settings",
+   "line": 218,
+   "file": "src/ui/pages/sett/zcl_abapgit_gui_page_sett_glob.clas.abap",
+   "caller": "zcl_abapgit_gui_page_sett_glob->read_settings",
+   "shape": "arrow",
+   "adjudicated": true
+  }
+ ]
+}
