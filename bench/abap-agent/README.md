@@ -487,6 +487,67 @@ computes the verdict from exactly this rule.
 is ambiguous, not everywhere: B1, B2 and B3 are where an ordinary agent task sits, and Gate 2 showed
 no gain there. A fail on B1A would be the stronger result, since it is the class built to favour sem.
 
+## Gate 2b, 2026-10-06
+
+Checkpoint `gate2b`, `--brief sem-first`, 3 repetitions, `claude-sonnet-5-5` at effort high through
+Claude Code 2.1.291, build `15ad2dd5224b` and later on this branch (the `sem_find` fixes of 40acad8
+are in it; the binary still reports `sem 0.27.0`). 187 of the 192 planned runs, **13.21 USD** by
+Claude Code's figure against the 15 USD cap. The run was interrupted once: the session's container
+restarted after the first 10 B1A rows (b1a_01 complete, b1a_02 two repetitions per arm), and the
+remainder was run from `--task` lists, so b1a_02's third repetition carries `rep` 0 again. All rows
+are kept. B3 ran under a per-class cap of 2 USD and reached it on the last grep run (`b3_04`, rep 2,
+`error` set, no score), so B3 has 10 grep and 9 sem runs. Per-run means, except cost (summed);
+deltas are the sem arm against the grep arm (`summarize.py --checkpoint gate2b --brief sem-first`):
+
+| Class | Arm | Runs | Success | Precision | Tokens read | Output tokens | Cost (USD) | Wall time (s) | Tool calls | sem calls |
+|---|---|---|---|---|---|---|---|---|---|---|
+| B1A | grep | 36 | 1.000 | 1.000 | 55,601 | 2,500 | 2.71 | 22.9 | 5.1 | - |
+| B1A | sem (sem-first) | 36 | 1.000 | 1.000 | 75,095 (+35%) | 2,225 (-11%) | 2.80 (+3%) | 25.1 (+10%) | 4.5 (-10%) | 1.0 |
+| B2 | grep | 18 | 18/18 pass | - | 66,749 | 2,204 | 1.41 | 59.4 | 6.9 | - |
+| B2 | sem (sem-first) | 18 | 18/18 pass | - | 100,819 (+51%) | 2,350 (+7%) | 1.70 (+20%) | 65.7 (+11%) | 7.3 (+5%) | 1.0 |
+| B1 | grep | 30 | 1.000 | 1.000 | 29,147 | 2,332 | 1.44 | 18.5 | 2.8 | - |
+| B1 | sem (sem-first) | 30 | 0.971 | 0.971 | 31,684 (+9%) | 1,621 (-30%) | 1.14 (-21%) | 16.9 (-9%) | 1.8 (-36%) | 1.0 |
+| B3 | grep | 10 | 0.900 | 0.900 | 80,306 | 3,522 | 1.10 | 34.5 | 5.4 | - |
+| B3 | sem (sem-first) | 9 | 1.000 | 1.000 | 94,220 (+17%) | 3,627 (+3%) | 0.92 (-17%) | 37.0 (+7%) | 6.2 (+15%) | 2.78 |
+
+**Against the pre-registered rule:**
+
+- B1A: success 1.000 against 1.000 (met), tokens read 135% of the grep arm's (needs 85% or less). Not met.
+- B2: 18/18 passes in both arms (met), wall time 111% of the grep arm's (needs 70% or less), tokens
+  read 151% (needs 115% or less). Not met.
+
+**Verdict: drop.** There is no third re-run.
+
+**Where the tokens go.** The gap is structural, not a wrong answer. The first API call of every sem
+run carries the schemas of the eight `sem mcp` tools: 10.5k to 11.3k tokens of context against 6.0k
+to 6.8k in the grep arm, the same 4.5k on every class. Claude Code re-reads that context on every
+turn, so over the 5 to 6 turns of a B1A or B2 run it alone is some 25k tokens, which is the whole
+B1A gap (19.5k) with the sem arm's fewer turns taken off. `sem_find` itself was cheap: one call per
+run, about 4.8k characters (1.2k tokens) per answer. To break even the sem arm would have to finish
+in 40% fewer turns than grep, and grep needs six.
+
+**What `sem_find` did.** Every callers answer on B1A said INCOMPLETE (36 of 36: on names declared in
+several classes the resolver reports the untyped `->` calls it did not bind, which is honest), so the
+briefing sent the agent back to Grep for the possible callers it named, and the sem arm still made
+1.8 Grep and 1.5 Bash calls per run. The "matches N definitions" refusals of Gate 2 are gone. On B1
+the sem arm needed 1.8 tool calls against 2.8 and read 30% fewer output tokens, and cost 21% less,
+the one class where it is cheaper; its 0.971 is one run (`b1_05`, rep 1) that named the callers as
+`class->deserialize` instead of `class->zif_abapgit_object~deserialize`, with every file and line
+right (`line_precision` 1.0). On B3 the sem arm scored 1.000 against 0.900 and cost 17% less, the
+same direction as Gate 2; the rule does not decide on B3.
+
+**What grep did.** Sonnet with Grep, Read and Bash scored 1.000 on all twelve B1A targets, where only
+32% of the call-shaped grep hits are real calls: it read the receiver declarations itself in two or
+three extra calls. The premise of B1A, that a text-search agent would get ambiguous names wrong, did
+not hold for this model.
+
+**Reading.** The resolver is right (story 2.7: 100% precision, 94% recall; B1A: no miss in 36 runs
+where `sem_find` was used), and on review (B3) sem is ahead both times it was measured. But a static
+index behind an eight-tool MCP server costs more context per turn than it saves on a single-file
+question, and grep on this model is not wrong often enough on ABAP to pay for it. A slimmer server
+(one tool, a short description) would remove most of the per-turn cost; that is the one lever this
+run identifies, and under the rule it is for the owner to decide whether it is worth a run of its own.
+
 ## Known issues
 
 - **abapGit's libraries are pinned here, not by abapGit.** `abap_transpile` clones the libraries named in `test/abap_transpile.json` (`open-abap-core`, `open-abap-gui`, `open-abap-seo`, `express-icf-shim`, `abapGit-web-classic`) from their default branches on every build. On 2026-10-05 `open-abap-gui` changed (#188 to #195) and `npm run unit` started failing before any test ran (`Error: Void type: DISVARIANT` in `cl_alv_variant`), which made B2 unscorable. `abapgit-transpile-libs.json` now maps each library to its repository and its last commit before the pinned abapGit commit (2026-10-04T17:55Z). The harness clones each at that commit into `<work-dir>/libs/<name>` and rewrites `libs[]` in each checkout's `test/abap_transpile.json` from `url` to `folder`. The transpiler resolves `folder` as `path.join(cwd, folder)`, so an absolute path does not work; the harness writes it relative to the checkout. The libraries sit outside every checkout so agents' `grep` and sem's index never see them. The harness fails if the config names a library the pin file lacks, or the reverse. Re-pin on purpose only, and say so in the commit.
