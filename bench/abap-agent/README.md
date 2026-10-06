@@ -555,6 +555,97 @@ question, and grep on this model is not wrong often enough on ABAP to pay for it
 (one tool, a short description) would remove most of the per-turn cost; that is the one lever this
 run identifies, and under the rule it is for the owner to decide whether it is worth a run of its own.
 
+## Gate 2c, slim server (reporting only)
+
+Gate 2b put the sem arm's extra tokens on the schemas of the eight `sem mcp` tools, re-read on
+every turn. Gate 2c asks whether a server that lists `sem_find` alone closes the B1A gap. It is a
+reporting experiment, not a re-run of the adoption rule: Gate 2b's verdict, drop, stands whatever
+this shows, and there is still no third re-run.
+
+`sem mcp` now reads `SEM_MCP_TOOLS` (comma-separated tool names) and lists only those; the others
+stay callable by name, and no description changed. The harness passes it with `--mcp-tools`. The
+briefing is `sem-first` with the sentences on `sem_impact` and `sem_certify` taken out (`--brief
+sem-find-only`, see "Briefing"), since the run does not list them. The grep arm was re-run the same
+day, so both arms are measured under the same conditions.
+
+| Setting | Value |
+|---|---|
+| Checkpoint | `gate2c` |
+| Sem arm | `--brief sem-find-only --mcp-tools sem_find` |
+| Repetitions | 3 per task |
+| Classes | B1A |
+| Model, effort | `claude-sonnet-5-5`, high, Claude Code 2.1.291 |
+| Build | `abe1d86e5c0b` (`sem 0.27.0`) |
+| Cap | 6 USD |
+
+```sh
+python3 bench/abap-agent/run.py --checkpoint gate2c --brief sem-find-only --mcp-tools sem_find --class B1A --reps 3 --cap-usd 6
+python3 bench/abap-agent/summarize.py --checkpoint gate2c --brief sem-find-only
+```
+
+The run went in seven invocations of that command, one or two `--task` each, so no foreground call
+outlived its timeout; each got the rest of the 6 USD as `--cap-usd`. The plan's order and `rep`
+numbers are the same as one invocation's.
+
+**The listing.** `tools/list` from the release binary over stdio, on the pinned abapGit checkout,
+as compact JSON:
+
+| `SEM_MCP_TOOLS` | Tools | Bytes | About tokens (bytes / 4) |
+|---|---|---|---|
+| unset | 8 | 9,876 | 2,469 |
+| `sem_find` | 1 | 2,837 | 709 |
+
+`sem_find` is the largest tool: 2,835 bytes of JSON, most of it its parameter schema, and a
+description of 570 characters, well under the 1,500 at which it would have been worth shortening.
+The server instructions (1,003 characters) are sent in both cases and still name all eight tools.
+
+**Results.** 72 of 72 planned runs, **5.30 USD** by Claude Code's figure. No run hit an error, the
+turn bound or the timeout, and the sem server was `connected` and listed `sem_find` alone in every
+sem run. Per-run means, except cost (summed); deltas are the sem arm against the grep arm
+(`summarize.py --checkpoint gate2c --brief sem-find-only`):
+
+| Class | Arm | Runs | Success | Precision | Tokens read | Output tokens | Cost (USD) | Wall time (s) | Tool calls | sem calls |
+|---|---|---|---|---|---|---|---|---|---|---|
+| B1A | grep | 36 | 1.000 | 1.000 | 53,192 | 2,495 | 2.67 | 22.9 | 5.0 | - |
+| B1A | sem (sem-find-only) | 36 | 1.000 | 1.000 | 63,054 (+19%) | 2,162 (-13%) | 2.63 (-2%) | 26.2 (+14%) | 4.8 (-4%) | 1.03 |
+| B1A | Gate 2b grep | 36 | 1.000 | 1.000 | 55,601 | 2,500 | 2.71 | 22.9 | 5.1 | - |
+| B1A | Gate 2b sem (sem-first) | 36 | 1.000 | 1.000 | 75,095 (+35%) | 2,225 (-11%) | 2.80 (+3%) | 25.1 (+10%) | 4.5 (-10%) | 1.0 |
+
+**First-call context** (the first assistant message's `cache_creation + cache_read + input` tokens,
+mean over the 36 runs of each arm, from the transcripts):
+
+| Arm | Gate 2c | Gate 2b |
+|---|---|---|
+| grep | 6,253 | 6,250 |
+| sem | 7,868 | 10,741 |
+| sem minus grep | 1,615 | 4,491 |
+
+The slim server takes 2,873 tokens off every request of the sem arm, 64% of its per-request overhead. What is left,
+1.6k, is the one schema, the server instructions and the briefing paragraph (615 characters), at
+the same ratio of tokens to bytes as the full listing showed in Gate 2b.
+
+**What `sem_find` did.** It was called in every sem run, 37 times in 36 runs (on `b1a_08` rep 2 a
+second time with `limit: 200`), and never returned an error. All 37 answers said INCOMPLETE, as in
+Gate 2b, at about 4.9k characters each, so the briefing sent the agent to Grep for the possible
+callers: the sem arm made 2.2 Grep and 1.3 Bash calls per run, against 2.5 and 2.3 in the grep arm
+(Gate 2b's sem arm: 1.8 and 1.5). 30 of 36 final answers mention `sem_find`. Turns per run: 5.8 sem,
+6.0 grep.
+
+**Against Gate 2b's B1A criterion**, for reference only: success 1.000 against 1.000, tokens read
+119% of the grep arm's (needs 85% or less). Not met. **The adoption verdict is unchanged: drop.**
+
+**Reading.** The slim server does what Gate 2b predicted for the fixed cost: the sem arm's first
+request falls from 10.7k to 7.9k tokens, and its B1A tokens read from +35% to +19% over grep, at
+the same success, with cost now level with grep (-2%). It does not close the gap. The remaining
+1.6k per request, over 5.8 turns, is 9.3k of the 9.9k difference by itself; `sem_find`'s answer
+(1.2k tokens, in the context of every later turn) and the text-search output it saves roughly
+cancel (inferred from the totals, not measured per turn). The turn count did not move:
+with every answer INCOMPLETE on these targets, the agent still checks the possible callers with
+Grep and Bash, so `sem_find` replaces about one text search, not the read-the-receiver loop that
+makes grep exact here. To reach the 85% Gate 2b asked for, the sem arm would need fewer turns than
+grep, which on B1A needs an answer the agent can take without checking, a complete verdict, more
+than a smaller listing.
+
 ## Known issues
 
 - **abapGit's libraries are pinned here, not by abapGit.** `abap_transpile` clones the libraries named in `test/abap_transpile.json` (`open-abap-core`, `open-abap-gui`, `open-abap-seo`, `express-icf-shim`, `abapGit-web-classic`) from their default branches on every build. On 2026-10-05 `open-abap-gui` changed (#188 to #195) and `npm run unit` started failing before any test ran (`Error: Void type: DISVARIANT` in `cl_alv_variant`), which made B2 unscorable. `abapgit-transpile-libs.json` now maps each library to its repository and its last commit before the pinned abapGit commit (2026-10-04T17:55Z). The harness clones each at that commit into `<work-dir>/libs/<name>` and rewrites `libs[]` in each checkout's `test/abap_transpile.json` from `url` to `folder`. The transpiler resolves `folder` as `path.join(cwd, folder)`, so an absolute path does not work; the harness writes it relative to the checkout. The libraries sit outside every checkout so agents' `grep` and sem's index never see them. The harness fails if the config names a library the pin file lacks, or the reverse. Re-pin on purpose only, and say so in the commit.
