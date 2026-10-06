@@ -52,6 +52,9 @@ pub enum TypeExpr {
     Fn(Vec<TypeExpr>, Option<Box<TypeExpr>>),
     /// One of several types: `A | B`, `Union[A, B]`.
     Union(Vec<TypeExpr>),
+    /// A type written down that names nothing to bind a call to (ABAP's
+    /// generic `REF TO object`), and why.
+    Opaque(&'static str),
     Unknown,
 }
 
@@ -64,7 +67,7 @@ impl TypeExpr {
                 args.iter().any(TypeExpr::has_hole)
             }
             TypeExpr::Ref(t) | TypeExpr::Slice(t) => t.has_hole(),
-            TypeExpr::Traits(_) | TypeExpr::Fn(..) => false,
+            TypeExpr::Traits(_) | TypeExpr::Fn(..) | TypeExpr::Opaque(_) => false,
         }
     }
 }
@@ -142,6 +145,15 @@ pub enum Expr {
     /// The current function's unannotated parameter `k` (typed, when the
     /// language opts in, by what every resolved call site passes).
     Param(u32),
+    /// A value no declaration types, and why (ABAP's `NEW #( )` with no
+    /// declared target): calls through it, or of it, are unknown for that
+    /// reason.
+    Opaque(&'static str),
+    /// Parameter `p` (the third) of the method `m` (the second) as the type
+    /// named first declares it: an ABAP method implementing an interface's
+    /// method, or redefining its base class's, has the parameters declared
+    /// there.
+    Signature(Sym, Sym, Sym),
     Unknown,
 }
 
@@ -344,6 +356,9 @@ pub struct FileFacts {
     /// `_names`, Go unexported names): glob imports see them only from
     /// within the declaring module's subtree.
     pub private: Vec<(u32, Name)>,
+    /// Other files pasted into this one, as written (ABAP's `INCLUDE x.`):
+    /// the layout joins them into one unit.
+    pub includes: Vec<Name>,
 }
 
 /// `return <value>` in function `func` (scope `scope`).

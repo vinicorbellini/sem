@@ -947,6 +947,8 @@ fn render(f: &FileFacts, e: ir::ExprId) -> String {
         Typed(t) => format!("{:?}", f.type_pool[t as usize]),
         Param(k) => format!("param{k}"),
         Arg(c, pos, k) => format!("arg{k}@{pos}({})", render(f, c)),
+        Opaque(why) => format!("?({why})"),
+        Signature(t, m, p) => format!("{}~{}.{}", f.sym(t), f.sym(m), f.sym(p)),
         Unknown => "?".to_string(),
     }
 }

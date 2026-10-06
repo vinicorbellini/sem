@@ -271,6 +271,7 @@ impl<'t, 'a> Resolver<'t, 'a> {
                 self.method(&t, f.sym(name), depth + 1)
             }
             Expr::Path(p) => self.path(p, cx, at, depth),
+            Expr::Opaque(why) => Pick::Unknown(why),
             _ => Pick::Unknown("not a call"),
         }
     }
@@ -572,6 +573,7 @@ impl<'t, 'a> Resolver<'t, 'a> {
             Ty::Super(f, ty) => self
                 .inherited(*f, *ty, t, name, depth)
                 .unwrap_or(Pick::Unknown("method not found on repo type")),
+            Ty::Opaque(why) => Pick::Unknown(why),
             Ty::Unknown => Pick::Unknown("unknown receiver type"),
         }
     }

@@ -3194,8 +3194,12 @@ DATA gv_global TYPE i.
             let other = if object == "zcl_fx_order" { "zcl_fx_other" } else { "zcl_fx_order" };
             assert!(edges.contains(&abap_edge(from, &format!("{object}.lcl_helper"))), "{from}: {edges:?}");
             assert!(edges.contains(&abap_edge(from, &format!("{object}.tag"))), "{from}: {edges:?}");
+            // (zcl_fx_other.label does reach zcl_fx_order.describe, through its
+            // parameter's declared type, story 2.2: only the local class is
+            // the other object's own.)
             assert!(
-                !edges.iter().any(|(f, to)| f == from && to.starts_with(&format!("{other}."))),
+                !edges.iter().any(|(f, to)| f == from
+                    && (*to == format!("{other}.lcl_helper") || *to == format!("{other}.tag"))),
                 "{from} leaks into {other}: {edges:?}"
             );
         }
@@ -3211,14 +3215,18 @@ DATA gv_global TYPE i.
     #[cfg(feature = "lang-abap")]
     fn abap_fixture_2_0_ambiguous_method_no_edge() {
         // `describe` is defined in zcl_fx_order, zcl_fx_order_sub and zcl_fx_user.
-        // `io_order->describe( )` in zcl_fx_other resolves to none of them.
+        // The name alone picks none of them. Since story 2.2 the receiver's
+        // declared type does: `io_order->describe( )` in zcl_fx_other, with
+        // `io_order TYPE REF TO zcl_fx_order`, reaches zcl_fx_order's only.
         let edges = abap_fixture_2_0_edges();
-        assert!(
-            !edges.iter().any(|(from, to)| from == "zcl_fx_other.label" && to.ends_with(".describe")),
-            "got: {edges:?}"
-        );
-        // Inside an object the name is its own: zcl_fx_order's test class
-        // reaches zcl_fx_order's `describe` only.
+        let describes: Vec<&String> = edges
+            .iter()
+            .filter(|(from, to)| from == "zcl_fx_other.label" && to.ends_with(".describe"))
+            .map(|(_, to)| to)
+            .collect();
+        assert_eq!(describes, vec!["zcl_fx_order.describe"]);
+        // So does zcl_fx_order's test class, through `mo_cut TYPE REF TO
+        // zcl_fx_order`.
         let describes: Vec<&String> = edges
             .iter()
             .filter(|(from, to)| from == "zcl_fx_order.describe_mentions_id" && to.ends_with(".describe"))
@@ -3231,6 +3239,9 @@ DATA gv_global TYPE i.
     #[cfg(feature = "lang-abap")]
     fn abap_fixture_2_0_unique_method_across_files() {
         // `label` is defined once, in zcl_fx_other: zcl_fx_user's call reaches it.
+        // Story 2.0 bound it by that uniqueness; since 2.2 the name binds
+        // nothing by itself, and `lo_other = NEW zcl_fx_other( )` gives the
+        // receiver its class, as `io_order TYPE REF TO zcl_fx_order` does below.
         let edges = abap_fixture_2_0_edges();
         assert!(edges.contains(&abap_edge("zcl_fx_user.run", "zcl_fx_other.label")), "got: {edges:?}");
         // An interface component is one name though written in two tokens.
@@ -3238,8 +3249,8 @@ DATA gv_global TYPE i.
             edges.contains(&abap_edge("zcl_fx_other.total", "zcl_fx_order.zif_fx_order~get_total")),
             "got: {edges:?}"
         );
-        // A name defined in the object itself needs no uniqueness: zcl_fx_order's
-        // test class reaches `create` and `describe` in its global class.
+        // zcl_fx_order's test class reaches `create` (a static call) and
+        // `describe` (through `mo_cut TYPE REF TO zcl_fx_order`) in its global class.
         assert!(
             edges.contains(&abap_edge("zcl_fx_order.setup", "zcl_fx_order.create")),
             "got: {edges:?}"
@@ -3291,9 +3302,12 @@ DATA gv_global TYPE i.
         // A reader in zcl_c stays clean while zcl_a and zcl_b gain and lose
         // `ping`. Each step, an incremental rebuild (both the cached-graph path
         // and the red-green session) must give the edges a fresh build gives.
-        let class = |name: &str, method: &str, body: &str| {
+        // Story 2.0 bound `lo_x->ping( )` by the name being unique; since 2.2
+        // the receiver's declared type, `zcl_a`, does, and the method is
+        // looked up on it and its base.
+        let class = |name: &str, base: &str, method: &str, body: &str| {
             format!(
-                "CLASS {name} DEFINITION PUBLIC CREATE PUBLIC.\n  PUBLIC SECTION.\n    METHODS {method}.\nENDCLASS.\n\n\nCLASS {name} IMPLEMENTATION.\n\n  METHOD {method}.\n    {body}\n  ENDMETHOD.\n\nENDCLASS.\n"
+                "CLASS {name} DEFINITION PUBLIC{base} CREATE PUBLIC.\n  PUBLIC SECTION.\n    METHODS {method}.\nENDCLASS.\n\n\nCLASS {name} IMPLEMENTATION.\n\n  METHOD {method}.\n    {body}\n  ENDMETHOD.\n\nENDCLASS.\n"
             )
         };
         let dir = tempfile::TempDir::new().unwrap();
@@ -3305,30 +3319,38 @@ DATA gv_global TYPE i.
         let registry = crate::parser::plugins::create_default_registry();
         let build = || crate::parser::graph::EntityGraph::build(dir.path(), &files, &registry);
         let go_targets = |graph: &crate::parser::graph::EntityGraph| -> Vec<String> {
+            // the methods it reaches, not the class its `DATA` names
             let mut targets: Vec<String> = abap_edges(graph)
                 .into_iter()
-                .filter(|(from, _)| from == "zcl_c.go")
+                .filter(|(from, to)| from == "zcl_c.go" && to.contains('.'))
                 .map(|(_, to)| to)
                 .collect();
             targets.sort();
             targets
         };
 
-        write("zcl_a.clas.abap", class("zcl_a", "ping", "WRITE 'a'."));
-        write("zcl_b.clas.abap", class("zcl_b", "ping", "WRITE 'b'."));
-        write("zcl_c.clas.abap", class("zcl_c", "go", "lo_x->ping( )."));
+        write("zcl_a.clas.abap", class("zcl_a", "", "ping", "WRITE 'a'."));
+        write("zcl_b.clas.abap", class("zcl_b", "", "ping", "WRITE 'b'."));
+        write(
+            "zcl_c.clas.abap",
+            class("zcl_c", "", "go", "DATA lo_x TYPE REF TO zcl_a.\n    lo_x->ping( )."),
+        );
         let (mut graph, mut entities) = build();
         let mut session = crate::parser::session::GraphSession::build(dir.path(), &files, &registry);
-        assert!(go_targets(&graph).is_empty(), "`ping` is defined twice");
+        assert_eq!(go_targets(&graph), ["zcl_a.ping"], "`ping` of the declared class only");
 
         // (changed file, its new content, the targets of `go` afterwards)
         let steps = [
-            // zcl_b loses `ping`: the name is unique, `go` gains an edge.
-            ("zcl_b.clas.abap", class("zcl_b", "pong", "WRITE 'b'."), vec!["zcl_a.ping"]),
-            // zcl_b defines it again: ambiguous, the edge goes.
-            ("zcl_b.clas.abap", class("zcl_b", "ping", "WRITE 'b'."), vec![]),
-            // zcl_a loses it: unique again, now in zcl_b.
-            ("zcl_a.clas.abap", class("zcl_a", "pong", "WRITE 'a'."), vec!["zcl_b.ping"]),
+            // zcl_a loses `ping`: no edge, and zcl_b's is not the declared class's.
+            ("zcl_a.clas.abap", class("zcl_a", "", "pong", "WRITE 'a'."), vec![]),
+            // zcl_a inherits from zcl_b, which has it.
+            (
+                "zcl_a.clas.abap",
+                class("zcl_a", " INHERITING FROM zcl_b", "pong", "WRITE 'a'."),
+                vec!["zcl_b.ping"],
+            ),
+            // zcl_b loses it too.
+            ("zcl_b.clas.abap", class("zcl_b", "", "pong", "WRITE 'b'."), vec![]),
         ];
         for (file, content, expected) in steps {
             write(file, content);
@@ -3623,9 +3645,10 @@ DATA gv_global TYPE i.
         }
         assert!(edges.contains(&abap_edge("zcl_fx_user.run", "zcl_fx_order.create")), "got: {edges:?}");
 
-        // A keyword written as a call through an untyped receiver still binds
-        // by the unique name, in any case; one written only as a keyword, in
-        // the method's own lines, does not.
+        // Since story 2.2 no name binds by being unique, so a keyword is never
+        // taken for one. A receiver of a declared class reaches its `create` in
+        // any case; an untyped one reaches nothing; `CREATE OBJECT` calls the
+        // constructor of the declared class, not a method named `create`.
         let class = |name: &str, body: &str| {
             format!(
                 "CLASS {name} DEFINITION PUBLIC CREATE PUBLIC.\n  PUBLIC SECTION.\n    METHODS create.\nENDCLASS.\n\n\nCLASS {name} IMPLEMENTATION.\n\n  METHOD create.\n    {body}\n  ENDMETHOD.\n\nENDCLASS.\n"
@@ -3638,19 +3661,22 @@ DATA gv_global TYPE i.
         };
         let graph = abap_graph(&[
             ("zcl_a.clas.abap", class("zcl_a", "WRITE 'a'.")),
-            ("zcl_b.clas.abap", user("zcl_b", "lo_a->CREATE( ).")),
-            ("zcl_c.clas.abap", user("zcl_c", "CREATE OBJECT lo_a.")),
+            ("zcl_b.clas.abap", user("zcl_b", "DATA lo_a TYPE REF TO zcl_a. lo_a->CREATE( ).")),
+            ("zcl_c.clas.abap", user("zcl_c", "DATA lo_a TYPE REF TO zcl_a. CREATE OBJECT lo_a.")),
+            ("zcl_d.clas.abap", user("zcl_d", "lo_x->create( ).")),
         ]);
         let edges = abap_edges(&graph);
         assert!(edges.contains(&abap_edge("zcl_b.go", "zcl_a.create")), "got: {edges:?}");
+        assert!(edges.contains(&abap_edge("zcl_c.go", "zcl_a")), "got: {edges:?}");
         assert!(
             !edges.iter().any(|(from, to)| from.starts_with("zcl_c") && to == "zcl_a.create"),
             "got: {edges:?}"
         );
+        assert!(!edges.iter().any(|(from, _)| from.starts_with("zcl_d")), "got: {edges:?}");
     }
 
     // Spec 2.1: a call written in a static form resolves exactly, through the
-    // calls pipeline, beside the bag-of-words resolver until receivers are typed.
+    // calls pipeline, which since story 2.2 has no bag-of-words resolver beside it.
 
     /// The story 2.1 fixture objects: 2.0's, `zcl_fx_calls`, and the report and
     /// function group that call by `PERFORM` and `CALL FUNCTION`.
@@ -3681,12 +3707,19 @@ DATA gv_global TYPE i.
     /// it alone, and the pipeline's counts.
     #[cfg(feature = "lang-abap")]
     fn abap_fixture_2_1_calls() -> (Vec<AbapSite>, crate::parser::calls::Stats) {
-        use crate::parser::calls::{self, SiteAnswer};
-        let registry = crate::parser::plugins::create_default_registry();
         let sources: Vec<(&str, String)> = ABAP_FIXTURE_2_1_FILES
             .iter()
             .map(|file| (*file, abap_fixture_text(file)))
             .collect();
+        abap_calls(&sources)
+    }
+
+    /// Every call site of `sources` as the calls pipeline answers it alone,
+    /// and the pipeline's counts.
+    #[cfg(feature = "lang-abap")]
+    fn abap_calls(sources: &[(&str, String)]) -> (Vec<AbapSite>, crate::parser::calls::Stats) {
+        use crate::parser::calls::{self, SiteAnswer};
+        let registry = crate::parser::plugins::create_default_registry();
         let entities: Vec<SemanticEntity> = sources
             .iter()
             .flat_map(|(file, src)| registry.extract_entities(file, src))
@@ -3828,11 +3861,12 @@ DATA gv_global TYPE i.
     fn abap_fixture_2_1_interface_prefixed_call() {
         // `zif_fx_order~get_total( )` with no receiver is the class's own
         // implementing method, or the one it inherits. Beside it on line 30,
-        // `lo_helper->tag( )` has no receiver type yet.
+        // `lo_helper->tag( )` reaches the local class's `tag` since story 2.2
+        // types `lo_helper` from `NEW lcl_helper( )`.
         let (sites, _) = abap_fixture_2_1_calls();
         assert_eq!(
             abap_answers(&sites, "zcl_fx_order.clas.abap", 30),
-            vec!["zcl_fx_order.zif_fx_order~get_total", "unknown: unknown receiver type"]
+            vec!["zcl_fx_order.zif_fx_order~get_total", "zcl_fx_order.tag"]
         );
         for line in [38, 39] {
             assert_eq!(
@@ -3937,21 +3971,23 @@ DATA gv_global TYPE i.
     #[test]
     #[cfg(feature = "lang-abap")]
     fn abap_fixture_2_1_unknown_receiver() {
-        // A receiver with no type yet, a local or an attribute, is an unknown
-        // with its reason, in `Stats.unresolved`, never a guessed target.
-        // (The bag-of-words resolver still binds `total` by its unique name
-        // until receivers are typed and the pipeline replaces it.)
+        // These receivers had no type in story 2.1. Story 2.2 types them from
+        // their declarations, a local from `NEW zcl_fx_other( )` and the
+        // attribute `mo_other TYPE REF TO zcl_fx_other`, so each call reaches
+        // `total`, in the functional form and with `CALL METHOD`. A receiver
+        // with no type is an unknown with its reason, in `Stats.unresolved`,
+        // never a guessed target (`abap_fixture_2_2_untyped_stays_unknown`).
         let (sites, stats) = abap_fixture_2_1_calls();
         for line in [54, 55, 56] {
             assert_eq!(
                 abap_answers(&sites, "zcl_fx_calls.clas.abap", line),
-                vec!["unknown: unknown receiver type"],
+                vec!["zcl_fx_other.total"],
                 "line {line}"
             );
         }
-        let unknown = sites.iter().filter(|(_, _, a)| a == "unknown: unknown receiver type").count();
+        let unknown: Vec<&AbapSite> = sites.iter().filter(|(_, _, a)| a.starts_with("unknown")).collect();
         let reasons: Vec<(&str, usize)> = stats.unresolved.iter().map(|(why, n)| (*why, *n)).collect();
-        assert_eq!(reasons, vec![("unknown receiver type", unknown)]);
+        assert_eq!(reasons.iter().map(|(_, n)| n).sum::<usize>(), unknown.len(), "{unknown:?}");
     }
 
     #[test]
@@ -4007,6 +4043,239 @@ DATA gv_global TYPE i.
             graph = incremental;
             entities = next;
         }
+    }
+
+    // Spec 2.2: a receiver binds to the class its declaration names, and to
+    // nothing when none does; bag-of-words no longer runs for ABAP.
+
+    /// The story 2.1 fixture and `zcl_fx_types`, one method per binding form.
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_2_calls() -> (Vec<AbapSite>, crate::parser::calls::Stats) {
+        let sources: Vec<(&str, String)> = ABAP_FIXTURE_2_1_FILES
+            .iter()
+            .chain(&["zcl_fx_types.clas.abap"])
+            .map(|file| (*file, abap_fixture_text(file)))
+            .collect();
+        abap_calls(&sources)
+    }
+
+    #[cfg(feature = "lang-abap")]
+    const ABAP_TYPES: &str = "zcl_fx_types.clas.abap";
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_2_new_binds_local() {
+        // `DATA(lo_helper) = NEW lcl_helper( )` in zcl_fx_order.describe:
+        // `lo_helper->tag( )` reaches the local class's `tag`, defined in
+        // `locals_def` and implemented in `locals_imp`, as a graph edge with
+        // no bag-of-words resolver beside the pipeline.
+        let (sites, _) = abap_fixture_2_2_calls();
+        assert_eq!(
+            abap_answers(&sites, "zcl_fx_order.clas.abap", 30),
+            vec!["zcl_fx_order.zif_fx_order~get_total", "zcl_fx_order.tag"]
+        );
+        let lang = crate::parser::calls::language_for("zcl_fx_order.clas.abap").unwrap();
+        assert!(lang.replaces_bow());
+        let edges = abap_fixture_2_1_edges();
+        assert!(
+            edges.contains(&abap_typed_edge("zcl_fx_order.describe", "zcl_fx_order.tag", "calls")),
+            "got: {edges:?}"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_2_attribute_type() {
+        // `DATA mo_cut TYPE REF TO zcl_fx_order` in ltc_order's definition types
+        // `mo_cut` in its methods; `mo_order` likewise in zcl_fx_types.
+        let (sites, _) = abap_fixture_2_2_calls();
+        let tests = "zcl_fx_order.clas.testclasses.abap";
+        assert_eq!(abap_answers(&sites, tests, 23), vec!["external", "zcl_fx_order.describe"]);
+        assert_eq!(
+            abap_answers(&sites, tests, 19),
+            vec!["external", "zcl_fx_order.zif_fx_order~get_total"]
+        );
+        assert_eq!(abap_answers(&sites, ABAP_TYPES, 43), vec!["zcl_fx_order.describe"]);
+        // Reading an attribute is a reference to it, written bare or as `me->x`.
+        let class = "CLASS zcl_fx_attr DEFINITION PUBLIC.\n  PUBLIC SECTION.\n    METHODS: bare, own.\n  PRIVATE SECTION.\n    DATA mv_count TYPE i.\nENDCLASS.\nCLASS zcl_fx_attr IMPLEMENTATION.\n  METHOD bare.\n    mv_count = 1.\n  ENDMETHOD.\n  METHOD own.\n    me->mv_count = 2.\n  ENDMETHOD.\nENDCLASS.\n";
+        let edges = abap_edges(&abap_graph(&[("zcl_fx_attr.clas.abap", class.to_string())]));
+        for from in ["zcl_fx_attr.bare", "zcl_fx_attr.own"] {
+            assert!(edges.contains(&abap_edge(from, "zcl_fx_attr.mv_count")), "{from}: {edges:?}");
+        }
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_2_return_type_chain() {
+        // `DATA(lo_order) = zcl_fx_order=>create( iv_id )` in zfx_fm takes the
+        // declared `RETURNING ... TYPE REF TO zcl_fx_order` of `create`.
+        let (sites, _) = abap_fixture_2_2_calls();
+        assert_eq!(
+            abap_answers(&sites, "zfx_fg.fugr.zfx_fm.abap", 11),
+            vec!["zcl_fx_order.zif_fx_order~get_total"]
+        );
+        // A chain resolves both links, through a static call and a bare one.
+        assert_eq!(
+            abap_answers(&sites, ABAP_TYPES, 27),
+            vec!["zcl_fx_order.create", "zcl_fx_order.describe"]
+        );
+        assert_eq!(
+            abap_answers(&sites, ABAP_TYPES, 28),
+            vec!["zcl_fx_types.by_return", "zcl_fx_order.zif_fx_order~get_total"]
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_2_param_type() {
+        // An `IMPORTING` parameter typed `REF TO zcl_fx_order`, and a `CHANGING`
+        // one typed through `TYPES ty_order TYPE REF TO zcl_fx_order`.
+        let (sites, _) = abap_fixture_2_2_calls();
+        assert_eq!(abap_answers(&sites, ABAP_TYPES, 20), vec!["zcl_fx_order.describe"]);
+        assert_eq!(abap_answers(&sites, ABAP_TYPES, 21), vec!["zcl_fx_order.describe"]);
+        assert_eq!(
+            abap_answers(&sites, "zcl_fx_other.clas.abap", 20),
+            vec!["zcl_fx_order.zif_fx_order~get_total"]
+        );
+        // A form's `USING` parameter, and a function module's, whose signature
+        // abapGit writes as the comment block after `FUNCTION`.
+        let form = "REPORT zfx_typed.\nFORM run USING io_order TYPE REF TO zcl_fx_order.\n  io_order->describe( ).\nENDFORM.\n";
+        let module = "FUNCTION zfx_typed_fm.\n*\"----------------------------------------------------------------------\n*\"*\"Local Interface:\n*\"  IMPORTING\n*\"     REFERENCE(IO_ORDER) TYPE REF TO  ZCL_FX_ORDER\n*\"----------------------------------------------------------------------\n  io_order->describe( ).\nENDFUNCTION.\n";
+        let (sites, _) = abap_calls(&[
+            ("zcl_fx_order.clas.abap", abap_fixture_text("zcl_fx_order.clas.abap")),
+            ("zfx_typed.prog.abap", form.to_string()),
+            ("zfx_typed.fugr.zfx_typed_fm.abap", module.to_string()),
+        ]);
+        assert_eq!(abap_answers(&sites, "zfx_typed.prog.abap", 3), vec!["zcl_fx_order.describe"]);
+        assert_eq!(
+            abap_answers(&sites, "zfx_typed.fugr.zfx_typed_fm.abap", 7),
+            vec!["zcl_fx_order.describe"]
+        );
+        // A method implementing an interface's, or redefining its base class's,
+        // has the parameters declared there, in another file.
+        let intf = "INTERFACE zif_fx_p PUBLIC.\n  METHODS run IMPORTING io_order TYPE REF TO zcl_fx_order.\nENDINTERFACE.\n";
+        let base = "CLASS zcl_fx_p DEFINITION PUBLIC.\n  PUBLIC SECTION.\n    INTERFACES zif_fx_p.\n    METHODS again IMPORTING io_order TYPE REF TO zcl_fx_order.\nENDCLASS.\nCLASS zcl_fx_p IMPLEMENTATION.\n  METHOD zif_fx_p~run.\n    io_order->describe( ).\n  ENDMETHOD.\n  METHOD again.\n  ENDMETHOD.\nENDCLASS.\n";
+        let sub = "CLASS zcl_fx_q DEFINITION PUBLIC INHERITING FROM zcl_fx_p.\n  PUBLIC SECTION.\n    METHODS again REDEFINITION.\nENDCLASS.\nCLASS zcl_fx_q IMPLEMENTATION.\n  METHOD again.\n    io_order->describe( ).\n  ENDMETHOD.\nENDCLASS.\n";
+        let (sites, _) = abap_calls(&[
+            ("zcl_fx_order.clas.abap", abap_fixture_text("zcl_fx_order.clas.abap")),
+            ("zif_fx_p.intf.abap", intf.to_string()),
+            ("zcl_fx_p.clas.abap", base.to_string()),
+            ("zcl_fx_q.clas.abap", sub.to_string()),
+        ]);
+        assert_eq!(abap_answers(&sites, "zcl_fx_p.clas.abap", 8), vec!["zcl_fx_order.describe"]);
+        assert_eq!(abap_answers(&sites, "zcl_fx_q.clas.abap", 7), vec!["zcl_fx_order.describe"]);
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_2_cast() {
+        // `CAST zif_fx_order( lo )` is a reference to the interface: the call
+        // reaches its declaration of `get_total`, which has no entity of its
+        // own until story 2.3 and so lands on the interface. `CAST zcl_fx_order`
+        // reaches the class's method.
+        let (sites, _) = abap_fixture_2_2_calls();
+        assert_eq!(abap_answers(&sites, ABAP_TYPES, 31), vec!["zif_fx_order"]);
+        assert_eq!(abap_answers(&sites, ABAP_TYPES, 32), vec!["zcl_fx_order.describe"]);
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_2_create_object() {
+        // `CREATE OBJECT lo_order` calls the constructor of the class `lo_order`
+        // is declared to refer to, and `lo_order->describe( )` reaches it.
+        let (sites, _) = abap_fixture_2_2_calls();
+        assert_eq!(abap_answers(&sites, ABAP_TYPES, 36), vec!["zcl_fx_order"]);
+        assert_eq!(abap_answers(&sites, ABAP_TYPES, 37), vec!["zcl_fx_order.describe"]);
+        // `TYPE zcl_fx_order_sub` makes the subclass, but `lo_base` is declared
+        // `REF TO zcl_fx_order`: types are declared ones, not followed through
+        // assignments, so the call reaches the declared class's method. Story
+        // 2.3's dispatch edge leads on to the redefinition.
+        assert_eq!(abap_answers(&sites, ABAP_TYPES, 38), vec!["zcl_fx_order_sub"]);
+        assert_eq!(abap_answers(&sites, ABAP_TYPES, 39), vec!["zcl_fx_order.describe"]);
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_2_new_hash_takes_target_type() {
+        // `ro_order = NEW #( iv_id = iv_id )` in `create` constructs the class
+        // `ro_order` is declared as, `RETURNING VALUE(ro_order) TYPE REF TO
+        // zcl_fx_order`, and so does an attribute target.
+        let (sites, _) = abap_fixture_2_2_calls();
+        assert_eq!(abap_answers(&sites, "zcl_fx_order.clas.abap", 25), vec!["zcl_fx_order"]);
+        assert_eq!(abap_answers(&sites, ABAP_TYPES, 24), vec!["zcl_fx_order"]);
+        assert_eq!(abap_answers(&sites, ABAP_TYPES, 42), vec!["zcl_fx_order"]);
+        let edges = abap_fixture_2_1_edges();
+        assert!(
+            edges.contains(&abap_typed_edge("zcl_fx_order.create", "zcl_fx_order", "calls")),
+            "got: {edges:?}"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_2_untyped_stays_unknown() {
+        // `REF TO object` and `REF TO data` name no class, and an undeclared
+        // name has no type: each call is an unknown with its reason.
+        let (sites, stats) = abap_fixture_2_2_calls();
+        for line in [46, 47] {
+            assert_eq!(
+                abap_answers(&sites, ABAP_TYPES, line),
+                vec!["unknown: generic reference type"],
+                "line {line}"
+            );
+        }
+        assert_eq!(abap_answers(&sites, ABAP_TYPES, 48), vec!["unknown: unknown receiver type"]);
+        assert_eq!(stats.unresolved.get("generic reference type"), Some(&2));
+
+        // The known gap: a local class's `METHODS` in `locals_def` and its
+        // `METHOD` in `locals_imp`. The second file does not see the first, so
+        // its parameters are unknown, said to be, and not guessed. So is a
+        // `NEW #( )` with no declared target.
+        let def = "CLASS lcl_x DEFINITION.\n  PUBLIC SECTION.\n    METHODS run IMPORTING io_order TYPE REF TO zcl_fx_order.\nENDCLASS.\n";
+        let imp = "CLASS lcl_x IMPLEMENTATION.\n  METHOD run.\n    io_order->describe( ).\n    run( NEW #( ) ).\n  ENDMETHOD.\nENDCLASS.\n";
+        let (sites, stats) = abap_calls(&[
+            ("zcl_fx_order.clas.abap", abap_fixture_text("zcl_fx_order.clas.abap")),
+            ("zcl_fx_sig.clas.locals_def.abap", def.to_string()),
+            ("zcl_fx_sig.clas.locals_imp.abap", imp.to_string()),
+        ]);
+        let imp_file = "zcl_fx_sig.clas.locals_imp.abap";
+        assert_eq!(abap_answers(&sites, imp_file, 3), vec!["unknown: signature in another file"]);
+        assert_eq!(
+            abap_answers(&sites, imp_file, 4),
+            vec!["zcl_fx_sig.run", "unknown: NEW # or CREATE OBJECT without a declared type"]
+        );
+        assert_eq!(stats.unresolved.get("signature in another file"), Some(&1));
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_2_external_class_not_unknown() {
+        // A class from outside the repo, as a receiver's type or a static
+        // call's, is external: not unknown, and not an edge.
+        let (sites, _) = abap_fixture_2_2_calls();
+        assert_eq!(abap_answers(&sites, ABAP_TYPES, 52), vec!["external"]);
+        assert_eq!(abap_answers(&sites, ABAP_TYPES, 53), vec!["external"]);
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_2_2_local_class_not_shared() {
+        // zcl_fx_types has no `lcl_helper`. Its `REF TO lcl_helper` names a
+        // class outside the object, so `lo_helper->tag( )` reaches neither
+        // zcl_fx_order's local class nor zcl_fx_other's.
+        let (sites, _) = abap_fixture_2_2_calls();
+        assert_eq!(abap_answers(&sites, ABAP_TYPES, 57), vec!["external"]);
+        let files: Vec<(&str, String)> = ABAP_FIXTURE_2_1_FILES
+            .iter()
+            .chain(&[ABAP_TYPES])
+            .map(|file| (*file, abap_fixture_text(file)))
+            .collect();
+        let edges = abap_edges(&abap_graph(&files));
+        assert!(
+            !edges.iter().any(|(from, to)| from.starts_with("zcl_fx_types.")
+                && (to.ends_with(".lcl_helper") || to.ends_with(".tag"))),
+            "got: {edges:?}"
+        );
     }
 
     #[test]
