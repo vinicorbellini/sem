@@ -767,6 +767,10 @@ than a smaller listing.
 
 ## Control: Rust where-used (reporting only)
 
+The task file's `repo.source` is a detached checkout of the pinned commit, which the harness clones from; it is not
+committed. Recreate it before a run or a dry run with
+`git -C <this clone> worktree add --detach /tmp/claude-0/sem-control-src dc2cc4d7173d9f3eab87d491b351927fbe2f1f63`.
+
 Checkpoint `control`, class C1, `--brief sem-first`, 3 repetitions, `claude-sonnet-5-5` at effort high through
 Claude Code 2.1.291, the same harness, arms, briefing and turn bound as Gate 2b. sem served MCP from
 `/home/user/sem/crates/target/release/sem`, built from this branch at `767f67e` (the merge of the `sem_find` callers
