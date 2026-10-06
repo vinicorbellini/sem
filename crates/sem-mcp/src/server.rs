@@ -148,9 +148,13 @@ fn entity_matches_name(
 /// --json`, the code `caller_verdict` lives in; `sem-mcp` does not depend on `sem-cli`, and
 /// `sem_certify` shells out the same way). Returns the verdict fields (`complete`,
 /// `incomplete_because`, `checked`, `possible_callers`, `possible_caller_sites`) as one JSON
-/// object, or `None` when the CLI could not answer (the callers list is then returned as
-/// before, with no verdict).
-async fn callers_verdict(cwd: &Path, query: &str, file: Option<&str>) -> Option<serde_json::Value> {
+/// object, with each caller's `call_lines` by caller id, or `None` when the CLI could not
+/// answer (the callers list is then returned as before, with no verdict and no call lines).
+async fn callers_verdict(
+    cwd: &Path,
+    query: &str,
+    file: Option<&str>,
+) -> Option<(serde_json::Value, HashMap<String, Vec<u64>>)> {
     let mut args = vec!["find".to_string(), query.to_string(), "--callers".to_string(), "--json".to_string()];
     if let Some(f) = file {
         args.extend(["--file".to_string(), f.to_string()]);
@@ -176,7 +180,53 @@ async fn callers_verdict(cwd: &Path, query: &str, file: Option<&str>) -> Option<
     for key in ["complete", "incomplete_because", "checked", "possible_callers", "possible_caller_sites"] {
         verdict.insert(key.to_string(), row.get(key)?.clone());
     }
-    Some(serde_json::Value::Object(verdict))
+    let call_lines = row
+        .get("related")?
+        .as_array()?
+        .iter()
+        .filter_map(|r| {
+            let lines = r["call_lines"]
+                .as_array()?
+                .iter()
+                .filter_map(serde_json::Value::as_u64)
+                .collect();
+            Some((r["id"].as_str()?.to_string(), lines))
+        })
+        .collect();
+    Some((serde_json::Value::Object(verdict), call_lines))
+}
+
+/// ` (call at f:12)` or ` (calls at f:12, f:15)` after a caller row, as the CLI writes it;
+/// empty with no line.
+fn call_lines_suffix(file: &str, lines: &[u64]) -> String {
+    if lines.is_empty() {
+        return String::new();
+    }
+    let at: Vec<String> = lines.iter().map(|l| format!("{file}:{l}")).collect();
+    format!(
+        " ({} at {})",
+        if lines.len() == 1 { "call" } else { "calls" },
+        at.join(", ")
+    )
+}
+
+/// The one text line naming the test definitions a callers answer skipped, as the CLI writes it.
+fn skipped_line(skipped: &[&sem_core::parser::graph::EntityInfo]) -> String {
+    let at: Vec<String> = skipped
+        .iter()
+        .map(|e| {
+            format!(
+                "{} {} {}:{}",
+                e.entity_type, e.name, e.file_path, e.start_line
+            )
+        })
+        .collect();
+    format!(
+        "skipped {} test definition{} of the same name: {}",
+        skipped.len(),
+        if skipped.len() == 1 { "" } else { "s" },
+        at.join(", ")
+    )
 }
 
 /// The verdict block of `sem find --callers` in text, from `callers_verdict`'s JSON.
@@ -2636,7 +2686,7 @@ impl SemServer {
     // ── Find ──
 
     #[tool(
-        description = "Where is it? Find entity definitions by exact name (\"type name\" disambiguates, e.g. \"function createProgram\"); queries=[...] batches. mode \"callers\": who calls it (exact, or marked incomplete). mode \"refs\": what it calls and references. mode \"context\": its source plus callers and callees in token_budget, instead of reading the file. `in` restricts to a file or directory; with no query it lists the entities there (`text` searches entity bodies). `intent`: describe it when you don't know the name."
+        description = "Where is it? Find entity definitions by exact name (\"type name\" disambiguates, e.g. \"function createProgram\"); queries=[...] batches. mode \"callers\": who calls it and on which lines (exact, or marked incomplete; a same-named test definition is skipped and named). mode \"refs\": what it calls and references. mode \"context\": its source plus callers and callees in token_budget, instead of reading the file. `in` restricts to a file or directory; with no query it lists the entities there (`text` searches entity bodies). `intent`: describe it when you don't know the name."
     )]
     async fn sem_find(
         &self,
@@ -2837,7 +2887,7 @@ impl SemServer {
     // ── Callers ──
 
     #[tool(
-        description = "List the direct callers of one entity (who calls/references it). The query must resolve to exactly one definition — an ambiguous name is refused with the full candidate list so you can disambiguate with file or a \"type name\" query and retry. limit caps the number of callers returned."
+        description = "List the direct callers of one entity (who calls/references it), each with the lines in it that write the name (call_lines). The query must resolve to exactly one definition — an ambiguous name is refused with the full candidate list so you can disambiguate with file or a \"type name\" query and retry, unless every candidate but one is a test: then the answer is that one's, and the tests are listed as skipped. limit caps the number of callers returned."
     )]
     async fn sem_callers(
         &self,
@@ -2847,7 +2897,7 @@ impl SemServer {
             Ok(ctx) => ctx,
             Err(err) => return Ok(tool_error(err)),
         };
-        let (graph, _) = self.live_graph(&ctx.repo_root).await;
+        let (graph, all_entities) = self.live_graph(&ctx.repo_root).await;
 
         let query = params.query.trim();
         if query.is_empty() {
@@ -2885,6 +2935,25 @@ impl SemServer {
 
         if matches.is_empty() {
             return Ok(tool_error(format!("no entity named '{query}'")));
+        }
+        // A test of the same name is not the definition anyone asks for
+        // callers of: with exactly one candidate left once the tests are
+        // dropped, answer for it, as the CLI does. Several non-tests stay
+        // ambiguous.
+        let mut skipped = Vec::new();
+        if matches.len() > 1 {
+            let tests = sem_core::parser::graph::test_entity_ids(
+                &all_entities,
+                &self.registry.custom_test_dirs,
+            );
+            let (test_defs, rest): (Vec<_>, Vec<_>) = matches
+                .iter()
+                .copied()
+                .partition(|e| tests.contains(e.id.as_str()));
+            if rest.len() == 1 {
+                skipped = test_defs;
+                matches = rest;
+            }
         }
         if matches.len() > 1 {
             // A caller list only means something once you know whose callers
@@ -2929,13 +2998,28 @@ impl SemServer {
         }
 
         // The verdict is the CLI's, for every language: a caller list that lies
-        // by omission must say so, and over MCP too.
-        let verdict = callers_verdict(&ctx.repo_root, query, file_filter).await;
+        // by omission must say so, and over MCP too. The call lines come with it.
+        let (verdict, call_lines) = match callers_verdict(&ctx.repo_root, query, file_filter).await
+        {
+            Some((v, lines)) => (Some(v), lines),
+            None => (None, HashMap::new()),
+        };
+        let lines_of = |e: &sem_core::parser::graph::EntityInfo| {
+            call_lines.get(e.id.as_str()).cloned().unwrap_or_default()
+        };
 
         if params.format() == "json" {
             let mut out = serde_json::json!({
                 "entity": row(def),
-                "callers": callers.iter().map(|e| row(e)).collect::<Vec<_>>(),
+                "callers": callers
+                    .iter()
+                    .map(|e| {
+                        let mut r = row(e);
+                        r["call_lines"] = serde_json::json!(lines_of(e));
+                        r
+                    })
+                    .collect::<Vec<_>>(),
+                "skipped": skipped.iter().map(|e| row(e)).collect::<Vec<_>>(),
             });
             if let (Some(obj), Some(serde_json::Value::Object(v))) = (out.as_object_mut(), verdict.clone()) {
                 obj.extend(v);
@@ -2949,6 +3033,9 @@ impl SemServer {
             "{} {} {}:{}\n",
             def.entity_type, def.name, def.file_path, def.start_line
         );
+        if !skipped.is_empty() {
+            out.push_str(&format!("  {}\n", skipped_line(&skipped)));
+        }
         if callers.is_empty() {
             if verdict.as_ref().is_some_and(|v| !v["complete"].as_bool().unwrap_or(true)) {
                 out.push_str("  (callers: none resolved by the static graph; see below: this is NOT a proof of no callers)\n");
@@ -2958,8 +3045,12 @@ impl SemServer {
         }
         for e in &callers {
             out.push_str(&format!(
-                "  {} {} {}:{}\n",
-                e.entity_type, e.name, e.file_path, e.start_line
+                "  {} {} {}:{}{}\n",
+                e.entity_type,
+                e.name,
+                e.file_path,
+                e.start_line,
+                call_lines_suffix(&e.file_path, &lines_of(e))
             ));
         }
         if callers.len() < total {

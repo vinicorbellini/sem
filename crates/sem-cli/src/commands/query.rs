@@ -118,8 +118,12 @@ pub fn find_command(opts: QueryOptions) {
 /// refused with the full candidate list rather than answered many times over
 /// (`refs` keeps the old show-everything behavior — its answer reads fine
 /// per-def; a caller list only means something once you know *whose* callers
-/// it is). `limit` caps the caller rows shown; text mode says how many were
-/// held back, json is just the capped list the caller asked for.
+/// it is). The one exception: when every candidate but one is a test (an
+/// ABAP test class's `METHODS get_x FOR TESTING` beside the global `get_x`),
+/// the answer is that one's, and the tests skipped are named. `limit` caps
+/// the caller rows shown; text mode says how many were held back, json is
+/// just the capped list the caller asked for. Each caller carries the lines
+/// in it that write the name (`call_lines`).
 pub fn callers_command(opts: QueryOptions, limit: Option<usize>) {
     let mut answer = resolve(&opts, Verb::Callers);
     if answer.defs.is_empty() {
@@ -146,11 +150,31 @@ pub fn callers_command(opts: QueryOptions, limit: Option<usize>) {
         answer.defs.truncate(1);
         answer.related = vec![merged];
     }
+    // A test of the same name is not the definition anyone asks for callers
+    // of: with exactly one candidate left once the tests are dropped, answer
+    // for it. Several non-tests stay ambiguous.
+    let mut skipped: Vec<EntityInfo> = Vec::new();
+    if answer.defs.len() > 1 {
+        let tests = test_defs(&root, idx.as_ref(), &answer.defs);
+        if tests.iter().filter(|t| !**t).count() == 1 {
+            let keep = tests.iter().position(|t| !t).unwrap_or(0);
+            skipped = answer
+                .defs
+                .iter()
+                .zip(&tests)
+                .filter(|(_, t)| **t)
+                .map(|(d, _)| d.clone())
+                .collect();
+            answer.defs = vec![answer.defs.swap_remove(keep)];
+            answer.related = vec![answer.related.swap_remove(keep)];
+        }
+    }
     if answer.defs.len() > 1 {
         refuse_ambiguous(&answer.defs, &opts);
     }
 
     let verdict = caller_verdict(&root, idx.as_ref(), &answer.defs[0], &answer.related[0], &group);
+    let mut lines = call_lines(&root, &answer.defs[0], &answer.related[0]);
 
     let mut hidden = 0;
     if let Some(cap) = limit {
@@ -160,12 +184,18 @@ pub fn callers_command(opts: QueryOptions, limit: Option<usize>) {
                 related.truncate(cap);
             }
         }
+        lines.truncate(cap);
     }
     if opts.json {
         let def = &answer.defs[0];
         let row = serde_json::json!({
             "entity": to_row(def),
-            "related": answer.related[0].iter().map(to_row).collect::<Vec<_>>(),
+            "related": answer.related[0]
+                .iter()
+                .zip(&lines)
+                .map(|(e, l)| CallerRow { row: to_row(e), call_lines: l.clone() })
+                .collect::<Vec<_>>(),
+            "skipped": skipped.iter().map(to_row).collect::<Vec<_>>(),
             "complete": verdict.complete,
             "incomplete_because": verdict.incomplete_because,
             "checked": verdict.checked,
@@ -178,6 +208,9 @@ pub fn callers_command(opts: QueryOptions, limit: Option<usize>) {
     }
     let def = &answer.defs[0];
     println!("{} {} {}:{}", def.entity_type.dimmed(), def.name.bold(), def.file_path, def.start_line);
+    if !skipped.is_empty() {
+        println!("  {}", skipped_line(&skipped));
+    }
     if !group.is_empty() {
         let mut by_file: std::collections::BTreeMap<&str, Vec<String>> = std::collections::BTreeMap::new();
         for g in &group {
@@ -194,13 +227,127 @@ pub fn callers_command(opts: QueryOptions, limit: Option<usize>) {
             println!("  (callers: none resolved by the static graph; see below: this is NOT a proof of no callers)");
         }
     }
-    for row in related {
-        println!("  {} {} {}:{}", row.entity_type.dimmed(), row.name, row.file_path, row.start_line);
+    for (row, l) in related.iter().zip(&lines) {
+        println!(
+            "  {} {} {}:{}{}",
+            row.entity_type.dimmed(),
+            row.name,
+            row.file_path,
+            row.start_line,
+            call_lines_suffix(&row.file_path, l)
+        );
     }
     if hidden > 0 {
         println!("{}", format!("  … {hidden} more (raise --limit)").dimmed());
     }
     print!("{}", super::completeness::render_text(&verdict, limit.unwrap_or(25), "  "));
+}
+
+/// Which of `defs` are tests: the index's own flag (`Entity::is_test`, set at
+/// build time by `test_entity_ids`) where the index has flags and the def's
+/// file is fresh, else `test_entity_ids` over the def's file re-extracted.
+fn test_defs(root: &Path, idx: Option<&QueryIndex>, defs: &[EntityInfo]) -> Vec<bool> {
+    let registry = super::create_registry(&root.to_string_lossy());
+    let idx = idx.filter(|idx| idx.has_test_flags());
+    let mut extracted: std::collections::HashMap<&str, std::collections::HashSet<String>> =
+        std::collections::HashMap::new();
+    defs.iter()
+        .map(|def| {
+            if let Some(idx) = idx.filter(|idx| !file_is_stale(idx, root, &def.file_path)) {
+                if let Some(e) = idx
+                    .entities_in_file(&def.file_path)
+                    .into_iter()
+                    .find(|e| e.id() == def.id.as_str())
+                {
+                    return e.is_test();
+                }
+            }
+            extracted
+                .entry(def.file_path.as_str())
+                .or_insert_with(|| {
+                    let content =
+                        std::fs::read_to_string(root.join(&def.file_path)).unwrap_or_default();
+                    let all = registry.extract_entities(&def.file_path, &content);
+                    sem_core::parser::graph::test_entity_ids(&all, &registry.custom_test_dirs)
+                        .into_iter()
+                        .map(str::to_string)
+                        .collect()
+                })
+                .contains(def.id.as_str())
+        })
+        .collect()
+}
+
+/// The one text line naming the test definitions a callers answer skipped.
+fn skipped_line(skipped: &[EntityInfo]) -> String {
+    let at: Vec<String> = skipped
+        .iter()
+        .map(|e| {
+            format!(
+                "{} {} {}:{}",
+                e.entity_type, e.name, e.file_path, e.start_line
+            )
+        })
+        .collect();
+    format!(
+        "skipped {} test definition{} of the same name: {}",
+        skipped.len(),
+        if skipped.len() == 1 { "" } else { "s" },
+        at.join(", ")
+    )
+}
+
+/// The lines in each of `callers` that write `def`'s name, from the scan the
+/// verdict uses (`completeness::scan_file`, comments and definitions left
+/// out), over the callers' own files only. A line inside a caller nested in
+/// another is the inner one's. An edge no line writes (ABAP Unit's fixture
+/// calls, the constructor `NEW` runs, a dispatch from a declaration) has none.
+fn call_lines(root: &Path, def: &EntityInfo, callers: &[EntityInfo]) -> Vec<Vec<usize>> {
+    use super::completeness as c;
+    let mut scanned: std::collections::HashMap<&str, Vec<usize>> = std::collections::HashMap::new();
+    let inner = |caller: &EntityInfo, line: usize| {
+        callers.iter().any(|o| {
+            o.file_path == caller.file_path
+                && (o.start_line, o.end_line) != (caller.start_line, caller.end_line)
+                && caller.start_line <= o.start_line
+                && o.end_line <= caller.end_line
+                && o.start_line <= line
+                && line <= o.end_line
+        })
+    };
+    callers
+        .iter()
+        .map(|caller| {
+            scanned
+                .entry(caller.file_path.as_str())
+                .or_insert_with(|| {
+                    let src =
+                        std::fs::read_to_string(root.join(&caller.file_path)).unwrap_or_default();
+                    c::scan_file(&caller.file_path, &src, &def.name)
+                        .into_iter()
+                        .filter(|m| m.kind.counts_as_caller())
+                        .map(|m| m.line)
+                        .collect()
+                })
+                .iter()
+                .copied()
+                .filter(|&l| caller.start_line <= l && l <= caller.end_line && !inner(caller, l))
+                .collect()
+        })
+        .collect()
+}
+
+/// ` (call at f:12)` or ` (calls at f:12, f:15)` after a caller row; empty with no line.
+fn call_lines_suffix(file: &str, lines: &[usize]) -> String {
+    if lines.is_empty() {
+        return String::new();
+    }
+    let at: Vec<String> = lines.iter().map(|l| format!("{file}:{l}")).collect();
+    format!(
+        " ({} at {})",
+        if lines.len() == 1 { "call" } else { "calls" },
+        at.join(", ")
+    )
 }
 
 /// Same-named definitions that are all registrations of one dispatcher:
@@ -417,6 +564,15 @@ struct DefRow {
     file: String,
     start_line: usize,
     end_line: usize,
+}
+
+/// A caller row of `sem callers --json`: the entity, and the lines in it
+/// that write the name it calls.
+#[derive(Serialize)]
+struct CallerRow {
+    #[serde(flatten)]
+    row: DefRow,
+    call_lines: Vec<usize>,
 }
 
 #[derive(Serialize)]

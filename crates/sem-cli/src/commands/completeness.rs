@@ -58,7 +58,7 @@ pub enum Kind {
 }
 
 impl Kind {
-    fn counts_as_caller(self) -> bool {
+    pub(crate) fn counts_as_caller(self) -> bool {
         !matches!(self, Kind::Import | Kind::Definition)
     }
     /// The reason text. ABAP words some kinds differently: its `->` receiver is an

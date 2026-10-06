@@ -16,6 +16,9 @@
     "possible_callers": [],
     "related": [
       {
+        "call_lines": [
+          8
+        ],
         "end_line": 8,
         "file": "src/config.py",
         "id": "src/config.py::function::load",
@@ -23,6 +26,7 @@
         "start_line": 6,
         "type": "function"
       }
-    ]
+    ],
+    "skipped": []
   }
 ]
