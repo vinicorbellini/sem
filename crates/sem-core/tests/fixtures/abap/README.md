@@ -15,8 +15,8 @@ Run them with `cd crates && cargo test -p sem-core abap`. No ABAP test is
 Story 1.1 is case-insensitive names, 1.2 comment and string stripping, 1.3 the
 full entity set, 1.4 one entity per class, 1.5 abapGit layout, 1.6 parse-error
 tolerance, 1.7 test detection, 1.10 METHOD blocks the grammar loses, 2.0 names
-across files, 2.4 includes and function groups.
-across files, 2.1 static calls.
+across files, 2.4 includes and function groups, 2.1 static calls, 2.2 receiver
+types.
 
 | Fixture file | Tests that read it | Story |
 |--------------|--------------------|-------|
@@ -46,7 +46,9 @@ across files, 2.1 static calls.
 | | `abap_fixture_2_1_super_call` (`super->describe( )`) | 2.1 |
 | `zcl_fx_user.clas.abap` | `abap_fixture_2_0_global_class_across_files`, `abap_fixture_2_0_unique_method_across_files`, `abap_fixture_2_0_ambiguous_method_no_edge` (its `describe`) | 2.0 |
 | | `abap_fixture_2_1_static_call` (`ZCL_FX_ORDER=>CREATE( 1 )`) | 2.1 |
-| `zcl_fx_calls.clas.abap` | the `abap_fixture_2_1_*` tests: one method per static call form, each in its functional and `CALL METHOD` spelling or in both cases, a `NEW`, and receivers with no type | 2.1 |
+| `zcl_fx_calls.clas.abap` | the `abap_fixture_2_1_*` tests: one method per static call form, each in its functional and `CALL METHOD` spelling or in both cases, a `NEW`, and receivers typed by their declarations (2.2) | 2.1 |
+| `zcl_fx_types.clas.abap` | the `abap_fixture_2_2_*` tests: one method per binding form (an `IMPORTING` parameter, a `CHANGING` one typed through `TYPES`, `RETURNING`, a chain, `CAST`, `CREATE OBJECT`, `NEW #` on an attribute), and one per unknown reason (`REF TO object` and `data`, undeclared, a class outside the repo, a local class of another object) | 2.2 |
+| `zcl_fx_order.clas.abap`, `.testclasses`, `zfx_fg.fugr.zfx_fm.abap` | `abap_fixture_2_2_new_binds_local` (`NEW lcl_helper( )`), `_new_hash_takes_target_type` (`create`), `_attribute_type` (`mo_cut`), `_return_type_chain` (`lo_order`) | 2.2 |
 | `zcl_fx_other.clas.abap` | `abap_fixture_2_0_local_class_stays_in_object`, `abap_fixture_2_0_ambiguous_method_no_edge`, `abap_fixture_2_0_unique_method_across_files` (`zif_fx_order~get_total`) | 2.0 |
 | `zcl_fx_other.clas.locals_imp.abap` | `abap_fixture_2_0_local_class_stays_in_object` (a second `lcl_helper`) | 2.0 |
 | `zcl_fx_other.clas.testclasses.abap` | `abap_fixture_2_0_local_friends_does_not_shadow` (`LOCAL FRIENDS`) | 2.0 |
@@ -87,4 +89,6 @@ by `test_abap_fixture_layout`.
 | `abap_fixture_1_10_interface_method_names` | 1.10 |
 | `abap_fixture_2_0_incremental_follows_other_files` (definitions gained and lost in other files) | 2.0 |
 | `abap_fixture_2_1_incremental_static_call` (a static call's target lost and regained in another file) | 2.1 |
-| `abap_fixture_2_1_keyword_is_not_a_unique_name` (`CREATE PUBLIC` against a unique `create`; also reads the 2.0 fixture objects) | 2.0 |
+| `abap_fixture_2_1_keyword_is_not_a_unique_name` (`CREATE PUBLIC` against the one `create`, and since 2.2 typed and untyped receivers; also reads the 2.0 fixture objects) | 2.0, 2.2 |
+| `abap_fixture_2_2_param_type` (a form's `USING`, a function module's comment-block signature, an interface's and a base class's parameters in another file) | 2.2 |
+| `abap_fixture_2_2_untyped_stays_unknown` (a local class's `METHODS` in `locals_def` and its `METHOD` in `locals_imp`; `NEW #( )` with no target) | 2.2 |

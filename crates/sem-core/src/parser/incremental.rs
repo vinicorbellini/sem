@@ -101,10 +101,6 @@ pub(crate) enum Table {
     /// gaining, losing, or changing its default/named exports invalidates
     /// exactly the importers that could be affected — not the whole corpus.
     TsExportSurface = 16,
-    /// ABAP: folded object name -> the objects of its compiled unit
-    /// (`abap_include`). An `INCLUDE` added or removed in one file changes what
-    /// a form in another file can see without changing any entity.
-    AbapUnit = 17,
     /// Whole-table guard: swift call signatures (empty unless the repo has
     /// `.swift` sources, in which case any change forces a full re-resolve).
     GuardSwiftCallSignatures = 200,

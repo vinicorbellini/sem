@@ -46,46 +46,6 @@ pub fn parse_abapgit_name(path: &str) -> Option<AbapObject> {
     })
 }
 
-/// How far an ABAP definition reaches by name alone, before receivers have
-/// types. Global names are unique per system; local ones live in their object.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Scope {
-    /// The whole repo: a global class or interface, a function module, a report.
-    Repo,
-    /// Its own object, and the whole repo when no other definition repo-wide
-    /// shares the name: a method or attribute of a global class or interface.
-    Unique,
-    /// Its own object only: a local class and its members, a form, a module, a
-    /// macro. A file with no abapGit name is an object of its own.
-    Object,
-}
-
-/// The [`Scope`] of an entity of type `entity_type` defined in `file_path`.
-///
-/// | Candidate | Scope |
-/// |-----------|-------|
-/// | global class or interface (`zcl_x.clas.abap`, `zif_x.intf.abap`) | `Repo` |
-/// | function module (`<group>.fugr.<fm>.abap`), report | `Repo` |
-/// | anything else in a global class or interface's main file | `Unique` |
-/// | anything in a local part (`locals_def`, `locals_imp`, `testclasses`) | `Object` |
-/// | form, module, macro, and anything else | `Object` |
-///
-/// The file name decides the part, so a local class can never reach past its
-/// object, whatever it is named: were `CLASS zcl_x DEFINITION LOCAL FRIENDS ...`
-/// in `zcl_x.clas.testclasses.abap` an entity, it would stay `Object`.
-pub fn abap_global_scope(file_path: &str, entity_type: &str) -> Scope {
-    let Some(object) = parse_abapgit_name(file_path) else {
-        return Scope::Object;
-    };
-    let part = object.part.as_deref();
-    match (object.object_type.as_str(), part, entity_type) {
-        ("clas", None, "class") | ("intf", None, "interface") => Scope::Repo,
-        ("clas" | "intf", None, _) => Scope::Unique,
-        ("fugr", Some(_), "function") | ("prog", _, "report") => Scope::Repo,
-        _ => Scope::Object,
-    }
-}
-
 /// Whether `file_path` is the `TOP` include of a function group or a program:
 /// `<group>.fugr.l<group>top.abap`, or `<name>top.prog.abap` (`zfoo_top`).
 /// Its top-level `DATA` is the global data of the compiled unit, so it is the
@@ -118,8 +78,10 @@ pub fn include_file_names(include: &str, from: &AbapObject) -> Vec<String> {
     names
 }
 
-/// ABAP keywords that are also method names somewhere: `CREATE PUBLIC` in a
-/// class definition is not a call of a method `create`. Sorted, folded.
+/// ABAP keywords that are also names somewhere: `CREATE PUBLIC` in a class
+/// definition does not read a `create`, nor `TYPE TABLE OF` a `table`, so
+/// the calls pipeline's reference sites skip them (`calls/abap.rs`). Sorted,
+/// folded.
 const KEYWORDS: &[&str] = &[
     "abap", "abstract", "accepting", "add", "adjacent", "aliases", "all", "and", "any",
     "append", "appending", "as", "ascending", "assert", "assign", "assigned", "assigning",
@@ -231,34 +193,6 @@ mod tests {
             parsed("src\\zdemo\\zcl_foo.clas.abap"),
             ("zcl_foo".into(), "clas".into(), None)
         );
-    }
-
-    #[test]
-    fn abap_global_scope_by_part_and_type() {
-        let cases = [
-            ("src/zcl_foo.clas.abap", "class", Scope::Repo),
-            ("src/zif_foo.intf.abap", "interface", Scope::Repo),
-            ("src/zfg.fugr.z_fm.abap", "function", Scope::Repo),
-            ("src/zfoo.prog.abap", "report", Scope::Repo),
-            ("src/zcl_foo.clas.abap", "method", Scope::Unique),
-            ("src/zcl_foo.clas.abap", "variable", Scope::Unique),
-            ("src/zif_foo.intf.abap", "type", Scope::Unique),
-            ("src/zcl_foo.clas.locals_imp.abap", "class", Scope::Object),
-            ("src/zcl_foo.clas.locals_imp.abap", "method", Scope::Object),
-            // `CLASS zcl_foo DEFINITION LOCAL FRIENDS ltc_x.` names the global class.
-            ("src/zcl_foo.clas.testclasses.abap", "class", Scope::Object),
-            ("src/zfg.fugr.lzfgf01.abap", "form", Scope::Object),
-            ("src/zfoo.prog.abap", "form", Scope::Object),
-            ("src/zfoo.prog.abap", "macro", Scope::Object),
-            ("src/foo.abap", "class", Scope::Object),
-        ];
-        for (path, entity_type, scope) in cases {
-            assert_eq!(
-                abap_global_scope(path, entity_type),
-                scope,
-                "{path} {entity_type}"
-            );
-        }
     }
 
     #[test]

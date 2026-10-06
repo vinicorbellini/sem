@@ -973,6 +973,8 @@ fn render(f: &FileFacts, e: ir::ExprId) -> String {
         Param(k) => format!("param{k}"),
         Arg(c, pos, k) => format!("arg{k}@{pos}({})", render(f, c)),
         Dynamic(k) => format!("dynamic[{}]", ir::DYNAMIC_REASONS[k as usize]),
+        Opaque(why) => format!("?({why})"),
+        Signature(t, m, p) => format!("{}~{}.{}", f.sym(t), f.sym(m), f.sym(p)),
         Unknown => "?".to_string(),
     }
 }

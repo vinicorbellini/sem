@@ -25,6 +25,8 @@ pub enum Ty {
     Fn(Box<Ty>),
     /// The bases of repo type `(file, type)`, in order: Python's `super()`.
     Super(u32, u32),
+    /// Known to bind no call, and why ([`TypeExpr::Opaque`], [`Expr::Opaque`]).
+    Opaque(&'static str),
     Unknown,
 }
 
@@ -184,6 +186,7 @@ pub fn resolve_type(
                 .map(|e| resolve_type(scopes, lang, e, env, depth + 1))
                 .collect(),
         ),
+        TypeExpr::Opaque(why) => Ty::Opaque(why),
         TypeExpr::Unknown => Ty::Unknown,
     }
 }
@@ -339,6 +342,13 @@ impl<'t, 'a> Resolver<'t, 'a> {
                 if f.sym(sym) == self.lang.self_value() {
                     return cx.self_ty.clone().unwrap_or(Ty::Unknown);
                 }
+                // an attribute of the enclosing type, no receiver written (ABAP)
+                if let (true, Some(t)) = (self.lang.implicit_self(), &cx.self_ty) {
+                    let field = self.field_type(t, f.sym(sym), depth + 1);
+                    if field != Ty::Unknown {
+                        return field;
+                    }
+                }
                 self.value_type(&f.path(p), cx, depth)
             }
             Expr::Path(p) => self.value_type(&f.path(p), cx, depth),
@@ -424,8 +434,33 @@ impl<'t, 'a> Resolver<'t, 'a> {
                 &cx.env(),
                 depth + 1,
             ),
+            Expr::Opaque(why) => Ty::Opaque(why),
+            Expr::Signature(owner, method, param) => {
+                self.signature_type(f.sym(owner), f.sym(method), f.sym(param), cx, depth)
+            }
             Expr::Dynamic(_) | Expr::Unknown => Ty::Unknown,
         }
+    }
+
+    /// Parameter `param` of method `method` as type `owner` (an interface, a
+    /// base class) declares it: the type of that declaration's local.
+    fn signature_type(&self, owner: &str, method: &str, param: &str, cx: &FnCx, depth: u32) -> Ty {
+        let owner = TypeExpr::Named {
+            path: Path::single(owner),
+            args: Vec::new(),
+        };
+        let owner = resolve_type(&self.scopes, self.lang, &owner, &cx.env(), depth + 1);
+        let Some((f, i, _)) = self.method(&owner, method, depth + 1).single_fn() else {
+            return Ty::Unknown;
+        };
+        let facts = self.files[f as usize];
+        let lo = facts.locals.partition_point(|l| l.func < i);
+        let hi = facts.locals.partition_point(|l| l.func <= i);
+        let Some(li) = (lo..hi).find(|&k| facts.sym(facts.locals[k].name) == param) else {
+            return Ty::Unknown;
+        };
+        let dcx = self.fn_cx(f, Some(i), facts.fns[i as usize].scope);
+        self.local_type(&dcx, li, depth + 1)
     }
 
     /// `recv` names a module rather than a value — a package qualifier

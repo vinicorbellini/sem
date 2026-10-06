@@ -29,8 +29,15 @@
 //! - [`INCLUDE_NOT_IN_REPO`] joins `Stats.unresolved`, one count per entry of
 //!   [`IncludeGraph::unresolved`].
 //!
-//! The bag-of-words pass (`graph.rs`, `build_abap_includes`) still runs beside
-//! the pipeline until `replaces_bow()` flips (story 2.2).
+//! This is the only reader of the include graph: since story 2.2 the
+//! bag-of-words pass no longer runs on `.abap` files (`replaces_bow()`), so its
+//! `build_abap_includes` and the `AbapUnit` incremental table that recorded a
+//! reader's unit are gone. The pipeline resolves every ABAP file on each
+//! build, a cached-graph rebuild and the red-green session's included
+//! (`calls::resolve_call_edges`), and its `layout()` joins the units from
+//! every file's lowered `includes`, so a unit that gains or loses an object
+//! is seen without a table of its own
+//! (`abap_fixture_2_4_incremental_follows_include`).
 
 use std::collections::{BTreeMap, HashMap};
 
@@ -71,8 +78,6 @@ pub struct IncludeGraph {
     /// Folded object name to the folded name of its unit's representative.
     /// Objects no include connects are absent: their unit is themselves.
     unit_of: HashMap<String, String>,
-    /// A unit's representative to its sorted member objects.
-    members: HashMap<String, Vec<String>>,
 }
 
 impl IncludeGraph {
@@ -150,10 +155,9 @@ impl IncludeGraph {
         }
         // An object no include joins to another is its own unit, as if absent.
         for (root, members) in by_root.into_iter().filter(|(_, m)| m.len() > 1) {
-            for member in &members {
-                graph.unit_of.insert(member.clone(), root.clone());
+            for member in members {
+                graph.unit_of.insert(member, root.clone());
             }
-            graph.members.insert(root, members);
         }
         graph
     }
@@ -163,28 +167,6 @@ impl IncludeGraph {
     pub fn unit(&self, object: &str) -> String {
         let key = object.to_ascii_lowercase();
         self.unit_of.get(&key).cloned().unwrap_or(key)
-    }
-
-    /// Every object of `object`'s unit, folded and sorted, joined by a space.
-    /// A change to this string is a change to what `object`'s forms can see,
-    /// which the unit's name alone does not show when a third object joins.
-    pub fn unit_digest(&self, object: &str) -> String {
-        let key = object.to_ascii_lowercase();
-        match self
-            .unit_of
-            .get(&key)
-            .and_then(|unit| self.members.get(unit))
-        {
-            Some(members) => members.join(" "),
-            None => key,
-        }
-    }
-
-    /// The objects an include joins into a unit, each with its unit digest.
-    pub fn joined_objects(&self) -> impl Iterator<Item = (&str, String)> {
-        self.unit_of
-            .keys()
-            .map(|object| (object.as_str(), self.unit_digest(object)))
     }
 
     /// Whether any include joins two objects.
