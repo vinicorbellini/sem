@@ -68,9 +68,10 @@ pub(super) fn extract_abap_fallback_entities(
     };
     let code = strip_abap_content(text);
 
+    // The blocks a `TYPES` or `CONSTANTS` statement can be declared in.
     let classes: Vec<(usize, usize, String)> = entities
         .iter()
-        .filter(|e| e.entity_type == "class")
+        .filter(|e| e.entity_type == "class" || e.entity_type == "interface")
         .filter_map(|e| Some((e.start_byte?, e.end_byte?, e.id.clone())))
         .collect();
 
@@ -78,6 +79,7 @@ pub(super) fn extract_abap_fallback_entities(
     let mut open_blocks: Vec<OpenBlock> = Vec::new();
     let mut open_type: Option<OpenType> = None;
     let mut open_data: Option<OpenType> = None;
+    let mut open_constant: Option<OpenType> = None;
     let top_include = is_abap_top_include(file_path);
     let mut class_blocks: Vec<ClassBlock> = Vec::new();
     let mut open_class: Option<ClassBlock> = None;
@@ -94,6 +96,9 @@ pub(super) fn extract_abap_fallback_entities(
         }
         if keyword != "DATA" {
             open_data = None;
+        }
+        if keyword != "CONSTANTS" {
+            open_constant = None;
         }
 
         match keyword.as_str() {
@@ -218,6 +223,9 @@ pub(super) fn extract_abap_fallback_entities(
                 let Some(class_id) = innermost_class(&classes, head.start_byte) else {
                     continue;
                 };
+                if open_method.is_some() {
+                    continue;
+                }
                 found.extend(declarator_entities(
                     file_path,
                     source,
@@ -227,6 +235,26 @@ pub(super) fn extract_abap_fallback_entities(
                     "type",
                     Some(class_id),
                     &mut open_type,
+                ));
+            }
+            // A class's or interface's constants, and the global constants of
+            // a `TOP` include, by the same rule as its `DATA` below.
+            "CONSTANTS" => {
+                let class_id = innermost_class(&classes, head.start_byte);
+                if open_method.is_some()
+                    || class_id.is_none() && !(top_include && open_blocks.is_empty())
+                {
+                    continue;
+                }
+                found.extend(declarator_entities(
+                    file_path,
+                    source,
+                    &code,
+                    &statement,
+                    head.start_byte,
+                    "constant",
+                    class_id,
+                    &mut open_constant,
                 ));
             }
             // Global data of a function group or program: the `DATA` of its
@@ -250,6 +278,7 @@ pub(super) fn extract_abap_fallback_entities(
     }
 
     class_blocks.extend(open_class);
+    reconcile_declarations(entities, &mut found);
     reconcile_methods(file_path, source, &class_blocks, entities, &mut found);
 
     if found.is_empty() {
@@ -602,6 +631,25 @@ fn declarator_entity(
     )
 }
 
+/// Drop the `type` and `constant` entities read off the statements that the
+/// grammar already gave: one that has the same type and parent and overlaps
+/// the fallback's range is the same declaration. The grammar's entity wins,
+/// as a method's does in `reconcile_methods`; the fallback keeps what the
+/// grammar lost, in the files and classes it fails on.
+fn reconcile_declarations(entities: &[SemanticEntity], found: &mut Vec<SemanticEntity>) {
+    found.retain(|f| {
+        if f.entity_type != "type" && f.entity_type != "constant" {
+            return true;
+        }
+        !entities.iter().any(|e| {
+            e.entity_type == f.entity_type
+                && e.parent_id == f.parent_id
+                && e.start_byte < f.end_byte
+                && f.start_byte < e.end_byte
+        })
+    });
+}
+
 /// Reconcile the `METHOD` blocks read off the statements with the `method`
 /// entities the tree walk found, so that every method entity is one block.
 ///
@@ -792,6 +840,43 @@ fn fallback_entity(
     start_byte: usize,
     end_byte: usize,
 ) -> SemanticEntity {
+    let mut entity = text_entity(file_path, source, entity_type, name, parent_id, start_byte, end_byte);
+    entity.metadata = Some(BTreeMap::from([(
+        METADATA_SOURCE.0.to_string(),
+        METADATA_SOURCE.1.to_string(),
+    )]));
+    entity
+}
+
+/// An entity with no node of its own to hash, so its hashes are over its text
+/// (see `structural_hash`). Untagged: the grammar's `TYPES` and `CONSTANTS`
+/// (`abap_declarations`) are built here too, from the nodes that span them.
+pub(super) fn text_declaration(
+    file_path: &str,
+    source: &[u8],
+    entity_type: &str,
+    name: (usize, usize),
+    parent_id: &str,
+    start_byte: usize,
+    end_byte: usize,
+) -> SemanticEntity {
+    let word = Word {
+        text: String::from_utf8_lossy(&source[name.0..name.1]).trim().to_string(),
+        start_byte: name.0,
+        end_byte: name.1,
+    };
+    text_entity(file_path, source, entity_type, word, Some(parent_id), start_byte, end_byte)
+}
+
+fn text_entity(
+    file_path: &str,
+    source: &[u8],
+    entity_type: &str,
+    name: Word,
+    parent_id: Option<&str>,
+    start_byte: usize,
+    end_byte: usize,
+) -> SemanticEntity {
     let content = String::from_utf8_lossy(&source[start_byte..end_byte]).into_owned();
     let structural = structural_hash(source, &name, start_byte, end_byte);
     SemanticEntity {
@@ -808,10 +893,7 @@ fn fallback_entity(
         end_line: line_number_for_byte(source, end_byte.saturating_sub(1)),
         start_byte: Some(start_byte),
         end_byte: Some(end_byte),
-        metadata: Some(BTreeMap::from([(
-            METADATA_SOURCE.0.to_string(),
-            METADATA_SOURCE.1.to_string(),
-        )])),
+        metadata: None,
     }
 }
 

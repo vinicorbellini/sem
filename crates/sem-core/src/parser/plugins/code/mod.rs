@@ -1,3 +1,4 @@
+pub(crate) mod abap_declarations;
 pub(crate) mod abap_fallback;
 pub mod abap_name;
 pub mod abap_include;
@@ -2074,7 +2075,11 @@ return M
     fn test_abap_fixture_intf() {
         assert_eq!(
             abap_fixture_entities("zif_fx_order.intf.abap"),
-            abap_expect(&[("interface", "zif_fx_order", None)])
+            abap_expect(&[
+                ("interface", "zif_fx_order", None),
+                ("type", "ty_amount", Some("zif_fx_order")),
+                ("constant", "c_status_open", Some("zif_fx_order")),
+            ])
         );
     }
 
@@ -2376,7 +2381,11 @@ return M
     fn abap_fixture_1_3_interface() {
         assert_eq!(
             abap_fixture_rows("zif_fx_order.intf.abap"),
-            vec![abap_row("interface", "zif_fx_order", 1, 14)]
+            vec![
+                abap_row("interface", "zif_fx_order", 1, 14),
+                abap_row("type", "ty_amount", 3, 3),
+                abap_row("constant", "c_status_open", 5, 5),
+            ]
         );
     }
 
@@ -2390,14 +2399,14 @@ return M
         let code = "INTERFACE zif_demo\n  PUBLIC .\n\n  CONSTANTS c_label TYPE string VALUE 'x' ##NO_TEXT.\n\n  METHODS run.\nENDINTERFACE.\n";
         assert_eq!(
             abap_rows(code, "zif_demo.intf.abap"),
-            vec![abap_row("interface", "zif_demo", 1, 7)]
+            vec![abap_row("interface", "zif_demo", 1, 7), abap_row("constant", "c_label", 4, 4)]
         );
 
         // The same without the pragma parses cleanly and keeps its name.
         let code = "INTERFACE zif_demo\n  PUBLIC .\n\n  CONSTANTS c_label TYPE string VALUE 'x'.\n\n  METHODS run.\nENDINTERFACE.\n";
         assert_eq!(
             abap_rows(code, "zif_demo.intf.abap"),
-            vec![abap_row("interface", "zif_demo", 1, 7)]
+            vec![abap_row("interface", "zif_demo", 1, 7), abap_row("constant", "c_label", 4, 4)]
         );
     }
 
@@ -2461,6 +2470,150 @@ DATA gv_global TYPE i.
         assert_eq!(by_name("mv_x").content, "DATA mv_x TYPE i.");
         assert_eq!(by_name("ty_c").content, "types ty_c type i.");
         assert_eq!(by_name("ty_a").content, "TYPES: ty_a TYPE i,");
+    }
+
+    #[cfg(feature = "lang-abap")]
+    fn abap_decl_sources(code: &str, file: &str, entity_type: &str) -> Vec<(String, Option<String>)> {
+        CodeParserPlugin
+            .extract_entities(code, file)
+            .iter()
+            .filter(|e| e.entity_type == entity_type)
+            .map(|e| (e.name.clone(), e.metadata.as_ref().and_then(|m| m.get("source").cloned())))
+            .collect()
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_fixture_1_3_constants() {
+        // CONSTANTS, single and chained, are `constant` entities of a class's
+        // sections and of an interface; a `BEGIN OF ... END OF` block is one
+        // entity named after the structure, in one chain or spread over
+        // statements. In a method body and in a program they are not entities.
+        let code = "\
+CLASS zcl_c DEFINITION PUBLIC.
+  PUBLIC SECTION.
+    CONSTANTS c_one TYPE i VALUE 1.
+    CONSTANTS: c_a TYPE i VALUE 1,
+               c_b TYPE string VALUE 'x'.
+    CONSTANTS: BEGIN OF c_s,
+                 x TYPE i VALUE 1,
+                 y TYPE i VALUE 2,
+               END OF c_s.
+    CONSTANTS BEGIN OF c_o.
+    CONSTANTS   z TYPE i VALUE 1.
+    CONSTANTS END OF c_o.
+    METHODS run.
+  PRIVATE SECTION.
+    CONSTANTS c_p TYPE i VALUE 5.
+ENDCLASS.
+
+CLASS zcl_c IMPLEMENTATION.
+  METHOD run.
+    CONSTANTS lc_local TYPE i VALUE 1.
+  ENDMETHOD.
+ENDCLASS.
+
+CONSTANTS gc_global TYPE i VALUE 1.
+";
+        assert_eq!(
+            abap_rows(code, "zcl_c.clas.abap"),
+            vec![
+                abap_row("class", "zcl_c", 1, 22),
+                abap_row("constant", "c_one", 3, 3),
+                abap_row("constant", "c_a", 4, 4),
+                abap_row("constant", "c_b", 5, 5),
+                abap_row("constant", "c_s", 6, 9),
+                abap_row("constant", "c_o", 10, 12),
+                abap_row("constant", "c_p", 15, 15),
+                abap_row("method", "run", 19, 21),
+            ]
+        );
+        // All of them come from the grammar.
+        assert!(abap_decl_sources(code, "zcl_c.clas.abap", "constant")
+            .iter()
+            .all(|(_, source)| source.is_none()));
+        let entities = CodeParserPlugin.extract_entities(code, "zcl_c.clas.abap");
+        let class_id = &entities[0].id;
+        for e in entities.iter().filter(|e| e.entity_type == "constant") {
+            assert_eq!(e.parent_id.as_ref(), Some(class_id), "{}", e.name);
+        }
+        let by_name = |n: &str| entities.iter().find(|e| e.name == n).unwrap();
+        assert_eq!(by_name("c_one").content, "CONSTANTS c_one TYPE i VALUE 1.");
+        assert_eq!(by_name("c_a").content, "CONSTANTS: c_a TYPE i VALUE 1,");
+        assert_eq!(by_name("c_b").content, "c_b TYPE string VALUE 'x'.");
+        assert!(by_name("c_s").content.starts_with("CONSTANTS: BEGIN OF c_s,"));
+        assert!(by_name("c_s").content.ends_with("END OF c_s."));
+
+        // An interface's constants nest under the interface.
+        let code = "INTERFACE zif_c PUBLIC.\n  CONSTANTS: BEGIN OF c_k,\n               a TYPE i VALUE 1,\n             END OF c_k.\n  CONSTANTS c_z TYPE i VALUE 2.\nENDINTERFACE.\n";
+        let entities = CodeParserPlugin.extract_entities(code, "zif_c.intf.abap");
+        assert_eq!(
+            abap_rows(code, "zif_c.intf.abap"),
+            vec![
+                abap_row("interface", "zif_c", 1, 6),
+                abap_row("constant", "c_k", 2, 4),
+                abap_row("constant", "c_z", 5, 5),
+            ]
+        );
+        assert_eq!(entities[1].parent_id.as_ref(), Some(&entities[0].id));
+
+        // A `TOP` include's top-level constants are entities, like its `DATA`;
+        // they come from the fallback, tagged.
+        let code = "CONSTANTS gc_a TYPE i VALUE 1.\nDATA gv_b TYPE i.\n";
+        assert_eq!(
+            abap_decl_sources(code, "zfx_fg.fugr.lzfx_fgtop.abap", "constant"),
+            vec![("gc_a".to_string(), Some("abap-fallback".to_string()))]
+        );
+        assert!(abap_decl_sources(code, "zfx_other.prog.abap", "constant").is_empty());
+    }
+
+    #[test]
+    #[cfg(feature = "lang-abap")]
+    fn abap_chained_types_come_from_the_grammar() {
+        // A chained `TYPES:` under a class is one `type` per name, read off
+        // the grammar's nodes, so none is tagged as the fallback's. The fallback
+        // still reads a class the grammar fails on.
+        let code = "\
+CLASS zcl_t DEFINITION PUBLIC.
+  PUBLIC SECTION.
+    TYPES: ty_a TYPE i,
+           ty_b TYPE string,
+           BEGIN OF ty_s,
+             id TYPE i,
+           END OF ty_s,
+           ty_c TYPE ty_s.
+    TYPES BEGIN OF ty_old.
+    TYPES   f TYPE i.
+    TYPES END OF ty_old.
+    METHODS run.
+ENDCLASS.
+";
+        assert_eq!(
+            abap_rows(code, "zcl_t.clas.abap"),
+            vec![
+                abap_row("class", "zcl_t", 1, 13),
+                abap_row("type", "ty_a", 3, 3),
+                abap_row("type", "ty_b", 4, 4),
+                abap_row("type", "ty_s", 5, 7),
+                abap_row("type", "ty_c", 8, 8),
+                abap_row("type", "ty_old", 9, 11),
+            ]
+        );
+        assert_eq!(
+            abap_decl_sources(code, "zcl_t.clas.abap", "type"),
+            ["ty_a", "ty_b", "ty_s", "ty_c", "ty_old"].map(|n| (n.to_string(), None))
+        );
+
+        // A class the grammar fails on (`ty_x` has no type the grammar reads)
+        // still gets its types from the fallback, and none twice.
+        let code = "CLASS zcl_u DEFINITION PUBLIC.\n  PUBLIC SECTION.\n    TYPES ty_ok TYPE i.\n    TYPES ty_bad TYPE ##??\n    TYPES ty_after TYPE i.\nENDCLASS.\n";
+        let sources = abap_decl_sources(code, "zcl_u.clas.abap", "type");
+        let mut names: Vec<_> = sources.iter().map(|(n, _)| n.as_str()).collect();
+        let total = names.len();
+        names.sort_unstable();
+        names.dedup();
+        assert_eq!(names.len(), total, "a type twice: {sources:?}");
+        assert!(names.contains(&"ty_ok"), "{sources:?}");
     }
 
     #[test]
@@ -4154,13 +4307,14 @@ DATA gv_global TYPE i.
         // variables however they are written (a chained `DATA:` part, a
         // structure, `CLASS-DATA` single or chained), and the methods after the
         // definition stay the grammar's. The structure's components are not
-        // attributes, and `TYPES` still come from the fallback.
+        // attributes, and `TYPES` and `CONSTANTS` are entities too.
         let code = "CLASS ltcl_demo DEFINITION FINAL FOR TESTING DURATION SHORT RISK LEVEL HARMLESS.\n  PRIVATE SECTION.\n    INTERFACES: zif_a, zif_b.\n    TYPES: BEGIN OF ty_s,\n        id TYPE dokil-id,\n      END OF ty_s.\n    CONSTANTS c_max TYPE i VALUE 3.\n    DATA: mv_a TYPE i,\n      BEGIN OF ms_called,\n        popup TYPE abap_bool,\n      END OF ms_called.\n    CLASS-DATA: go_x TYPE REF TO zcl_x.\n    CLASS-DATA gv_y TYPE string.\n    METHODS: setup,\n      first_test FOR TESTING RAISING zcx_error.\nENDCLASS.\n\nCLASS ltcl_demo IMPLEMENTATION.\n  METHOD setup.\n  ENDMETHOD.\n  METHOD first_test.\n  ENDMETHOD.\nENDCLASS.\n";
         assert_eq!(
             abap_rows(code, "zcl_demo.clas.testclasses.abap"),
             vec![
                 abap_row("class", "ltcl_demo", 1, 23),
                 abap_row("type", "ty_s", 4, 6),
+                abap_row("constant", "c_max", 7, 7),
                 abap_row("variable", "mv_a", 8, 8),
                 abap_row("variable", "ms_called", 9, 11),
                 abap_row("variable", "go_x", 12, 12),

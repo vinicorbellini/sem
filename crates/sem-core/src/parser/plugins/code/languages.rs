@@ -1294,9 +1294,14 @@ static ABAP_CONFIG: LanguageConfig = LanguageConfig {
     // (`class_implementation`); `method_implementation` is `METHOD … ENDMETHOD`
     // and `function_implementation` a function module's `FUNCTION … ENDFUNCTION`.
     // `report_statement` is `REPORT zfoo.` and `variable_declaration` a `DATA`
-    // statement, kept only inside a class's sections. The grammar has no node
-    // for `PROGRAM`, `FORM`, `MODULE`, `DEFINE` or `TYPES`; those come from
-    // `abap_fallback.rs`, as do the `METHOD` blocks its error recovery loses.
+    // statement, kept only inside a class's sections. `types_declaration` and
+    // `constants_declaration`, and their chained forms, are the `type` and
+    // `constant` entities of a class's sections and of an interface; a chain
+    // is flat, so they are read by one pass over the section
+    // (`abap_declarations.rs`), not node by node. The grammar has no node for
+    // `PROGRAM`, `FORM`, `MODULE` or `DEFINE`; those come from
+    // `abap_fallback.rs`, as do the `METHOD` blocks, `TYPES` and `CONSTANTS`
+    // its error recovery loses.
     entity_node_types: &[
         "report_statement",
         "class_declaration",
@@ -1305,6 +1310,10 @@ static ABAP_CONFIG: LanguageConfig = LanguageConfig {
         "method_implementation",
         "function_implementation",
         "variable_declaration",
+        "types_declaration",
+        "chained_types_declaration",
+        "constants_declaration",
+        "chained_constants_declaration",
     ],
     // A class definition's `DATA` sits in its visibility sections. `CLASS x
     // IMPLEMENTATION` holds its METHOD blocks directly, with no body node in

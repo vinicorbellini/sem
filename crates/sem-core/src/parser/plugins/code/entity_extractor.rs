@@ -1,5 +1,6 @@
 use tree_sitter::{Node, Tree};
 
+use super::abap_declarations::{is_declaration_node, push_abap_declarations};
 use super::abap_fallback::extract_abap_fallback_entities;
 use super::abap_name::parse_abapgit_name;
 use super::languages::LanguageConfig;
@@ -578,7 +579,10 @@ fn visit_node(
             continue;
         }
 
-        if config.entity_node_types.contains(&node_type) && !is_abap_local_data(node, config) {
+        if config.entity_node_types.contains(&node_type)
+            && !is_abap_local_data(node, config)
+            && !(config.id == "abap" && is_declaration_node(node_type))
+        {
             if let Some(name) = extract_name(node, source) {
                 let name = qualify_hcl_name(&name, node_type, parent_id, suppression_context);
                 let entity_type = map_entity_type(node, config);
@@ -681,6 +685,9 @@ fn visit_node(
                     let mut cursor = body_owner.walk();
                     for child in body_owner.named_children(&mut cursor) {
                         if config.container_node_types.contains(&child.kind()) {
+                            if config.id == "abap" {
+                                push_abap_declarations(child, file_path, source, &entity_id, entities);
+                            }
                             let mut inner_cursor = child.walk();
                             let nested: Vec<_> = child.named_children(&mut inner_cursor).collect();
                             for n in nested.into_iter().rev() {
@@ -691,6 +698,11 @@ fn visit_node(
                                 ));
                             }
                         }
+                    }
+
+                    // An interface's `TYPES` and `CONSTANTS` are direct children.
+                    if config.id == "abap" && node_type == "interface_declaration" {
+                        push_abap_declarations(node, file_path, source, &entity_id, entities);
                     }
 
                     // ABAP `CLASS x IMPLEMENTATION` has no body node to declare as a
@@ -2796,6 +2808,9 @@ fn map_node_type(tree_sitter_type: &str) -> &str {
             "variable"
         }
         "const_declaration" | "const_item" => "constant",
+        // ABAP's `TYPES` and `CONSTANTS`, single and chained
+        "types_declaration" | "chained_types_declaration" => "type",
+        "constants_declaration" | "chained_constants_declaration" => "constant",
         "signature" => "signature",
         "instance" => "instance",
         "data_type" | "newtype" | "data_family" => "type",
