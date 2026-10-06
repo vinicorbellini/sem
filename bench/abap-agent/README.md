@@ -28,7 +28,11 @@ How the targets were picked is in each task file's `selection` field. In short:
 - **B3**: four squash-merged PRs from the 300 commits before the pinned one.
 
 **Ground truth status.** `whereused.json` does not exist yet; it will come from `sapcli whereused`.
-Until it does, B1 rows carry `error = no ground truth yet` and an empty score. The answers are kept
+Until it does, B1 is scored against `ground_truth/whereused.grep.json`, the hand-checked text
+where-used of story 2.7 (`docs/abap/census-gate2.md`), which `tasks/b1_whereused.json` points to. It is
+`crates/sem-core/tests/fixtures/abap/inside-sap/whereused.grep.json` converted with
+`python3 scripts/abap-whereused-convert.py to-harness ... --tasks bench/abap-agent/tasks/b1_whereused.json`.
+B1 rows from before it carry `error = no ground truth yet` and an empty score. The answers are kept
 in `results.jsonl` (`final_text`), so they can be scored later without rerunning. Convert sapcli's
 output to:
 

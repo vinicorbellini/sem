@@ -1,8 +1,10 @@
 # Inside-SAP drop zone
 
-Files an agent with access to a real SAP system will add here later. Nothing
-else lives in this directory until then.
+Files an agent with access to a real SAP system will add here later, and the
+text where-used that stands in for the first of them until then.
 
-- `whereused.json`: `sapcli whereused` output for the 30 study methods, as a JSON object keyed by the method's `CLASS=>METHOD` (or `CLASS~METHOD` for interface methods), each value the array of `{ "object": "<abapGit name>", "type": "<TADIR type>", "include": "<include or method>", "line": <int> }` references sapcli returns.
+- `whereused.grep.json`: the fallback ground truth of story 2.7, written by `scripts/abap-whereused-grep.py truth` (no sem stripper or graph, every row read by hand; see `docs/abap/census-gate2.md`). Same schema as `whereused.json` below, for the 30 study methods and the ten B.1 targets, with `include` already the calling method (case-folded) and, per row, `file`, `caller` (local class and method as written), `shape` (`arrow`, `static`, `tilde`, `call_method`, `bare`) and `adjudicated`. Its `_meta` key holds the commit, each target's kind, stratum and grep counts, the sites dropped for their receiver and the literals that name the method; readers skip keys that start with `_`. `scripts/abap-whereused-compare.py` prefers `whereused.json` when it exists.
+
+- `whereused.json`: `sapcli whereused` output for the 30 study methods (and the ten B.1 targets), as a JSON object keyed by the method's `CLASS=>METHOD` (or `CLASS~METHOD` for interface methods), each value the array of `{ "object": "<abapGit name>", "type": "<TADIR type>", "include": "<include or method>", "line": <int> }` references sapcli returns. `scripts/abap-whereused-convert.py to-harness` turns it into `bench/abap-agent`'s shape; a method include (`...CM001`) needs `--method-map` from TMDIR, as its name does not say the method.
 - `parse-error-census.json`: a JSON object `{ "scanned": <int>, "files": [ ... ] }`, where `files` holds one `{ "file": "<abapGit file name>", "errors": <int>, "first_error": { "line": <int>, "column": <int>, "snippet": "<source text>" } }` per source file the tree-sitter grammar parses with errors (clean files are omitted) and `scanned` is the total number of files parsed.
 - `grammar-bugs/<construct>.abap`: one minimal, syntactically valid ABAP snippet per grammar failure, named after the construct (for example `inline-declaration-in-let.abap`), starting with a `* construct: ...` comment line and a second comment line stating what the grammar reports.
