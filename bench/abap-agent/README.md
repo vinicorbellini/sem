@@ -18,6 +18,7 @@ The arm order alternates by repetition.
 | Class | Tasks | Asks | Scored by |
 |---|---|---|---|
 | B1 where-used | 10 (`tasks/b1_whereused.json`) | list every method that calls X, with file and line | precision/recall of calling methods against `ground_truth/whereused.json` |
+| B1A where-used, ambiguous | `tasks/b1a_whereused.json` (Gate 2b; skipped while the file is absent) | as B1, on targets where a text search is ambiguous | as B1, against the task file's `ground_truth` (`ground_truth/whereused-ambiguous.json`) |
 | B2 change-and-verify | 6 (`tasks/b2_change.json`) | add mandatory parameter p to method X, update every caller, make the tests pass | hidden tests and `npm run unit` pass, test classes the agent ran, callers missed |
 | B3 review | 4 (`tasks/b3_review.json`) | summarise what merged PR #n changed and what it could break | changed entities and callers left behind against `ground_truth/b3_rubric.json` |
 
@@ -63,12 +64,12 @@ python3 bench/abap-agent/run.py --checkpoint gate1 --class B1 --task b1_03 --rep
 
 | Flag | Meaning |
 |---|---|
-| `--checkpoint baseline\|gate1\|gate2` | Written to every row; required for a real run. |
+| `--checkpoint baseline\|gate1\|gate2\|gate2b` | Written to every row; required for a real run. |
 | `--arm grep\|sem\|both` | Which arms to run (default both). |
-| `--class B1\|B2\|B3\|all` | Which task classes (default all); `--task b2_04` (repeatable) narrows to single tasks. |
+| `--class B1\|B1A\|B2\|B3\|all` | Which task classes (default all); `--task b2_04` (repeatable) narrows to single tasks. A class whose task file is absent is skipped with one line. |
 | `--model` | Passed to `claude --model` (default `claude-sonnet-5-5`). |
 | `--reps` | Repetitions per task per arm (default 3). |
-| `--brief` | Add one paragraph to the **sem arm's** prompt naming `sem_find`, `sem_impact` and `sem_certify` and telling the agent to prefer them over grep (`BRIEF` in `run.py`; see "Briefing"). The grep arm's prompt is unchanged. Default off. Recorded in the `brief` column. |
+| `--brief [sem-first]` | Add one paragraph to the **sem arm's** prompt naming `sem_find`, `sem_impact` and `sem_certify`. Plain `--brief` tells the agent to prefer them over grep (`BRIEF` in `run.py`); `--brief sem-first` tells it to ask `sem_find` first and grep only to check what it names (`BRIEF_SEM_FIRST`; see "Briefing"). The grep arm's prompt is unchanged. Default off. Recorded in the `brief` column. |
 | `--dry-run` | Everything except calling `claude`. It prepares the checkouts, writes each sem run's MCP config, and prints each run's working directory, exact command line and prompt. For the sem arm it starts `sem mcp` once, lists its tools and calls `sem_find` (B1, B2) or `sem_certify` (B3). It scores the untouched checkout. B2 scoring runs the unit suite, so expect about 30 s per B2 run. |
 | `--cap-usd` | Stop once the cumulative `total_cost_usd` reaches the cap (default 30; see below). |
 | `--abapgit` | abapGit clone to copy from (default `/tmp/claude-0/abapGit`). It is cloned, never modified. |
@@ -155,12 +156,12 @@ commit results with `git add -f bench/abap-agent/results.csv bench/abap-agent/re
 | Column | Meaning |
 |---|---|
 | `timestamp` | UTC, when the run finished. |
-| `checkpoint` | `baseline`, `gate1` or `gate2` (`dry-run` for dry runs). |
+| `checkpoint` | `baseline`, `gate1`, `gate2` or `gate2b` (`dry-run` for dry runs). |
 | `build` | sem commit measured: `git rev-parse HEAD` of this repo, `-dirty` if `crates/` has uncommitted changes. Build the binary from that commit. |
 | `sem_version` | `sem --version` of the binary that served MCP. |
 | `abapgit_commit` | Pinned abapGit commit. |
 | `model`, `arm`, `task_class`, `task_id`, `rep` | Which run. |
-| `brief` | 1 when the run's prompt carried the sem briefing (`--brief`, sem arm only), else 0. Baseline rows are 0. Compare only rows with the same `brief`. |
+| `brief` | Which sem briefing the run's prompt carried (sem arm only): `1` for `--brief`, `sem-first` for `--brief sem-first`, else `0`. Baseline rows and every grep row are 0. Compare only rows with the same `brief`. |
 | `dry_run` | 1 for `--dry-run` rows. |
 | `input_tokens` | Uncached input tokens, summed over the run's requests (`usage.input_tokens`). |
 | `output_tokens` | Output tokens, thinking included (`usage.output_tokens`). |
@@ -203,6 +204,17 @@ This is the same lever sem's own benchmark calls a briefing. Briefed and unbrief
 different questions (does sem help when the agent is told to use it, vs. when it is left to find
 the tools), so each gets its own rows (`brief` column) and its own run id; apply the adoption rule
 to one `brief` value at a time, against the grep arm of the same checkpoint.
+
+`--brief sem-first` (`BRIEF_SEM_FIRST`, Gate 2b) is a second briefing, because Gate 2's briefed sem
+arm ran grep next to `sem_find` instead of in place of it. It adds this paragraph to the sem arm only:
+
+> Besides the usual tools you have three sem tools for this code base: sem_find, sem_impact and sem_certify. For where-used questions (who calls a method) call sem_find with mode "callers" first and use its answer as the caller list. Use Grep only if sem_find returns an error or says INCOMPLETE, and then only to check the possible callers it names, not to search the code base again. When sem_find reports the line of each call, use those lines; otherwise read the calling method's range for the line. For other questions, sem_impact lists what depends on an entity and which tests to run, and sem_certify summarises what a commit or range changed.
+
+Its rows carry `brief` = `sem-first` and never mix with `1` rows.
+
+`summarize.py` prints a checkpoint's headline table, the sem arm's deltas against the grep arm and the
+adoption-rule verdict as Markdown: `python3 bench/abap-agent/summarize.py --checkpoint gate2b --brief sem-first`.
+It reads the scores stored in `results.csv`, not rescored ones, and leaves dry-run rows out.
 
 ## Adoption rule
 
@@ -341,6 +353,44 @@ concrete sem defect the transcripts show is the "matches N definitions" answer o
 grep; a B1/B2 set where grep is ambiguous (common names, dynamic calls, interface dispatch) is what
 it would take for this benchmark to show what sem resolves that grep cannot.
 
+## Gate 2b, pre-registered
+
+Written before any `gate2b` row exists. Gate 2's verdict was drop, but the benchmark could not show
+a difference: grep scored 1.000 on every B1 target, and the briefed sem arm ran grep next to
+`sem_find` instead of in place of it. Gate 2b changes two things: a where-used class on targets that
+are ambiguous for a text search (B1A), and the `sem-first` briefing. The sem fixes it tests
+(`sem_find` callers no longer refusing on a same-named test method, and call lines where available)
+are in the build under test; `build` and `sem_version` in each row say which.
+
+| Setting | Value |
+|---|---|
+| Checkpoint | `gate2b` |
+| Sem arm | `--brief sem-first` |
+| Repetitions | 3 per task |
+| Classes | B1A, B1, B2, B3 |
+| Model, effort | `claude-sonnet-5-5`, high, as Gate 2 |
+| Cap | 15 USD (`--cap-usd 15`) |
+
+```sh
+python3 bench/abap-agent/run.py --checkpoint gate2b --brief sem-first --class all --reps 3 --cap-usd 15
+python3 bench/abap-agent/summarize.py --checkpoint gate2b --brief sem-first
+```
+
+**Rule.** Adopt sem for the ABAP agents if either holds, both as means over the 3 repetitions:
+
+| Criterion | Sem arm against grep arm |
+|---|---|
+| B1A | success at least the grep arm's, **and** tokens read at most 85% of the grep arm's (a saving of 15% or more) |
+| B2 | wall time 30% or more lower at equal pass rate (same `tests_passed` count), **and** tokens read at most 15% higher (unchanged from Gate 2) |
+
+Otherwise drop the port. There is no third re-run. B1 and B3 are reported, not decided on.
+Tokens read is `input_tokens + cache_read_tokens + cache_write_tokens`, as before, and `summarize.py`
+computes the verdict from exactly this rule.
+
+**One-sided risk.** The B1A targets were chosen to be hard for grep. A pass says sem helps where grep
+is ambiguous, not everywhere: B1, B2 and B3 are where an ordinary agent task sits, and Gate 2 showed
+no gain there. A fail on B1A would be the stronger result, since it is the class built to favour sem.
+
 ## Known issues
 
 - **abapGit's libraries are pinned here, not by abapGit.** `abap_transpile` clones the libraries named in `test/abap_transpile.json` (`open-abap-core`, `open-abap-gui`, `open-abap-seo`, `express-icf-shim`, `abapGit-web-classic`) from their default branches on every build. On 2026-10-05 `open-abap-gui` changed (#188 to #195) and `npm run unit` started failing before any test ran (`Error: Void type: DISVARIANT` in `cl_alv_variant`), which made B2 unscorable. `abapgit-transpile-libs.json` now maps each library to its repository and its last commit before the pinned abapGit commit (2026-10-04T17:55Z). The harness clones each at that commit into `<work-dir>/libs/<name>` and rewrites `libs[]` in each checkout's `test/abap_transpile.json` from `url` to `folder`. The transpiler resolves `folder` as `path.join(cwd, folder)`, so an absolute path does not work; the harness writes it relative to the checkout. The libraries sit outside every checkout so agents' `grep` and sem's index never see them. The harness fails if the config names a library the pin file lacks, or the reverse. Re-pin on purpose only, and say so in the commit.
@@ -363,3 +413,4 @@ it would take for this benchmark to show what sem resolves that grep cannot.
 - **`sem mcp` runs standalone** (`SEM_MCP_NO_SHARED=1`), with telemetry, update checks, cloud and network off. Each run has its own checkout, and the process ends with the run.
 - **`files_read`** only sees the `Read` tool. An agent that reads with `Bash` or `Grep` looks like it read nothing, which is what both arms did in the baseline. `bytes_read` covers every tool.
 - **`test_classes_executed`** parses `Bash` output. Claude Code truncates long Bash output, and the harness also reads the untruncated `tool_use_result` when the transcript carries it. An agent that pipes `npm run unit` through `tail` still hides most test classes, as before.
+- **Scratch output is shared across runs.** Several Gate 2 B2 agents wrote scratch output to a literal `/tmp/out.txt`. The harness sets each run's working directory but not `TMPDIR`, and a hard-coded path ignores `TMPDIR` anyway, so a per-run scratch directory is more than a one-line change; it is left as is. Runs are sequential, so the file is overwritten rather than raced, but one run could read the previous run's output.

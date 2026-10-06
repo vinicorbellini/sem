@@ -4,7 +4,7 @@
 Paired agent runs on a pinned commit of abapGit: same model, same prompt, both through
 headless Claude Code (`claude -p`). One arm gets the built-in Bash, Read, Grep and Glob
 ("grep"), the other those plus the tools of `sem mcp` attached with --mcp-config ("sem").
-Three task classes: B1 where-used, B2 change-and-verify, B3 review. Every run gets a fresh
+Task classes: B1 where-used, B1A where-used on ambiguous names, B2 change-and-verify, B3 review. Every run gets a fresh
 checkout and appends one row to results.csv.
 
 Usage:
@@ -35,11 +35,11 @@ import tools  # noqa: E402
 MODEL = "claude-sonnet-5-5"
 EFFORT = "high"            # set explicitly: the default differs by model
 MAX_TURNS = 40             # claude --max-turns: a safety bound, not a target
-RUN_TIMEOUT_S = {"B1": 1800, "B2": 3600, "B3": 1800}   # wall clock per run; the process group is killed
+RUN_TIMEOUT_S = {"B1": 1800, "B1A": 1800, "B2": 3600, "B3": 1800}   # wall clock per run; the process group is killed
 REPS = 3
-CHECKPOINTS = ("baseline", "gate1", "gate2")
+CHECKPOINTS = ("baseline", "gate1", "gate2", "gate2b")
 ARMS = ("grep", "sem")
-CLASSES = ("B1", "B2", "B3")
+CLASSES = ("B1", "B1A", "B2", "B3")
 
 BENCH_DIR = Path(__file__).resolve().parent
 REPO_DIR = BENCH_DIR.parent.parent
@@ -56,6 +56,7 @@ DRY_RUN_JSONL = BENCH_DIR / "results.dry-run.jsonl"
 
 TASK_FILES = {
     "B1": BENCH_DIR / "tasks" / "b1_whereused.json",
+    "B1A": BENCH_DIR / "tasks" / "b1a_whereused.json",
     "B2": BENCH_DIR / "tasks" / "b2_change.json",
     "B3": BENCH_DIR / "tasks" / "b3_review.json",
 }
@@ -77,6 +78,19 @@ BRIEF = (
     "sem_impact lists what depends on an entity and which tests to run, and sem_certify summarises "
     "what a commit or range changed."
 )
+
+# --brief sem-first: the same for the sem arm, but where-used questions go to sem_find first and grep only
+# checks what it names. Gate 2's briefed sem arm ran grep next to sem_find, so sem's calls only added context.
+BRIEF_SEM_FIRST = (
+    "Besides the usual tools you have three sem tools for this code base: sem_find, sem_impact and "
+    "sem_certify. For where-used questions (who calls a method) call sem_find with mode \"callers\" first "
+    "and use its answer as the caller list. Use Grep only if sem_find returns an error or says INCOMPLETE, "
+    "and then only to check the possible callers it names, not to search the code base again. When sem_find "
+    "reports the line of each call, use those lines; otherwise read the calling method's range for the line. "
+    "For other questions, sem_impact lists what depends on an entity and which tests to run, and "
+    "sem_certify summarises what a commit or range changed."
+)
+BRIEFS = {"1": BRIEF, "sem-first": BRIEF_SEM_FIRST}   # the `brief` column's values; "0" is no briefing
 
 CSV_COLUMNS = [
     "timestamp", "checkpoint", "build", "sem_version", "abapgit_commit", "model", "arm", "brief",
@@ -198,12 +212,12 @@ def make_workspace(base: Path, work_dir: Path, run_id: str, commit: str) -> Path
 # ── Prompts ──────────────────────────────────────────────────────────────────
 
 
-def build_prompt(spec: dict, task: dict, brief: bool = False) -> str:
-    """Both arms get the same text; `brief` (the sem arm only, see BRIEF) adds the sem briefing paragraph."""
+def build_prompt(spec: dict, task: dict, brief: str | None = None) -> str:
+    """Both arms get the same text; `brief` (the sem arm only, a key of BRIEFS) adds that sem briefing paragraph."""
     fields = dict(task)
     if spec["class"] == "B3":
         fields["head"] = spec["abapgit_commit"][:12]
-    head = INSTRUCTIONS + "\n\n" + (BRIEF + "\n\n" if brief else "")
+    head = INSTRUCTIONS + "\n\n" + (BRIEFS[brief] + "\n\n" if brief else "")
     return head + spec["prompt_template"].format(**fields)
 
 
@@ -273,7 +287,7 @@ def agent_outcome(out: dict, stats: tools.RunStats, timeout_s: int) -> dict:
 
 
 def score(spec: dict, task: dict, answer: str, workspace: Path, base: Path, scratch: Path) -> dict:
-    if spec["class"] == "B1":
+    if spec["class"] in ("B1", "B1A"):   # same scorer and ground-truth schema
         truth = scorers.load_whereused(BENCH_DIR / spec["ground_truth"], task["id"])
         return scorers.score_b1(answer, truth)
     if spec["class"] == "B2":
@@ -344,13 +358,14 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--checkpoint", choices=CHECKPOINTS, help="Which checkpoint these runs measure.")
     parser.add_argument("--arm", choices=("grep", "sem", "both"), default="both")
-    parser.add_argument("--class", dest="task_class", choices=("B1", "B2", "B3", "all"), default="all")
+    parser.add_argument("--class", dest="task_class", choices=(*CLASSES, "all"), default="all")
     parser.add_argument("--model", default=MODEL)
     parser.add_argument("--reps", type=int, default=REPS)
     parser.add_argument("--task", action="append", help="Only this task id (repeatable), e.g. b1_03.")
-    parser.add_argument("--brief", action="store_true",
-                        help="Add the sem briefing paragraph (BRIEF) to the sem arm's prompt; the grep arm is unchanged. "
-                             "Recorded in the `brief` column: never mix briefed and unbriefed rows.")
+    parser.add_argument("--brief", nargs="?", const="1", choices=tuple(BRIEFS),
+                        help="Add a sem briefing paragraph to the sem arm's prompt; the grep arm is unchanged. "
+                             "Plain --brief is BRIEF, `sem-first` is BRIEF_SEM_FIRST. "
+                             "Recorded in the `brief` column: never mix briefings or briefed and unbriefed rows.")
     parser.add_argument("--dry-run", action="store_true",
                         help="Do everything except calling claude; print each run's command line and prompt.")
     parser.add_argument("--cap-usd", type=float, default=30.0,
@@ -369,6 +384,12 @@ def main():
     checkpoint = args.checkpoint or "dry-run"
     arms = ARMS if args.arm == "both" else (args.arm,)
     classes = CLASSES if args.task_class == "all" else (args.task_class,)
+    for c in classes:
+        if not TASK_FILES[c].is_file():
+            print(f"Class {c} skipped: {TASK_FILES[c].relative_to(BENCH_DIR)} does not exist")
+    classes = tuple(c for c in classes if TASK_FILES[c].is_file())
+    if not classes:
+        return
     work_dir = args.work_dir.resolve()
 
     prices = load_prices(args.model)
@@ -406,8 +427,8 @@ def main():
         for arm in order:
             if not args.dry_run and not budget.allows_run():
                 break
-            briefed = args.brief and arm == "sem"
-            run_id = f"{checkpoint}-{args.model}-{arm}{'-brief' if briefed else ''}-{task['id']}-r{rep}"
+            brief = args.brief if arm == "sem" else None
+            run_id = f"{checkpoint}-{args.model}-{arm}{'-brief' if brief == '1' else f'-{brief}' if brief else ''}-{task['id']}-r{rep}"
             print(f"── {task['id']} [{arm}] rep {rep} ──")
             workspace = make_workspace(base, work_dir, run_id, commit)
             mcp_path = None
@@ -415,7 +436,7 @@ def main():
             if arm == "sem":
                 mcp_path = work_dir / "mcp" / f"{run_id}.json"
                 mcp_path.write_text(json.dumps(tools.mcp_config(str(sem_binary), workspace, sem_log), indent=2))
-            prompt = build_prompt(spec, task, brief=briefed)
+            prompt = build_prompt(spec, task, brief=brief)
             session_id = str(uuid.uuid4())
             cmd = tools.claude_command(prompt, args.model, EFFORT, MAX_TURNS, arm, writes=(task_class == "B2"),
                                        session_id=session_id, mcp_config_path=mcp_path,
@@ -460,7 +481,7 @@ def main():
                 "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                 "checkpoint": checkpoint, "build": build, "sem_version": sem_version,
                 "abapgit_commit": commit[:12], "model": args.model, "arm": arm,
-                "brief": int(briefed),
+                "brief": brief or "0",
                 "task_class": task_class, "task_id": task["id"], "rep": rep, "dry_run": int(args.dry_run),
                 **usage,
                 "cost_usd": cost,
