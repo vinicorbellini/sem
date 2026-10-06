@@ -8,6 +8,7 @@ Usage:
     python3 bench/abap-agent/summarize.py --checkpoint gate2b --brief sem-first
     python3 bench/abap-agent/summarize.py --checkpoint gate2c --brief sem-find-only
     python3 bench/abap-agent/summarize.py --checkpoint gate2
+    python3 bench/abap-agent/summarize.py --checkpoint control --brief sem-first
 """
 
 import argparse
@@ -19,7 +20,7 @@ from pathlib import Path
 BENCH_DIR = Path(__file__).resolve().parent
 RESULTS_CSV = BENCH_DIR / "results.csv"
 RESULTS_JSONL = BENCH_DIR / "results.jsonl"
-CLASSES = ("B1", "B1A", "B2", "B3")
+CLASSES = ("B1", "B1A", "B2", "B3", "C1")
 
 
 def load_rows(checkpoint: str) -> list[dict]:
@@ -106,6 +107,9 @@ def verdict(checkpoint: str, by: dict) -> list[str]:
                          f"of grep (Gate 2b's criterion: at least equal success and 85% or less)")
         lines.append("\n**Reporting only.** The adoption verdict stays Gate 2b's: drop.")
         return lines
+    if checkpoint == "control":
+        # README: "Control: Rust where-used (reporting only)". It decides nothing; the Gate 2b verdict stands.
+        return ["- Reporting only: the Rust control (C1) has no adoption rule; the Gate 2b verdict (drop) is unchanged."]
     if checkpoint == "gate2b":
         g, s = pair("B1A")
         b1a = None

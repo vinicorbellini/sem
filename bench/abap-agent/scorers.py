@@ -1,6 +1,6 @@
 """Scorers for the ABAP agent benchmark.
 
-B1 where-used:      precision/recall of the calling methods against ground_truth/whereused.json.
+B1 where-used:      precision/recall of the calling methods against ground_truth/whereused.json (also B1A, and C1 on Rust).
 B2 change-and-verify: hidden tests + `npm run unit` in a scratch copy of the agent's checkout,
                     the new parameter's signature, and call sites that do not pass it.
 B3 review:          changed entities and callers left behind against ground_truth/b3_rubric.json.
@@ -20,7 +20,7 @@ import tools
 # ── Config ──────────────────────────────────────────────────────────────────
 
 LINE_TOLERANCE = 2        # B1: a reported line within this many lines of the true call matches
-TRUTH_SCOPE = "src/"       # B1: the ground truth covers src/ only; answer items elsewhere are not scored
+TRUTH_SCOPE = "src/"       # B1: the ground truth covers src/ only; answer items elsewhere are not scored (a task file's `scope` overrides it)
 NPM_UNIT_TIMEOUT_S = 1800
 HIDDEN_TEST_CLASS = "ltcl_hidden_b2"
 
@@ -47,13 +47,26 @@ def parse_final_json(text: str, key: str):
     return found
 
 
+def _is_rust(path: str) -> bool:
+    return (path or "").strip().endswith(".rs")
+
+
 def _norm_file(path: str) -> str:
-    path = (path or "").strip().replace("\\", "/").lower()
+    """ABAP paths fold case; a Rust (.rs) path keeps it, since Rust file and item names are case-sensitive."""
+    path = (path or "").strip().replace("\\", "/")
+    path = path if _is_rust(path) else path.lower()
     return path[2:] if path.startswith("./") else path
 
 
-def _method_part(name: str) -> str:
-    """'ZCL_FOO->ZIF_BAR~RUN' -> 'zif_bar~run'; 'zcl_foo=>bar' -> 'bar'; 'bar' -> 'bar'."""
+def _method_part(name: str, file: str | None = None) -> str:
+    """'ZCL_FOO->ZIF_BAR~RUN' -> 'zif_bar~run'; 'zcl_foo=>bar' -> 'bar'; 'bar' -> 'bar'.
+
+    For an item whose file is .rs: 'Type::method', 'module::function', 'Lower<'a>::expr' and
+    '<X as Trait>::m' -> the last path segment, case kept. The file is part of the scoring key,
+    so the owner adds nothing there, and Rust spells it many ways (generics, trait impls).
+    """
+    if _is_rust(file):
+        return (name or "").strip().rsplit("::", 1)[-1].strip("() ")
     name = (name or "").strip().lower()
     for sep in ("=>", "->"):
         if sep in name:
@@ -85,7 +98,7 @@ def load_whereused(path: Path, task_id: str):
     return data.get("targets", {}).get(task_id)
 
 
-def score_b1(answer: str, truth) -> dict:
+def score_b1(answer: str, truth, scope: str = TRUTH_SCOPE) -> dict:
     parsed = parse_final_json(answer, "callers")
     callers = parsed.get("callers", []) if parsed else []
     callers = [c for c in callers if isinstance(c, dict)]
@@ -97,11 +110,12 @@ def score_b1(answer: str, truth) -> dict:
     # The truth reads src/ only (story 2.7). A caller elsewhere, e.g. abapGit's test/src/, is outside its
     # scope: neither hit nor miss. On b1_04 the real call in test/src/zcl_abapgit_sap_package_test used
     # to count as a false positive in every arm (docs/abap/census-gate2.md lists it as real).
-    out_of_scope = [c for c in callers if not _norm_file(c.get("file")).startswith(TRUTH_SCOPE)]
+    # C1 (Rust) sets scope to crates/ in its task file.
+    out_of_scope = [c for c in callers if not _norm_file(c.get("file")).startswith(scope)]
     callers = [c for c in callers if c not in out_of_scope]
-    result["out_of_scope"] = sorted(f"{_norm_file(c.get('file'))}::{_method_part(c.get('method'))}" for c in out_of_scope)
-    predicted = {(_norm_file(c.get("file")), _method_part(c.get("method"))) for c in callers}
-    expected = {(_norm_file(t["file"]), _method_part(t["method"])) for t in truth}
+    result["out_of_scope"] = sorted(f"{_norm_file(c.get('file'))}::{_method_part(c.get('method'), c.get('file'))}" for c in out_of_scope)
+    predicted = {(_norm_file(c.get("file")), _method_part(c.get("method"), c.get("file"))) for c in callers}
+    expected = {(_norm_file(t["file"]), _method_part(t["method"], t["file"])) for t in truth}
     method_scores = set_scores(predicted, expected)
 
     # Line level: one-to-one, same file, within LINE_TOLERANCE.

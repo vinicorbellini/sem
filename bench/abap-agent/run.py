@@ -4,8 +4,9 @@
 Paired agent runs on a pinned commit of abapGit: same model, same prompt, both through
 headless Claude Code (`claude -p`). One arm gets the built-in Bash, Read, Grep and Glob
 ("grep"), the other those plus the tools of `sem mcp` attached with --mcp-config ("sem").
-Task classes: B1 where-used, B1A where-used on ambiguous names, B2 change-and-verify, B3 review. Every run gets a fresh
-checkout and appends one row to results.csv.
+Task classes: B1 where-used, B1A where-used on ambiguous names, B2 change-and-verify, B3 review, and C1 where-used
+on a Rust repository (the control; a task file's `repo` names the repository). Every run gets a fresh checkout and
+appends one row to results.csv.
 
 Usage:
     python3 bench/abap-agent/run.py --checkpoint baseline --arm both --class B3 --reps 1
@@ -35,11 +36,12 @@ import tools  # noqa: E402
 MODEL = "claude-sonnet-5-5"
 EFFORT = "high"            # set explicitly: the default differs by model
 MAX_TURNS = 40             # claude --max-turns: a safety bound, not a target
-RUN_TIMEOUT_S = {"B1": 1800, "B1A": 1800, "B2": 3600, "B3": 1800}   # wall clock per run; the process group is killed
+RUN_TIMEOUT_S = {"B1": 1800, "B1A": 1800, "B2": 3600, "B3": 1800, "C1": 1800}   # wall clock per run; the process group is killed
 REPS = 3
-CHECKPOINTS = ("baseline", "gate1", "gate2", "gate2b", "gate2c")
+CHECKPOINTS = ("baseline", "gate1", "gate2", "gate2b", "gate2c", "control")
 ARMS = ("grep", "sem")
-CLASSES = ("B1", "B1A", "B2", "B3")
+CLASSES = ("B1", "B1A", "B2", "B3", "C1")
+SCORED_AS_B1 = ("B1", "B1A", "C1")   # where-used: score_b1 against the task file's ground_truth
 
 BENCH_DIR = Path(__file__).resolve().parent
 REPO_DIR = BENCH_DIR.parent.parent
@@ -59,12 +61,13 @@ TASK_FILES = {
     "B1A": BENCH_DIR / "tasks" / "b1a_whereused.json",
     "B2": BENCH_DIR / "tasks" / "b2_change.json",
     "B3": BENCH_DIR / "tasks" / "b3_review.json",
+    "C1": BENCH_DIR / "tasks" / "c1_whereused.json",
 }
 
 # Identical for both arms, and sent as the head of the prompt: `claude -p` takes one prompt,
 # and Claude Code's own system prompt stays in place. The arms differ only in their tools.
 INSTRUCTIONS = (
-    "You are a software engineer working in an ABAP code base checked out on disk. "
+    "You are a software engineer working in {code_base} checked out on disk. "
     "Use the tools to inspect and, when the task asks for it, change the repository. "
     "Work until the task is complete, then give your final answer in the format the task asks for."
 )
@@ -179,8 +182,8 @@ def has_commit(repo: Path, sha: str) -> bool:
                           capture_output=True).returncode == 0
 
 
-def prepare_base(work_dir: Path, source: str, commit: str, needed: list[str], depth: int) -> Path:
-    """One pristine checkout at `commit`, with history back to every B3 commit and node_modules from the pinned lockfile."""
+def prepare_base(work_dir: Path, source: str, commit: str, needed: list[str], depth: int, b2: bool) -> Path:
+    """One pristine checkout at `commit`, with history back to every B3 commit; for B2, node_modules from the pinned lockfile."""
     base = work_dir / "base"
     if not base.exists():
         print(f"Preparing abapGit base checkout in {base} (from {source})")
@@ -196,6 +199,8 @@ def prepare_base(work_dir: Path, source: str, commit: str, needed: list[str], de
             print(f"ERROR: abapGit commits not found after fetching: {still}")
             sys.exit(1)
     run(["git", "-C", str(base), "checkout", "-q", "--detach", commit])
+    if not b2:
+        return base
     tools.clone_pinned_libs(work_dir / tools.LIBS_SUBDIR)
     if not (base / "node_modules").exists():
         print("  Installing abapGit's npm dependencies from the pinned lockfile")
@@ -204,18 +209,42 @@ def prepare_base(work_dir: Path, source: str, commit: str, needed: list[str], de
     return base
 
 
-def make_workspace(base: Path, work_dir: Path, run_id: str, commit: str) -> Path:
+def prepare_repo_base(work_dir: Path, repo: dict) -> Path:
+    """A task file's `repo` ({"source", "commit"}): one checkout of that commit alone, no other refs or history.
+
+    A shallow single-branch clone of the source's HEAD, which must be the commit (a detached worktree of it), so
+    an agent's `git log --all` cannot reach the benchmark's own branches and ground truth. Only tracked files
+    are copied, so a build's target/ never is.
+    """
+    base = work_dir / f"base-{repo['commit'][:12]}"
+    if not base.exists():
+        print(f"Preparing base checkout in {base} (from {repo['source']})")
+        work_dir.mkdir(parents=True, exist_ok=True)
+        run(["git", "clone", "-q", "--depth", "1", "--single-branch", "--no-tags",
+             f"file://{Path(repo['source']).resolve()}", str(base)])
+    head = run(["git", "-C", str(base), "rev-parse", "HEAD"]).strip()
+    if head != repo["commit"]:
+        print(f"ERROR: {base} is at {head}, the task file pins {repo['commit']}; check out the commit in {repo['source']}")
+        sys.exit(1)
+    if (base / "target").exists() or any(base.glob("crates/target")):
+        print(f"ERROR: {base} contains a target/ directory")
+        sys.exit(1)
+    return base
+
+
+def make_workspace(base: Path, work_dir: Path, run_id: str, commit: str, task_class: str) -> Path:
     workspace = work_dir / "runs" / run_id
     if workspace.exists():
         shutil.rmtree(workspace)
     workspace.parent.mkdir(parents=True, exist_ok=True)
     run(["git", "clone", "-q", "--no-hardlinks", str(base), str(workspace)])
     run(["git", "-C", str(workspace), "checkout", "-q", "--detach", commit])
-    (workspace / "node_modules").symlink_to(base / "node_modules")
-    tools.pin_transpile_libs(workspace, work_dir / tools.LIBS_SUBDIR)
-    # abapGit's .gitignore has "node_modules/", which does not match a symlink.
-    with open(workspace / ".git" / "info" / "exclude", "a") as f:
-        f.write("node_modules\n")
+    if task_class == "B2":   # abapGit's build: npm dependencies and the pinned transpiler libraries
+        (workspace / "node_modules").symlink_to(base / "node_modules")
+        tools.pin_transpile_libs(workspace, work_dir / tools.LIBS_SUBDIR)
+        # abapGit's .gitignore has "node_modules/", which does not match a symlink.
+        with open(workspace / ".git" / "info" / "exclude", "a") as f:
+            f.write("node_modules\n")
     return workspace
 
 
@@ -227,7 +256,7 @@ def build_prompt(spec: dict, task: dict, brief: str | None = None) -> str:
     fields = dict(task)
     if spec["class"] == "B3":
         fields["head"] = spec["abapgit_commit"][:12]
-    head = INSTRUCTIONS + "\n\n" + (BRIEFS[brief] + "\n\n" if brief else "")
+    head = INSTRUCTIONS.format(code_base=spec.get("code_base", "an ABAP code base")) + "\n\n" + (BRIEFS[brief] + "\n\n" if brief else "")
     return head + spec["prompt_template"].format(**fields)
 
 
@@ -297,9 +326,9 @@ def agent_outcome(out: dict, stats: tools.RunStats, timeout_s: int) -> dict:
 
 
 def score(spec: dict, task: dict, answer: str, workspace: Path, base: Path, scratch: Path) -> dict:
-    if spec["class"] in ("B1", "B1A"):   # same scorer and ground-truth schema
+    if spec["class"] in SCORED_AS_B1:   # same scorer and ground-truth schema
         truth = scorers.load_whereused(BENCH_DIR / spec["ground_truth"], task["id"])
-        return scorers.score_b1(answer, truth)
+        return scorers.score_b1(answer, truth, scope=spec.get("scope", scorers.TRUTH_SCOPE))
     if spec["class"] == "B2":
         return scorers.score_b2(task, workspace, base, BENCH_DIR / spec["hidden_tests_dir"], scratch)
     rubric = scorers.load_rubric(BENCH_DIR / spec["rubric"], task["id"])
@@ -349,7 +378,7 @@ def check_sem_mcp(sem_binary: Path, workspace: Path, log_path: Path, spec: dict,
                   mcp_tools: str | None = None) -> list[str]:
     """--dry-run: start `sem mcp` as the MCP config does, list its tools and call sem_find once."""
     target = task.get("method") or task.get("target")
-    method = target.replace("=>", "->").split("->")[-1].split("~")[-1] if target else None
+    method = target.replace("=>", "->").split("->")[-1].split("~")[-1].split("::")[-1] if target else None
     lines = []
     try:
         mcp = tools.SemMcp(str(sem_binary), workspace, log_path, mcp_tools)
@@ -359,7 +388,10 @@ def check_sem_mcp(sem_binary: Path, workspace: Path, log_path: Path, spec: dict,
         lines.append(f"sem mcp lists: {[t['name'] for t in mcp.list_tools()]}")
         start = time.time()
         if method:
-            output = mcp.call("sem_find", {"query": method, "mode": "callers"})
+            query = {"query": method, "mode": "callers"}
+            if spec.get("repo") and task.get("defined_in"):   # C1: as the sem-first briefing says, with the defining file
+                query["file"] = task["defined_in"]
+            output = mcp.call("sem_find", query)
             lines.append(f"sem_find callers {method}: {len(output.encode())} bytes, {time.time() - start:.1f}s")
         if spec["class"] == "B3":
             output = mcp.call("sem_certify", {"range": f"{task['commit']}~1..{task['commit']}"})
@@ -427,17 +459,29 @@ def main():
     build, sem_version = sem_build(sem_binary)
     claude_version = run([tools.CLAUDE, "--version"], check=False).strip() if shutil.which(tools.CLAUDE) else "-"
     specs = {c: load_tasks(c) for c in classes}
-    commit = next(iter(specs.values()))["abapgit_commit"]
-    assert all(s["abapgit_commit"] == commit for s in specs.values()), "task files pin different abapGit commits"
-    b3 = load_tasks("B3")
-    base = prepare_base(work_dir, args.abapgit, commit,
-                        [t["commit"] for t in b3["tasks"]] if "B3" in classes else [], b3["history_depth"])
+    # A task file with `repo` names its own repository and commit; the others run on the pinned abapGit commit.
+    bases, commits = {}, {}
+    abap = [c for c in classes if "repo" not in specs[c]]
+    if abap:
+        commit = specs[abap[0]]["abapgit_commit"]
+        assert all(specs[c]["abapgit_commit"] == commit for c in abap), "task files pin different abapGit commits"
+        b3 = load_tasks("B3")
+        base = prepare_base(work_dir, args.abapgit, commit,
+                            [t["commit"] for t in b3["tasks"]] if "B3" in classes else [], b3["history_depth"],
+                            b2="B2" in classes)
+        bases.update({c: base for c in abap})
+        commits.update({c: commit for c in abap})
+    for c in classes:
+        if "repo" in specs[c]:
+            bases[c] = prepare_repo_base(work_dir, specs[c]["repo"])
+            commits[c] = specs[c]["repo"]["commit"]
 
     plan = [(c, t, rep) for c in classes for t in specs[c]["tasks"]
             if not args.task or t["id"] in args.task for rep in range(args.reps)]
     csv_path, jsonl_path = (DRY_RUN_CSV, DRY_RUN_JSONL) if args.dry_run else (RESULTS_CSV, RESULTS_JSONL)
 
-    print(f"ABAP agent benchmark: grep vs sem on abapGit {commit[:12]}, through Claude Code ({claude_version})")
+    print(f"ABAP agent benchmark: grep vs sem on {', '.join(sorted({f'{commits[c][:12]} ({c})' for c in classes}))}, "
+          f"through Claude Code ({claude_version})")
     print(f"Model: {args.model} | Checkpoint: {checkpoint} | Build: {build} ({sem_version}) | sem: {sem_binary}")
     print(f"Classes: {', '.join(classes)} | Tasks: {len({(c, t['id']) for c, t, _ in plan})} | "
           f"Reps: {args.reps} | Arms: {', '.join(arms)} | Runs: {len(plan) * len(arms)} | Cap: ${args.cap_usd}")
@@ -461,7 +505,8 @@ def main():
             mcp_tools = args.mcp_tools if arm == "sem" else None
             run_id = f"{checkpoint}-{args.model}-{arm}{'-brief' if brief == '1' else f'-{brief}' if brief else ''}-{task['id']}-r{rep}"
             print(f"── {task['id']} [{arm}] rep {rep} ──")
-            workspace = make_workspace(base, work_dir, run_id, commit)
+            base, commit = bases[task_class], commits[task_class]
+            workspace = make_workspace(base, work_dir, run_id, commit, task_class)
             mcp_path = None
             sem_log = work_dir / f"{run_id}.sem-mcp.log"
             if arm == "sem":

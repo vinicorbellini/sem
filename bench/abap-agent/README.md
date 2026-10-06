@@ -11,7 +11,9 @@ repetition. Both runs use the same model, effort, turn bound and prompt:
   `crates/sem-mcp/src/server.rs`), attached with `--mcp-config` as a standalone stdio server.
 
 Every run gets a fresh clone of the pinned checkout, so an edit in one run never reaches another.
-The arm order alternates by repetition.
+The arm order alternates by repetition. One class, C1, is a control on a Rust repository (sem itself at
+upstream's merge-base `dc2cc4d7173d9f3eab87d491b351927fbe2f1f63`); see "C1 targets" and "Control: Rust where-used
+(reporting only)".
 
 ## Tasks
 
@@ -21,6 +23,7 @@ The arm order alternates by repetition.
 | B1A where-used, ambiguous | 12 (`tasks/b1a_whereused.json`) | the same, for a method whose name other classes also declare | as B1, against `ground_truth/whereused-ambiguous.json` |
 | B2 change-and-verify | 6 (`tasks/b2_change.json`) | add mandatory parameter p to method X, update every caller, make the tests pass | hidden tests and `npm run unit` pass, test classes the agent ran, callers missed |
 | B3 review | 4 (`tasks/b3_review.json`) | summarise what merged PR #n changed and what it could break | changed entities and callers left behind against `ground_truth/b3_rubric.json` |
+| C1 where-used, Rust control | 12 (`tasks/c1_whereused.json`) | B1A's question on sem's own Rust source | as B1, against `ground_truth/whereused-rust.json` |
 
 How the targets were picked is in each task file's `selection` field. In short:
 
@@ -28,6 +31,7 @@ How the targets were picked is in each task file's `selection` field. In short:
 - **B1A**: methods whose name is declared in 3 or more classes or interfaces, so a text search for the name is ambiguous. See "B1A targets".
 - **B2**: methods whose own class has a test class that runs under `npm run unit`. Each hidden test in `hidden_tests/` was checked twice. It passes against a reference implementation (the parameter added with a DEFAULT, callers untouched). It fails to build on the unchanged checkout.
 - **B3**: four squash-merged PRs from the 300 commits before the pinned one.
+- **C1**: B1A's rule carried over to Rust: functions and methods whose name is declared 3 or more times. See "C1 targets".
 
 **Ground truth status.** `whereused.json` does not exist yet; it will come from `sapcli whereused`.
 Until it does, B1 is scored against `ground_truth/whereused.grep.json`, the hand-checked text
@@ -141,7 +145,119 @@ and confirms every truth file path and every `defined_in` exists at the pinned c
 `run.py` does not run B1A yet: `CLASSES`, `--class` and `RUN_TIMEOUT_S` know B1 to B3. B1A needs the B1 path
 (scorer `score_b1`, ground truth from the task file's `ground_truth`) under the new class name.
 
-## Running
+## C1 targets
+
+Gate 2b could not say whether its result is about sem on short agent tasks or about the ABAP port: every gate ran on
+abapGit. C1 ("where-used, Rust control") asks B1A's question on a language upstream sem was built for, with the same
+harness, arms, briefing and model. The repository is sem itself at upstream's merge-base with this branch,
+`dc2cc4d7173d9f3eab87d491b351927fbe2f1f63`: 250 `.rs` files, 163k lines, all under `crates/`. The task file names
+it (`repo`), so C1 runs need no abapGit. The rule was written into `tasks/c1_whereused.json` (`selection`) before any
+candidate's callers were read:
+
+| Dimension | Threshold |
+|---|---|
+| (a) name declared several times | `fn name`, any kind (free function, inherent method, trait method, impl method), **3 or more** times in the repository's `.rs` files, tests and examples included. Every target meets it. |
+| (b) trait method, several impls | declared in a trait defined in the repository that **3 or more** `impl` blocks implement. The question is **callers of the trait method**: every call that resolves to `Trait::method`, whatever type implements it, through `dyn Trait`, a generic or `impl Trait` bound, a concrete type whose method comes from its impl of the trait, `Trait::method(x)`, or `self.method( )` inside an impl. An inherent method or free function of the same name is a different function. |
+| (c) name also used as something else | whole-word grep hits (`\bname\b`, case-sensitive) **at least twice** its call-shaped hits (a field, variable, string, module or other item). |
+| (d) short name | **under 8** characters. |
+
+Candidates are under `crates/*/src/`, outside `#[cfg(test)]` modules: methods with a `self` receiver of a repository
+trait (target `Trait::method`) or an inherent impl (`Type::method`), and free functions (`module::function`, not
+`main`). Associated functions without `self` are left out, because `Type::f(` names the type at every call from
+outside the impl, as `CLASS-METHODS` do in B1A; so are methods of impls of std and crate traits (`fmt`, `from`,
+`default`), whose calls are operators and macros. Each candidate needs **6 to 80** call-shaped grep hits (lines
+matching `\bname\s*\(`, which covers `.name(`, `::name(` and a bare `name(`, minus the `fn name(` declaration) in 3 or
+more files. Strata, assigned in this order: `trait` (b), `short` (d), `polluted` (c), `multi` (the rest); 3 picks
+each at index 0, k and 2k, k = n div 3, a used index or a picked name moving to the next index, the 75% and
+3-to-40-callers post-check and the round-robin hand-off exactly as B1A's. Callers anywhere under `crates/` count,
+`#[cfg(test)]` modules, `tests/`, `benches/` and `examples/` included, like B1A's local test classes. A call is a
+call expression in the source, including one inside a macro's arguments; a function named as a value
+(`.map(Type::method)`) and a call made only by a macro's expansion do not count. A caller is the innermost named
+`fn` (a closure belongs to the function it is written in).
+
+The walk is at the top of `ground_truth/whereused-rust.review.md`. Of the 26 candidates tried, 13 were rejected
+(12 for having 1 or 2 callers, as in B1A mostly private helpers, one for the 75% check: `graph::is_test_entity`,
+13 of 17 call-shaped hits true) and one skipped for a name already picked. No stratum ran out.
+
+| Task | Target | Stratum | Dimensions | Declared | grep hits | grep files | Call-shaped hits | True call sites | True callers |
+|---|---|---|---|---:|---:|---:|---:|---:|---:|
+| c1_01 | `Lang::lower` | trait | a, b, c, d | 8 | 74 | 26 | 8 | 3 | 3 |
+| c1_02 | `Lang::layout` | trait | a, b, c, d | 7 | 90 | 17 | 11 | 7 | 7 |
+| c1_03 | `SemanticParserPlugin::extract_entities_with_tree` | trait | a, b | 3 | 40 | 11 | 25 | 6 | 6 |
+| c1_04 | `arch_view::names` | short | a, c, d | 3 | 1070 | 92 | 42 | 9 | 3 |
+| c1_05 | `QueryIndex::lookup` | short | a, c, d | 4 | 189 | 48 | 52 | 26 | 22 |
+| c1_06 | `Lower::expr` | short | a, d | 4 | 127 | 20 | 69 | 19 | 4 |
+| c1_07 | `util::fingerprint` | polluted | a, c | 5 | 99 | 29 | 29 | 5 | 5 |
+| c1_08 | `QueryIndex::file_count` | polluted | a, c | 5 | 89 | 31 | 20 | 9 | 9 |
+| c1_09 | `FastExtractorSet::identity` | polluted | a, c | 7 | 106 | 34 | 7 | 3 | 3 |
+| c1_10 | `CloudClient::auth_header` | multi | a | 3 | 30 | 3 | 27 | 14 | 14 |
+| c1_11 | `telemetry::now_secs` | multi | a | 3 | 11 | 3 | 8 | 4 | 3 |
+| c1_12 | `SvelteLowerer::make_entity` | multi | a | 3 | 40 | 3 | 37 | 4 | 4 |
+| total | | | | | 1965 | | 335 | 109 | 83 |
+
+"grep hits" and "grep files" are lines and files of `crates/**/*.rs` with the name as a whole word, case-sensitive;
+"Call-shaped hits" narrows that to lines that look like a call of something of that name, comments and strings
+included, as a plain grep returns them. Across the twelve, 109 of 335 call-shaped hits are calls of the target (33%;
+B1A: 32%). Where B1A leaned on two classes, C1 leans on `QueryIndex` (two targets) and on `parser/calls/` (three),
+again straight from the index rule.
+
+**The prompt.** B1A's template with the ABAP wording replaced: "a checkout of the sem repository (Rust sources in a
+Cargo workspace under crates/)", "every function that calls", the answer as `Type::method` or `module::function`.
+Its clauses are B1A's: calls to other same-named functions are not calls of the target, a per-task `count_rule` says
+what counts (for a trait method, every call that resolves to it as in (b); for an inherent method, a receiver
+statically typed as that type; for a free function, a bare call where it is in scope or a path to it), and dynamic
+calls do not count, which in Rust means a function named as a value and a call made only by a macro's expansion.
+Calls in test modules, `tests/`, `benches/` and `examples/` count. The shared head of the prompt (`INSTRUCTIONS`)
+names the code base from the task file's `code_base` ("a Rust code base"; the ABAP classes keep "an ABAP code
+base", so their prompts are unchanged byte for byte). The sem-first briefing is unchanged, including its ABAP
+example, as the control requires.
+
+**The ground truth.** `ground_truth/whereused-rust.json`, B1A's schema (`targets` -> task id -> `[{method, file,
+line}]`), `crates/` only, which is every `.rs` file. Each of the 1965 whole-word hits was decided by hand against the
+receiver's declaration, and every decision is a line in `ground_truth/whereused-rust.review.md`. 1856 are not calls
+of the target: comments and strings (fixture source code in raw strings), declarations, `use` lines, variables and
+fields of the same name, and calls that resolve to another function of the name. sem was neither run nor read for
+any of it.
+
+Judgement calls a second reader should check:
+
+- `c1_01`, `c1_02`: in each of the three `impl Lang for ...`, the trait method's body is a bare `lower(tree, src)` /
+  `layout(...)`. A method is never in scope by its bare name in Rust, so these call the module's own free function
+  (`go::lower`, `rust::layout`), not the trait method. They are the trap a text search falls into here.
+- `c1_03`: a call on a concrete `CodeParserPlugin` counts, because that type's `extract_entities_with_tree` exists
+  only as its impl of the trait. 19 of the 25 call-shaped hits are the inherent
+  `ParserRegistry::extract_entities_with_tree`, a different method with the same name.
+- `c1_09`: `FastExtractorSet::identity` and the trait method `FastExtractor::identity` are declared 41 lines apart in
+  the same file; `e.identity()` in `FastExtractorSet::new` is on a `Box<dyn FastExtractor>` and calls the trait's.
+  The call in `identity_salt` is on an `Arc<FastExtractorSet>` and counts.
+- `c1_06`, `c1_10`: two files define a type of the same name. `parser/calls/go.rs`, `python.rs` and `rust.rs` each
+  have a private `struct Lower` with an `expr` method (and `FileFacts::expr` is a fourth); `sem-cli` and
+  `sem-cloud-client` each have a `CloudClient` with `auth_header`. Only `rust.rs`'s and `sem-cli`'s count.
+- `c1_04`, `c1_11`: `certify::certificate` binds a closure named `names`, and `json.rs` and `oxc_extractor.rs`
+  have test helpers named `names`; `cloud.rs`, `update.rs` and `telemetry.rs` each have a private `now_secs`.
+- The `.rs` fixtures under `crates/sem-core/tests/fixtures/` are in scope like any other file. None of their hits is
+  a call of a target.
+
+Check: `python3` loads the truth and the task file, confirms every task id has a non-empty caller list, that every
+truth file path and every `defined_in` exists at the commit (`git cat-file -e`), that the task file's `true_*`
+counts match the truth, and that scoring the truth against itself gives 1.0 with `scope` `crates/`. There is no
+test file for `scorers.py`, so the Rust normalisation is checked with:
+
+```sh
+cd bench/abap-agent && python3 -c "
+import json, scorers
+t = [{'method': 'QueryIndex::lookup', 'file': 'crates/a/src/Foo.rs', 'line': 3}]
+f = lambda m, p: scorers.score_b1(json.dumps({'callers': [{'method': m, 'file': p, 'line': 3}]}), t, scope='crates/')['success_score']
+assert f('QueryIndex::lookup', 'crates/a/src/Foo.rs') == f('lookup', './crates/a/src/Foo.rs') == f('<QueryIndex as X>::lookup', 'crates/a/src/Foo.rs') == 1.0
+assert f('QueryIndex::Lookup', 'crates/a/src/Foo.rs') == f('QueryIndex::lookup', 'crates/a/src/foo.rs') == 0.0
+a = [{'method': 'zcl_a->run', 'file': 'src/zcl_a.clas.abap', 'line': 1}]
+assert scorers.score_b1(json.dumps({'callers': [{'method': 'ZCL_A->RUN', 'file': 'SRC/ZCL_A.CLAS.ABAP', 'line': 1}]}), a)['success_score'] == 1.0
+print('ok')"
+```
+
+`score_b1` keys a Rust item on (file, last `::` segment) with case kept, so `Type::method`, `Lower<'a>::expr` and
+`<X as Trait>::m` all match; ABAP items and paths are folded to lower case as before. The 132 stored Gate 2b B1 and
+B1A answers rescore to their stored scores with the changed scorer.
 
 Runs use the **owner's Claude account**: whichever account `claude` on PATH is logged in with
 (OAuth, `claude auth`). No `ANTHROPIC_API_KEY` is needed or read. Under a subscription the USD
@@ -160,16 +276,16 @@ python3 bench/abap-agent/run.py --checkpoint gate1 --class B1 --task b1_03 --rep
 
 | Flag | Meaning |
 |---|---|
-| `--checkpoint baseline\|gate1\|gate2\|gate2b\|gate2c` | Written to every row; required for a real run. |
+| `--checkpoint baseline\|gate1\|gate2\|gate2b\|gate2c\|control` | Written to every row; required for a real run. |
 | `--arm grep\|sem\|both` | Which arms to run (default both). |
-| `--class B1\|B1A\|B2\|B3\|all` | Which task classes (default all); `--task b2_04` (repeatable) narrows to single tasks. A class whose task file is absent is skipped with one line. |
+| `--class B1\|B1A\|B2\|B3\|C1\|all` | Which task classes (default all); `--task b2_04` (repeatable) narrows to single tasks. A class whose task file is absent is skipped with one line. |
 | `--model` | Passed to `claude --model` (default `claude-sonnet-5-5`). |
 | `--reps` | Repetitions per task per arm (default 3). |
 | `--brief [sem-first\|sem-find-only]` | Add one paragraph to the **sem arm's** prompt naming `sem_find`, `sem_impact` and `sem_certify`. Plain `--brief` tells the agent to prefer them over grep (`BRIEF` in `run.py`); `--brief sem-first` tells it to ask `sem_find` first and grep only to check what it names (`BRIEF_SEM_FIRST`; see "Briefing"); `--brief sem-find-only` is the same for a server that lists `sem_find` alone, and needs `--mcp-tools sem_find`. The grep arm's prompt is unchanged. Default off. Recorded in the `brief` column. |
 | `--mcp-tools NAMES` | Comma-separated tools the sem arm's server lists, passed to `sem mcp` as `SEM_MCP_TOOLS` (e.g. `sem_find`); the others stay callable by name but are not in the agent's context. Default: all eight. Recorded in the `mcp_tools` column. |
 | `--dry-run` | Everything except calling `claude`. It prepares the checkouts, writes each sem run's MCP config, and prints each run's working directory, exact command line and prompt. For the sem arm it starts `sem mcp` once, lists its tools and calls `sem_find` (B1, B2) or `sem_certify` (B3). It scores the untouched checkout. B2 scoring runs the unit suite, so expect about 30 s per B2 run. |
 | `--cap-usd` | Stop once the cumulative `total_cost_usd` reaches the cap (default 30; see below). |
-| `--abapgit` | abapGit clone to copy from (default `/tmp/claude-0/abapGit`). It is cloned, never modified. |
+| `--abapgit` | abapGit clone to copy from (default `/tmp/claude-0/abapGit`). It is cloned, never modified. A task file with a `repo` (C1) names its own source instead. |
 | `--work-dir` | Checkouts, transcripts, MCP configs, sem logs (default `/tmp/sem-abap-agent`). |
 | `--sem-binary` | sem to serve MCP. By default `$SEM_BINARY`, then `crates/target/release/sem` in this checkout, then in the main checkout when this is a linked worktree. |
 | `--keep` | Keep each run's checkout. |
@@ -179,10 +295,12 @@ The first run prepares `<work-dir>/base`:
 1. Clone `--abapgit`.
 2. Fetch 300 commits of history from GitHub when the B3 commits are missing (a shallow clone).
 3. Check out the pinned commit.
-4. `npm ci --ignore-scripts` with `abapgit-package-lock.json` (see Known issues).
-5. Clone the transpiler's libraries at the commits in `abapgit-transpile-libs.json` into `<work-dir>/libs/<name>` (see Known issues).
+4. With B2 in the run only: `npm ci --ignore-scripts` with `abapgit-package-lock.json` (see Known issues).
+5. With B2 in the run only: clone the transpiler's libraries at the commits in `abapgit-transpile-libs.json` into `<work-dir>/libs/<name>` (see Known issues).
 
-Each run clones `base`, symlinks its `node_modules` and points its `test/abap_transpile.json` at `<work-dir>/libs`. That file is marked `skip-worktree`, so it is not in the agent's `git status` or in the patch the scorer replays.
+Each run clones `base`. A B2 run also symlinks its `node_modules` and points its `test/abap_transpile.json` at `<work-dir>/libs`. That file is marked `skip-worktree`, so it is not in the agent's `git status` or in the patch the scorer replays. Until the C1 control these two steps ran for every class; B1, B1A and B3 never use them, so their checkouts now lack the `node_modules` symlink and keep the file as abapGit has it.
+
+A task file may name its repository instead: `"repo": {"source": "<path>", "commit": "<sha>"}` (C1). The harness then prepares `<work-dir>/base-<commit, 12 characters>` as a shallow single-branch clone of the source's HEAD, which must be that commit (check it out detached in a worktree), and fails if it is not or if the checkout holds a `target/` directory. The clone has that one commit and no other refs, so an agent's `git log --all` cannot reach the benchmark's own branches. None of the abapGit steps run for it. A `repo` task file also sets `scope` (the ground truth's directory, default `src/`) and `code_base` (the shared instructions' "an ABAP code base").
 
 ### The command per run
 
@@ -214,7 +332,7 @@ Why each flag:
 The harness removes the launching Claude Code session's own variables from the child's
 environment (`PARENT_SESSION_ENV` in `tools.py`). If they are inherited, the child joins the
 parent's session id and picks up its extra directories and their CLAUDE.md files. Auth and proxy
-variables stay. Each run also has a wall-clock timeout (`RUN_TIMEOUT_S`: 30 min for B1 and B3,
+variables stay. Each run also has a wall-clock timeout (`RUN_TIMEOUT_S`: 30 min for B1, B1A, B3 and C1,
 60 min for B2). On timeout the whole process group is killed (claude, sem mcp, npm).
 
 **Prompt.** `claude -p` takes one prompt, and Claude Code keeps its own system prompt. The text the
@@ -253,10 +371,10 @@ commit results with `git add -f bench/abap-agent/results.csv bench/abap-agent/re
 | Column | Meaning |
 |---|---|
 | `timestamp` | UTC, when the run finished. |
-| `checkpoint` | `baseline`, `gate1`, `gate2`, `gate2b` or `gate2c` (`dry-run` for dry runs). |
+| `checkpoint` | `baseline`, `gate1`, `gate2`, `gate2b`, `gate2c` or `control` (`dry-run` for dry runs). |
 | `build` | sem commit measured: `git rev-parse HEAD` of this repo, `-dirty` if `crates/` has uncommitted changes. Build the binary from that commit. |
 | `sem_version` | `sem --version` of the binary that served MCP. |
-| `abapgit_commit` | Pinned abapGit commit. |
+| `abapgit_commit` | Pinned abapGit commit. On C1 rows, the commit of the task file's `repo` (`dc2cc4d7173d`, sem at upstream's merge-base); the column keeps its name. |
 | `model`, `arm`, `task_class`, `task_id`, `rep` | Which run. |
 | `brief` | Which sem briefing the run's prompt carried (sem arm only): `1` for `--brief`, `sem-first` for `--brief sem-first`, `sem-find-only` for `--brief sem-find-only`, else `0`. Baseline rows and every grep row are 0. Compare only rows with the same `brief`. |
 | `dry_run` | 1 for `--dry-run` rows. |
@@ -282,7 +400,8 @@ commit results with `git add -f bench/abap-agent/results.csv bench/abap-agent/re
 
 B1 line numbers are also scored, within ±2 lines (`line_precision`, `line_recall` in `results.jsonl`).
 B1 answer items outside `src/` (abapGit's `test/src/`) are neither hits nor misses, because the
-ground truth reads `src/` only (`TRUTH_SCOPE` in `scorers.py`; listed as `out_of_scope` in the score).
+ground truth reads `src/` only (`TRUTH_SCOPE` in `scorers.py`; listed as `out_of_scope` in the score). C1's task file sets
+`scope` to `crates/`.
 
 B3 matching (`scorers._matches`): an answer item matches a rubric entry when one of the entry's
 aliases equals a whole identifier in the item. The identifier may carry a `zcl_abapgit_` /
@@ -645,6 +764,75 @@ Grep and Bash, so `sem_find` replaces about one text search, not the read-the-re
 makes grep exact here. To reach the 85% Gate 2b asked for, the sem arm would need fewer turns than
 grep, which on B1A needs an answer the agent can take without checking, a complete verdict, more
 than a smaller listing.
+
+## Control: Rust where-used (reporting only)
+
+Checkpoint `control`, class C1, `--brief sem-first`, 3 repetitions, `claude-sonnet-5-5` at effort high through
+Claude Code 2.1.291, the same harness, arms, briefing and turn bound as Gate 2b. sem served MCP from
+`/home/user/sem/crates/target/release/sem`, built from this branch at `767f67e` (the merge of the `sem_find` callers
+fixes of 40acad8, as in Gate 2b; the binary reports `sem 0.27.0`). The rows' `build` column says `1d00678b37eb`,
+because it records the checkout the harness ran from (the commit that added C1), not the binary's. `abapgit_commit`
+is `dc2cc4d7173d`, sem at upstream's merge-base. 72 of 72 planned runs, **4.23 USD** by Claude Code's figure against
+a 6 USD cap. No run hit an error, the turn bound or the timeout, and the sem server was `connected` in every sem run.
+
+```sh
+python3 bench/abap-agent/run.py --checkpoint control --brief sem-first --class C1 --reps 3 --cap-usd 6 \
+  --sem-binary /home/user/sem/crates/target/release/sem --work-dir /tmp/sem-bench-control
+python3 bench/abap-agent/summarize.py --checkpoint control --brief sem-first
+```
+
+**What the control isolates.** Gate 2b found the sem arm reading 35% more tokens than grep on B1A, with grep at
+1.000. That can mean two things: sem does not pay for itself on a short where-used task with this model, or the ABAP
+port is what costs. C1 keeps everything but the language and the repository: the same question shape (a name
+declared 3 or more times, strata as B1A's), the same prompt clauses, the same briefing, on a Rust repository whose
+resolver is upstream's. If the gap were the port's, it should close on Rust. The targets are under "C1 targets".
+
+Per-run means, except cost (summed); deltas are the sem arm against the grep arm (`summarize.py --checkpoint
+control --brief sem-first`), with Gate 2b's B1A rows for comparison:
+
+| Class | Arm | Runs | Success | Precision | Tokens read | Output tokens | Cost (USD) | Wall time (s) | Tool calls | sem calls |
+|---|---|---|---|---|---|---|---|---|---|---|
+| C1 | grep | 36 | 1.000 | 1.000 | 45,458 | 1,664 | 2.23 | 17.1 | 4.0 | - |
+| C1 | sem (sem-first) | 36 | 1.000 | 1.000 | 53,655 (+18%) | 1,457 (-12%) | 2.00 (-10%) | 17.9 (+5%) | 3.6 (-9%) | 1.25 |
+| B1A (Gate 2b) | grep | 36 | 1.000 | 1.000 | 55,601 | 2,500 | 2.71 | 22.9 | 5.1 | - |
+| B1A (Gate 2b) | sem (sem-first) | 36 | 1.000 | 1.000 | 75,095 (+35%) | 2,225 (-11%) | 2.80 (+3%) | 25.1 (+10%) | 4.5 (-10%) | 1.0 |
+
+Tokens read per task, grep vs sem (mean of 3): c1_01 35,545 / 55,001 (+55%), c1_02 52,939 / 73,805 (+39%), c1_03
+61,766 / 73,261 (+19%), c1_04 37,843 / 46,456 (+23%), c1_05 82,269 / 48,895 (-41%), c1_06 39,959 / 61,308 (+53%),
+c1_07 41,479 / 49,873 (+20%), c1_08 73,961 / 49,974 (-32%), c1_09 35,070 / 71,564 (+104%), c1_10 23,791 / 44,014
+(+85%), c1_11 23,947 / 34,313 (+43%), c1_12 36,926 / 35,394 (-4%). Turns: 5.0 grep, 4.6 sem.
+
+**First-call context.** The first assistant message's `input_tokens + cache_read_input_tokens +
+cache_creation_input_tokens`, from the transcripts, mean over runs: grep **6,331** (6,296 to 6,465), sem **10,821**
+(10,786 to 10,955). The difference, 4,490 tokens, is the eight `sem mcp` tool schemas and the server's instructions,
+the same 4.5k as on every ABAP class; it does not depend on the language. Over the sem arm's 4.6 turns it is some
+21k tokens read, more than the whole C1 gap (8.2k), so on Rust the sem arm's tool traffic was lighter than grep's and
+the schemas alone put it over.
+
+**What `sem_find` did.** Every sem run called it first, as briefed: 42 calls in 36 runs. 27 answered with a caller
+list, and all 27 said INCOMPLETE (on names declared several times the resolver reports the possible callers it did
+not bind, as on ABAP). 10 were refusals, in 9 runs on three targets: "no entity named 'lower'" / "'layout'" on
+`c1_01` and `c1_02` (a trait method declared without a body is not an entity, so the trait targets' question cannot be
+asked), and "'identity' matches 2 definitions; pass file" on `c1_09` (4 calls in 3 runs), where both definitions are in
+the file the task names (`FastExtractorSet::identity` and a test stub's impl). The last 5 listed `lang.rs` with `in`
+after the `c1_01` / `c1_02` refusal, before the agent went to Grep. The sem arm made 1.47 Grep and 0.53 Bash calls per run (grep arm 1.94 and 1.50; B1A's sem
+arm 1.8 and 1.5). Where the answer was usable the arm was cheaper on the targets with the most call sites
+(`QueryIndex::lookup` -41%, `QueryIndex::file_count` -32%), and most expensive where it refused (`c1_09` +104%,
+`c1_01` +55%) or where grep is trivially exact (`c1_10`, fourteen `self.auth_header()` calls in one file, +85%).
+
+**What grep did.** 1.000 on all twelve targets, all 36 runs, where 33% of the call-shaped hits are calls of the
+target, as on B1A: the model read the receivers itself, including the three traps the targets were picked for (the
+bare `lower(` inside each `impl Lang`, `ParserRegistry`'s same-named method, two `CloudClient` types).
+
+**Reading.** The control reproduces Gate 2b's shape on a language upstream sem was built for: equal answers, the sem
+arm reading more context (+18% against +35%), and the gap explained by the same 4.5k-token per-turn schema cost.
+Under Gate 2b's B1A criterion (tokens read at most 85% of grep's) C1 would fail too, at 118%. So the result is mostly
+"sem does not pay for itself on short where-used tasks with this model", not "the ABAP port is the problem". What
+the port adds is the other half of the B1A gap; that it comes from the extra Bash and Grep the ABAP sem arm ran after
+its INCOMPLETE answers is inferred from the call counts above, not measured. Two findings are about sem on Rust, not about the port: a trait method without a default body has no entity,
+and `sem_find` cannot pick between two same-named methods of different types in one file by `file` alone. Neither
+moved a score. **The adoption verdict is unchanged: drop**, as Gate 2b decided; this control is reporting only and
+decides nothing.
 
 ## Known issues
 
