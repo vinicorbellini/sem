@@ -124,6 +124,113 @@ async fn run_sem(cwd: &Path, args: Vec<String>, verdict: fn(i32) -> Option<&'sta
     }
 }
 
+/// Whether `e` answers `entity_name`: the bare name, or `Class.method` addressing (a child
+/// whose parent is named by the qualifier before the final dot). Names compare as the
+/// entity's language defines it (`sem_core::parser::graph::name_matches`: ABAP folds case,
+/// every other language is exact), the same rule the CLI applies.
+fn entity_matches_name(
+    graph: &EntityGraph,
+    e: &sem_core::parser::graph::EntityInfo,
+    entity_name: &str,
+) -> bool {
+    use sem_core::parser::graph::name_matches;
+    name_matches(&e.file_path, &e.name, entity_name)
+        || entity_name.rsplit_once('.').is_some_and(|(parent_part, child_part)| {
+            name_matches(&e.file_path, &e.name, child_part)
+                && e.parent_id
+                    .as_ref()
+                    .and_then(|pid| graph.entities.get(pid))
+                    .is_some_and(|p| name_matches(&p.file_path, &p.name, parent_part))
+        })
+}
+
+/// The completeness verdict for one entity's callers, from the CLI (`sem find NAME --callers
+/// --json`, the code `caller_verdict` lives in; `sem-mcp` does not depend on `sem-cli`, and
+/// `sem_certify` shells out the same way). Returns the verdict fields (`complete`,
+/// `incomplete_because`, `checked`, `possible_callers`, `possible_caller_sites`) as one JSON
+/// object, or `None` when the CLI could not answer (the callers list is then returned as
+/// before, with no verdict).
+async fn callers_verdict(cwd: &Path, query: &str, file: Option<&str>) -> Option<serde_json::Value> {
+    let mut args = vec!["find".to_string(), query.to_string(), "--callers".to_string(), "--json".to_string()];
+    if let Some(f) = file {
+        args.extend(["--file".to_string(), f.to_string()]);
+    }
+    let cwd = cwd.to_path_buf();
+    let out = tokio::task::spawn_blocking(move || {
+        std::process::Command::new(sem_exe())
+            .args(&args)
+            .current_dir(&cwd)
+            .env("SEM_NO_PROGRESS", "1")
+            .stdin(std::process::Stdio::null())
+            .output()
+    })
+    .await
+    .ok()?
+    .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let rows: serde_json::Value = serde_json::from_slice(&out.stdout).ok()?;
+    let row = rows.as_array()?.first()?.as_object()?;
+    let mut verdict = serde_json::Map::new();
+    for key in ["complete", "incomplete_because", "checked", "possible_callers", "possible_caller_sites"] {
+        verdict.insert(key.to_string(), row.get(key)?.clone());
+    }
+    Some(serde_json::Value::Object(verdict))
+}
+
+/// The verdict block of `sem find --callers` in text, from `callers_verdict`'s JSON.
+fn render_callers_verdict(v: &serde_json::Value, cap: usize) -> String {
+    let mut o = String::new();
+    if v["complete"].as_bool().unwrap_or(false) {
+        o += &format!(
+            "  complete: no other textual path to this definition ({})\n",
+            v["checked"].as_str().unwrap_or("")
+        );
+        return o;
+    }
+    o += "  INCOMPLETE: the resolved callers above are not the whole set:\n";
+    for r in v["incomplete_because"].as_array().into_iter().flatten() {
+        o += &format!("    - {}\n", r["detail"].as_str().unwrap_or(""));
+    }
+    let possible = v["possible_callers"].as_array().map(Vec::as_slice).unwrap_or(&[]);
+    if !possible.is_empty() {
+        o += &format!(
+            "  possible callers ({} site(s) in {} entit{}), unresolved by the static graph:\n",
+            v["possible_caller_sites"].as_u64().unwrap_or(0),
+            possible.len(),
+            if possible.len() == 1 { "y" } else { "ies" }
+        );
+        for p in possible.iter().take(cap) {
+            let sites: Vec<String> = p["sites"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .take(4)
+                .map(|s| {
+                    let kind = s["kind"].as_str().unwrap_or("").replace('_', " ");
+                    match s["via"].as_str() {
+                        Some(via) => format!("L{} {kind} via `{via}`", s["line"]),
+                        None => format!("L{} {kind}", s["line"]),
+                    }
+                })
+                .collect();
+            o += &format!(
+                "    {} {} {}:{} ({})\n",
+                p["type"].as_str().unwrap_or(""),
+                p["entity"].as_str().unwrap_or(""),
+                p["file"].as_str().unwrap_or(""),
+                p["start_line"],
+                sites.join(", ")
+            );
+        }
+        if possible.len() > cap {
+            o += &format!("    … {} more (raise limit)\n", possible.len() - cap);
+        }
+    }
+    o
+}
+
 fn no_verdict(_: i32) -> Option<&'static str> {
     None
 }
@@ -669,17 +776,7 @@ impl SemServer {
         // Match the bare name, or `Class.method` addressing (a child entity
         // whose parent is named by the qualifier before the final dot). Agents
         // reach for `Class.method` naturally.
-        let qualified = entity_name.rsplit_once('.');
-        let matches = |e: &sem_core::parser::graph::EntityInfo| {
-            e.name == entity_name
-                || qualified.is_some_and(|(parent_part, child_part)| {
-                    e.name == child_part
-                        && e.parent_id
-                            .as_ref()
-                            .and_then(|pid| graph.entities.get(pid))
-                            .is_some_and(|p| p.name == parent_part)
-                })
-        };
+        let matches = |e: &sem_core::parser::graph::EntityInfo| entity_matches_name(graph, e, entity_name);
 
         if let Some(entity) = graph
             .entities
@@ -721,17 +818,7 @@ impl SemServer {
         graph: &'a EntityGraph,
         entity_name: &str,
     ) -> Result<&'a sem_core::parser::graph::EntityInfo, String> {
-        let qualified = entity_name.rsplit_once('.');
-        let matches = |e: &sem_core::parser::graph::EntityInfo| {
-            e.name == entity_name
-                || qualified.is_some_and(|(parent_part, child_part)| {
-                    e.name == child_part
-                        && e.parent_id
-                            .as_ref()
-                            .and_then(|pid| graph.entities.get(pid))
-                            .is_some_and(|p| p.name == parent_part)
-                })
-        };
+        let matches = |e: &sem_core::parser::graph::EntityInfo| entity_matches_name(graph, e, entity_name);
         let mut hits: Vec<&sem_core::parser::graph::EntityInfo> =
             graph.entities.values().filter(|e| matches(e)).collect();
         hits.sort_by(|a, b| (&a.file_path, a.start_line).cmp(&(&b.file_path, b.start_line)));
@@ -1485,13 +1572,19 @@ impl SemServer {
             };
             let mut matches: Vec<&SemanticEntity> = all_entities
                 .iter()
-                .filter(|e| e.name.contains(name_part))
+                .filter(|e| {
+                    if sem_core::parser::graph::case_insensitive_for_file(&e.file_path) {
+                        e.name.to_ascii_lowercase().contains(&name_part.to_ascii_lowercase())
+                    } else {
+                        e.name.contains(name_part)
+                    }
+                })
                 .filter(|e| want_type.is_none_or(|t| e.entity_type == t))
                 .collect();
             let dependents = graph.dependents();
             matches.sort_by(|a, b| {
                 let rank = |e: &SemanticEntity| {
-                    if e.name == name_part {
+                    if sem_core::parser::graph::name_matches(&e.file_path, &e.name, name_part) {
                         0u8
                     } else if e.name.starts_with(name_part) {
                         1
@@ -2146,7 +2239,7 @@ impl SemServer {
                     if let Ok(content) = std::fs::read_to_string(&full) {
                         if let Some(plugin) = self.registry.get_plugin(fp) {
                             let entities = plugin.extract_entities(&content, fp);
-                            if entities.iter().any(|e| e.name == params.entity_name) {
+                            if entities.iter().any(|e| sem_core::parser::graph::name_matches(&e.file_path, &e.name, &params.entity_name)) {
                                 found_in.push(fp.clone());
                             }
                         }
@@ -2648,7 +2741,7 @@ impl SemServer {
             let mut matches: Vec<_> = graph
                 .entities
                 .values()
-                .filter(|e| e.name == name)
+                .filter(|e| sem_core::parser::graph::name_matches(&e.file_path, &e.name, name))
                 .filter(|e| want_type.is_none_or(|t| e.entity_type == t))
                 .filter(|e| file_filter.is_none_or(|f| in_scope(&e.file_path, f)))
                 .collect();
@@ -2770,7 +2863,7 @@ impl SemServer {
         let mut matches: Vec<_> = graph
             .entities
             .values()
-            .filter(|e| e.name == name)
+            .filter(|e| sem_core::parser::graph::name_matches(&e.file_path, &e.name, name))
             .filter(|e| want_type.is_none_or(|t| e.entity_type == t))
             .filter(|e| file_filter.is_none_or(|f| e.file_path == f))
             .collect();
@@ -2835,11 +2928,18 @@ impl SemServer {
             callers.truncate(cap);
         }
 
+        // The verdict is the CLI's, for every language: a caller list that lies
+        // by omission must say so, and over MCP too.
+        let verdict = callers_verdict(&ctx.repo_root, query, file_filter).await;
+
         if params.format() == "json" {
-            let out = serde_json::json!({
+            let mut out = serde_json::json!({
                 "entity": row(def),
                 "callers": callers.iter().map(|e| row(e)).collect::<Vec<_>>(),
             });
+            if let (Some(obj), Some(serde_json::Value::Object(v))) = (out.as_object_mut(), verdict.clone()) {
+                obj.extend(v);
+            }
             return Ok(CallToolResult::success(vec![Content::text(
                 serde_json::to_string(&out).unwrap_or_default(),
             )]));
@@ -2850,7 +2950,11 @@ impl SemServer {
             def.entity_type, def.name, def.file_path, def.start_line
         );
         if callers.is_empty() {
-            out.push_str("  (callers: none)\n");
+            if verdict.as_ref().is_some_and(|v| !v["complete"].as_bool().unwrap_or(true)) {
+                out.push_str("  (callers: none resolved by the static graph; see below: this is NOT a proof of no callers)\n");
+            } else {
+                out.push_str("  (callers: none)\n");
+            }
         }
         for e in &callers {
             out.push_str(&format!(
@@ -2863,6 +2967,9 @@ impl SemServer {
                 "  … {} more (raise limit)\n",
                 total - callers.len()
             ));
+        }
+        if let Some(v) = &verdict {
+            out.push_str(&render_callers_verdict(v, params.limit.unwrap_or(25)));
         }
         Ok(CallToolResult::success(vec![Content::text(out)]))
     }
@@ -4814,7 +4921,7 @@ fn mcp_entity_by_name_at_ref(
 ) -> Option<SemanticEntity> {
     mcp_entities_at_ref(git, registry, sha, file_path)
         .into_iter()
-        .find(|entity| entity.name == entity_name)
+        .find(|entity| sem_core::parser::graph::name_matches(&entity.file_path, &entity.name, entity_name))
 }
 
 fn mcp_entity_by_structural_hash_at_ref(

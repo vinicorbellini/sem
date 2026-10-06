@@ -167,6 +167,10 @@ impl ContextParams {
 
 // ── Find / Grep tool parameter structs ──
 
+// No `no_default_excludes` here, though `EntitiesParams` and `ImpactAnalysisParams` have one:
+// `find` follows the CLI's `sem find`, which has no such flag either, and real ABAP repos
+// (abapGit, abap2xlsx) hold no directory the default excludes skip. A fixture copied into a
+// directory named `fixtures` would be excluded, so ABAP tests must not do that.
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct FindParams {

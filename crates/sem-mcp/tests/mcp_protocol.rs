@@ -55,6 +55,8 @@ impl McpClient {
             .current_dir(repo)
             // These tests exercise one isolated stdio server each.
             .env("SEM_MCP_NO_SHARED", "1")
+            // `sem_certify`, and the callers verdict, run the `sem` CLI found on PATH
+            .env("PATH", path_with_sem())
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
@@ -288,6 +290,14 @@ fn sem_cli_bin() -> PathBuf {
          used for sem-mcp's tests"
     );
     candidate
+}
+
+/// `PATH` with the built `sem` binary's directory first, so the server's shell-outs find it.
+fn path_with_sem() -> std::ffi::OsString {
+    let dir = sem_cli_bin().parent().unwrap().to_path_buf();
+    let mut paths = vec![dir];
+    paths.extend(std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default()));
+    std::env::join_paths(paths).expect("join PATH")
 }
 
 fn cli_json(repo: &Path, args: &[&str]) -> Value {
@@ -675,4 +685,116 @@ fn entities_query_mode_supports_format_json() {
         assert!(row["dependents"].is_u64(), "dependent count carried: {row}");
         assert!(row["file"].is_string() && row["start_line"].is_u64());
     }
+}
+
+// ── ABAP over MCP (story 2.8) ──
+
+/// The ABAP fixture files in an abapGit `src/` layout (not under a directory named `fixtures`,
+/// which the default excludes skip), committed twice: the second commit edits
+/// `zcl_fx_order.describe`.
+fn abap_repo() -> tempfile::TempDir {
+    let dir = tempfile::tempdir().expect("create tempdir");
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    git(root, &["config", "user.email", "t@t.com"]);
+    git(root, &["config", "user.name", "test"]);
+    std::fs::create_dir_all(root.join("src")).unwrap();
+    let from = Path::new(env!("CARGO_MANIFEST_DIR")).join("../sem-core/tests/fixtures/abap");
+    for stem in ["zcl_fx_order", "zcl_fx_order_sub", "zcl_fx_user", "zcl_fx_other", "zif_fx_order", "zfx_dynamic", "zfx_report"] {
+        for entry in std::fs::read_dir(&from).unwrap() {
+            let entry = entry.unwrap();
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.starts_with(&format!("{stem}.")) {
+                std::fs::copy(entry.path(), root.join("src").join(&name)).unwrap();
+            }
+        }
+    }
+    git(root, &["add", "-A"]);
+    git(root, &["commit", "-q", "-m", "abap fixtures"]);
+    let order = root.join("src/zcl_fx_order.clas.abap");
+    let edited = std::fs::read_to_string(&order).unwrap().replace("rv_text = |order", "rv_text = |ORDER");
+    std::fs::write(&order, edited).unwrap();
+    git(root, &["commit", "-q", "-am", "describe says ORDER"]);
+    dir
+}
+
+fn json_text(client: &mut McpClient, tool: &str, args: Value) -> Value {
+    let resp = client.call_tool(tool, args);
+    serde_json::from_str(&tool_text(&resp)).unwrap_or_else(|e| panic!("{tool} did not return JSON: {e}\n{resp}"))
+}
+
+fn ids(rows: &Value) -> Vec<String> {
+    let mut v: Vec<String> = rows.as_array().unwrap().iter().map(|r| r["id"].as_str().unwrap().to_string()).collect();
+    v.sort();
+    v
+}
+
+#[test]
+fn mcp_abap_serves_find_impact_certify() {
+    let repo = abap_repo();
+    let order_file = "src/zcl_fx_order.clas.abap";
+    let mut client = McpClient::spawn(repo.path());
+
+    // sem_find: the name in any case is the same entity, as the CLI answers it
+    let upper = json_text(&mut client, "sem_find", json!({"query": "ZCL_FX_ORDER", "format": "json"}));
+    let lower = json_text(&mut client, "sem_find", json!({"query": "zcl_fx_order", "format": "json"}));
+    assert_eq!(upper, lower);
+    assert_eq!(upper.as_array().unwrap().len(), 1, "{upper}");
+    assert_eq!(upper[0]["name"], "zcl_fx_order");
+    let cli = cli_json(repo.path(), &["find", "ZCL_FX_ORDER", "--json"]);
+    assert_eq!(ids(&upper), ids(&cli));
+
+    // sem_find callers on `create`: the caller from another file, and the CLI's verdict
+    let mcp = json_text(&mut client, "sem_find", json!({"query": "CREATE", "mode": "callers", "file": order_file, "format": "json"}));
+    let cli = cli_json(repo.path(), &["find", "create", "--callers", "--file", order_file, "--json"]);
+    let cli = &cli[0];
+    let callers = ids(&mcp["callers"]);
+    assert!(callers.iter().any(|id| id.starts_with("src/zcl_fx_user.clas.abap::")), "{callers:?}");
+    for id in ids(&cli["related"]) {
+        assert!(callers.contains(&id), "CLI caller {id} missing over MCP: {callers:?}");
+    }
+    for key in ["complete", "incomplete_because", "checked", "possible_callers", "possible_caller_sites"] {
+        assert_eq!(mcp[key], cli[key], "verdict field {key}");
+    }
+    assert_eq!(mcp["complete"], false, "a dynamic call reaches every method of the class");
+
+    // a method reached only by a computed call is not "(callers: none)"
+    let text = tool_text(&client.call_tool("sem_find", json!({"query": "constructor", "mode": "callers", "file": order_file})));
+    assert!(!text.contains("(callers: none)\n"), "{text}");
+    assert!(text.contains("NOT a proof of no callers") && text.contains("INCOMPLETE"), "{text}");
+    assert!(text.contains("zfx_dynamic.prog.abap") && text.contains("dynamic call"), "{text}");
+    let ctor = json_text(&mut client, "sem_callers", json!({"query": "constructor", "file": order_file, "format": "json"}));
+    assert_eq!(ctor["complete"], false);
+    assert!(!ctor["possible_callers"].as_array().unwrap().is_empty(), "{ctor}");
+
+    // sem_impact: `Class.method` in any case, tests mode, the tests the CLI lists
+    let resp = client.call_tool("sem_impact", json!({"file_path": order_file, "entity_name": "zcl_fx_order.create", "mode": "tests"}));
+    let impact = tool_text(&resp);
+    let cli = cli_json(repo.path(), &["impact", "zcl_fx_order.create", "--tests", "--json"]);
+    let cli_tests: Vec<&str> = cli["tests"].as_array().unwrap().iter().map(|t| t["name"].as_str().unwrap()).collect();
+    assert!(cli_tests.contains(&"setup"), "{cli}");
+    for name in cli_tests {
+        assert!(impact.contains(name), "CLI test {name} missing over MCP:\n{impact}");
+    }
+    assert!(impact.contains("zcl_fx_order.clas.testclasses.abap"), "{impact}");
+    let folded = tool_text(&client.call_tool("sem_impact", json!({"file_path": order_file, "entity_name": "ZCL_FX_ORDER.CREATE", "mode": "tests"})));
+    assert!(folded.contains("setup") && folded.contains("zcl_fx_order.clas.testclasses.abap"), "{folded}");
+
+    // sem_certify over the two-commit range: the edited method and its callers, text and JSON
+    let cert = json_text(&mut client, "sem_certify", json!({"range": "HEAD~1..HEAD", "format": "json"}));
+    let cli = cli_json(repo.path(), &["certify", "HEAD~1..HEAD", "--json"]);
+    assert_eq!(cert["entities"], cli["entities"]);
+    assert_eq!(cert["entities"][0]["name"], "describe");
+    assert_eq!(cert["entities"][0]["file"], order_file);
+    let incomplete = cert["callerSetsIncomplete"].as_array().unwrap();
+    assert_eq!(incomplete.len(), 1, "{cert}");
+    assert_eq!(incomplete[0]["entity"], "describe");
+    assert!(
+        incomplete[0]["possibleCallersNotModified"].as_array().unwrap().iter().any(|c| c["file"] == "src/zfx_dynamic.prog.abap"),
+        "{}",
+        incomplete[0]
+    );
+    assert_eq!(cert["callerSetsIncomplete"], cli["callerSetsIncomplete"]);
+    let text = tool_text(&client.call_tool("sem_certify", json!({"range": "HEAD~1..HEAD"})));
+    assert!(text.contains("describe") && text.contains("zfx_dynamic.prog.abap"), "{text}");
 }

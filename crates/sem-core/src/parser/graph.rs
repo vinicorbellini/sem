@@ -5026,6 +5026,46 @@ fn is_scope_member_container(entity_type: &str) -> bool {
     )
 }
 
+/// ABAP's test rule: every entity in a `*.testclasses.abap` file, or any entity whose text
+/// says `FOR TESTING`. Shared by `is_test_entity` and the context packer, so neither keeps
+/// its own copy.
+pub fn is_abap_test_entity(entity: &crate::model::entity::SemanticEntity) -> bool {
+    let path = entity.file_path.to_ascii_lowercase();
+    if !path.ends_with(".abap") {
+        return false;
+    }
+    // abapGit's `*.testclasses.abap` holds only unit-test code, so every
+    // entity in it counts (its methods carry no marker of their own).
+    if path.ends_with(".testclasses.abap") {
+        return true;
+    }
+    // `FOR TESTING` is unambiguous, so it needs no test-path gate: local
+    // test classes live in `*.clas.locals_imp.abap` and the like. ABAP is
+    // case-insensitive. A comment mentioning it is a false positive until
+    // comment stripping (story 1.2) is used here.
+    let lower = entity.content.to_ascii_lowercase();
+    let mut words = lower.split_whitespace();
+    let mut prev = words.next();
+    for word in words {
+        if prev == Some("for") && word.trim_end_matches(['.', ',', ':']) == "testing" {
+            return true;
+        }
+        prev = Some(word);
+    }
+    false
+}
+
+/// Whether `query` names an entity called `entity_name` in `file_path`: ABAP names compare
+/// case-insensitively (`ZCL_FOO` is `zcl_foo`), every other language's exactly. The one
+/// predicate every by-name lookup uses, so the CLI and the MCP server cannot drift.
+pub fn name_matches(file_path: &str, entity_name: &str, query: &str) -> bool {
+    if case_insensitive_for_file(file_path) {
+        entity_name.eq_ignore_ascii_case(query)
+    } else {
+        entity_name == query
+    }
+}
+
 /// Check if an entity looks like a test based on name, file path, and content patterns.
 pub fn is_test_entity(
     entity: &crate::model::entity::SemanticEntity,
@@ -5062,25 +5102,8 @@ pub fn is_test_entity(
         || content.contains("it(")
         || content.contains("test(");
 
-    if entity.file_path.to_ascii_lowercase().ends_with(".abap") {
-        // abapGit's `*.testclasses.abap` holds only unit-test code, so every
-        // entity in it counts (its methods carry no marker of their own).
-        if entity.file_path.to_ascii_lowercase().ends_with(".testclasses.abap") {
-            return true;
-        }
-        // `FOR TESTING` is unambiguous, so it needs no test-path gate: local
-        // test classes live in `*.clas.locals_imp.abap` and the like. ABAP is
-        // case-insensitive. A comment mentioning it is a false positive until
-        // comment stripping (story 1.2) is used here.
-        let lower = content.to_ascii_lowercase();
-        let mut words = lower.split_whitespace();
-        let mut prev = words.next();
-        for word in words {
-            if prev == Some("for") && word.trim_end_matches(['.', ',', ':']) == "testing" {
-                return true;
-            }
-            prev = Some(word);
-        }
+    if is_abap_test_entity(entity) {
+        return true;
     }
 
     in_test_file && has_test_marker
@@ -12788,6 +12811,15 @@ export function caller() {
             "def solve(): test('input')",
         );
         assert!(!is_test_entity(&entity, &[]));
+    }
+
+    #[test]
+    fn name_matches_folds_case_for_abap_only() {
+        assert!(name_matches("src/zcl_a.clas.abap", "zcl_a", "ZCL_A"));
+        assert!(name_matches("src/zcl_a.clas.abap", "ZCL_A", "zcl_a"));
+        assert!(!name_matches("src/zcl_a.clas.abap", "zcl_a", "zcl_b"));
+        assert!(!name_matches("a.py", "Order", "order"));
+        assert!(name_matches("a.py", "Order", "Order"));
     }
 
     #[test]

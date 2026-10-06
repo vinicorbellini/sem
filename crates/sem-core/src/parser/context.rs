@@ -295,7 +295,8 @@ pub fn build_context_result_bounded(
 /// per-role counts instead of packing their noise signatures.
 fn is_test_entity(entity: &SemanticEntity) -> bool {
     let head = entity.content.trim_start();
-    entity.name.starts_with("test_")
+    crate::parser::graph::is_abap_test_entity(entity)
+        || entity.name.starts_with("test_")
         || entity.name == "tests"
         || head.starts_with("#[test]")
         || head.starts_with("#[tokio::test]")
@@ -654,6 +655,19 @@ mod tests {
         assert_eq!(hop2.len(), 2, "2 hops reach b and c");
         let unbounded = collect_reachable_related(&graph, ids[0], graph.dependencies(), 0);
         assert_eq!(unbounded.len(), 3, "unbounded reaches b, c, d");
+    }
+
+    #[test]
+    fn abap_test_entities_are_counted_not_packed() {
+        let mut method = entity("src/zcl_a.clas.testclasses.abap::method::check", "check", "METHOD check.\nENDMETHOD.");
+        method.file_path = "src/zcl_a.clas.testclasses.abap".to_string();
+        assert!(is_test_entity(&method));
+        let mut marked = entity("src/zcl_a.clas.locals_imp.abap::class::ltc", "ltc", "CLASS ltc DEFINITION FOR TESTING.");
+        marked.file_path = "src/zcl_a.clas.locals_imp.abap".to_string();
+        assert!(is_test_entity(&marked));
+        let mut plain = entity("src/zcl_a.clas.abap::method::run", "run", "METHOD run.\nENDMETHOD.");
+        plain.file_path = "src/zcl_a.clas.abap".to_string();
+        assert!(!is_test_entity(&plain));
     }
 
     fn entity(id: &str, name: &str, content: &str) -> SemanticEntity {
